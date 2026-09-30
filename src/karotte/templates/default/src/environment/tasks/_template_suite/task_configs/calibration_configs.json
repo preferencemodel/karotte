@@ -1,0 +1,10 @@
+[
+    {
+        "task_id": "template-suite-one",
+        "max_score": 1.0
+    },
+    {
+        "task_id": "template-suite-two",
+        "max_score": 1.0
+    }
+]

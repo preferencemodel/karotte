@@ -1,0 +1,287 @@
+{
+  "claude-opus-5-5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-fable-5-1": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-fable-5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-opus-5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-sonnet-5-5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-sonnet-5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-opus-4-8": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-opus-4-7": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-opus-4-6": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-sonnet-4-6": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-opus-4-5-20251101": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-sonnet-4-5-20250929": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "claude-haiku-4-5-20251001": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "together_ai/moonshotai/Kimi-K3": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "together_ai/moonshotai/Kimi-K2.6": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "together_ai/moonshotai/Kimi-K2.5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "together_ai/deepseek-ai/DeepSeek-V3.1": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "fireworks_ai/accounts/fireworks/models/glm-5p3": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "fireworks_ai/accounts/fireworks/models/glm-5p3-flash": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "together_ai/zai-org/GLM-5.2": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "together_ai/zai-org/GLM-5.1": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/o1": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/o3": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.1": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.2": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.4": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-6-astra": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-6-sol": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-6-luna": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.6": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.6-sol": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.6-terra": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.6-luna": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "minimax/MiniMax-M3": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "minimax/MiniMax-M2.5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "vertex_ai/gemini-3.1-pro-preview": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": false
+  },
+  "vertex_ai/gemini-3.8-flash": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": false
+  },
+  "vertex_ai/gemini-3.7-flash": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": false
+  },
+  "xai/grok-4.7": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "xai/grok-4.6": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "xai/grok-4.3": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "meta/muse-spark-1.3": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "meta/muse-spark-1.2": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "__karotte_special__/training": {
+    "resolved_agent": "external",
+    "is_special_training_model": true,
+    "api_key_required": false
+  },
+  "anthropic/claude-opus-5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.3-codex": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-5.6-2026-04-01": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "fireworks_ai/accounts/fireworks/models/kimi-k2p5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "mistral/mistral-medium-3.5": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "gemini/gemini-3-pro": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "vertex_ai/claude-opus-4-6": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": false
+  },
+  "pt/some-training-checkpoint": {
+    "resolved_agent": "external",
+    "is_special_training_model": true,
+    "api_key_required": false
+  },
+  "some-unknown-model": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  }
+}

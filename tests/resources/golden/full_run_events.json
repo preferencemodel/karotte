@@ -1,0 +1,413 @@
+[
+  {
+    "type": "task_started",
+    "run_id": "characterization-run",
+    "task_id": "characterization-task",
+    "model": "test_model",
+    "n_steps": 2,
+    "reasoning_effort": null
+  },
+  {
+    "metadata": {},
+    "type": "task_pre_hook_completed"
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "You are being evaluated. Follow the step instructions.",
+      "role": "system",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "step_started",
+    "step": 0
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Step A: echo something and state that step A is done.",
+      "role": "user",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Echoing twice.",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "function": {
+            "name": "echo",
+            "arguments": "{\"text\": \"hello\"}"
+          },
+          "type": "function"
+        },
+        {
+          "id": "call_2",
+          "function": {
+            "name": "echo",
+            "arguments": "{\"text\": \"world\"}"
+          },
+          "type": "function"
+        }
+      ],
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "tool_call_started",
+    "tool_call": {
+      "id": "call_1",
+      "function": {
+        "name": "echo",
+        "arguments": "{\"text\": \"hello\"}"
+      },
+      "type": "function"
+    }
+  },
+  {
+    "type": "tool_call_completed",
+    "tool_call_id": "call_1",
+    "result": {
+      "meta": null,
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"echo\":\"hello\"}",
+          "annotations": null,
+          "meta": null
+        }
+      ],
+      "structuredContent": {
+        "echo": "hello"
+      },
+      "isError": false
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"echo\":\"hello\"}"
+        }
+      ],
+      "role": "tool",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": "call_1"
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "tool_call_started",
+    "tool_call": {
+      "id": "call_2",
+      "function": {
+        "name": "echo",
+        "arguments": "{\"text\": \"world\"}"
+      },
+      "type": "function"
+    }
+  },
+  {
+    "type": "tool_call_completed",
+    "tool_call_id": "call_2",
+    "result": {
+      "meta": null,
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"echo\":\"world\"}",
+          "annotations": null,
+          "meta": null
+        }
+      ],
+      "structuredContent": {
+        "echo": "world"
+      },
+      "isError": false
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"echo\":\"world\"}"
+        }
+      ],
+      "role": "tool",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": "call_2"
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Step A done.",
+      "role": "assistant",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "scoring",
+    "scoring": {
+      "score": 1.0,
+      "metadata": {},
+      "continue_task": true
+    },
+    "resource_metrics": null
+  },
+  {
+    "type": "step_completed",
+    "step": 0
+  },
+  {
+    "type": "step_started",
+    "step": 1
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Step B: exercise the remaining tools and state that step B is done.",
+      "role": "user",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Fetching an image.",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "id": "call_3",
+          "function": {
+            "name": "get_image",
+            "arguments": "{}"
+          },
+          "type": "function"
+        }
+      ],
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "tool_call_started",
+    "tool_call": {
+      "id": "call_3",
+      "function": {
+        "name": "get_image",
+        "arguments": "{}"
+      },
+      "type": "function"
+    }
+  },
+  {
+    "type": "tool_call_completed",
+    "tool_call_id": "call_3",
+    "result": {
+      "meta": null,
+      "content": [
+        {
+          "type": "image",
+          "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mMIDLL5DwADtgHfYCywCgAAAABJRU5ErkJggg==",
+          "mimeType": "image/png",
+          "annotations": null,
+          "meta": null
+        }
+      ],
+      "structuredContent": null,
+      "isError": false
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mMIDLL5DwADtgHfYCywCgAAAABJRU5ErkJggg=="
+          }
+        }
+      ],
+      "role": "tool",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": "call_3"
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Covering the remaining edge cases.",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "id": "call_4",
+          "function": {
+            "name": "empty_result",
+            "arguments": "{}"
+          },
+          "type": "function"
+        },
+        {
+          "id": "call_5",
+          "function": {
+            "name": "echo",
+            "arguments": "{\"_error\": \"malformed JSON in original arguments\"}"
+          },
+          "type": "function"
+        }
+      ],
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "tool_call_started",
+    "tool_call": {
+      "id": "call_4",
+      "function": {
+        "name": "empty_result",
+        "arguments": "{}"
+      },
+      "type": "function"
+    }
+  },
+  {
+    "type": "tool_call_completed",
+    "tool_call_id": "call_4",
+    "result": {
+      "meta": null,
+      "content": [],
+      "structuredContent": null,
+      "isError": false
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": [],
+      "role": "tool",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": "call_4"
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "tool_call_started",
+    "tool_call": {
+      "id": "call_5",
+      "function": {
+        "name": "echo",
+        "arguments": "{\"_error\": \"malformed JSON in original arguments\"}"
+      },
+      "type": "function"
+    }
+  },
+  {
+    "type": "tool_call_completed",
+    "tool_call_id": "call_5",
+    "result": {
+      "meta": null,
+      "content": [
+        {
+          "type": "text",
+          "text": "Error: Invalid JSON in tool arguments",
+          "annotations": null,
+          "meta": null
+        }
+      ],
+      "structuredContent": {
+        "result": "Error: Invalid JSON in tool arguments"
+      },
+      "isError": true
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Error: Invalid JSON in tool arguments"
+        }
+      ],
+      "role": "tool",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": "call_5"
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Step B done.",
+      "role": "assistant",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "scoring",
+    "scoring": {
+      "score": 1.0,
+      "metadata": {},
+      "continue_task": true
+    },
+    "resource_metrics": null
+  },
+  {
+    "type": "step_completed",
+    "step": 1
+  },
+  {
+    "type": "task_completed",
+    "status": "passed"
+  }
+]

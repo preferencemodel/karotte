@@ -1,0 +1,1716 @@
+{
+  "claude-opus-5-5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-opus-5-5",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-fable-5-1": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-fable-5-1",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-fable-5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-fable-5",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-opus-5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-opus-5",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-sonnet-5-5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-sonnet-5-5",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-sonnet-5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-sonnet-5",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-opus-4-8": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-opus-4-8",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-opus-4-7": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-opus-4-7",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-opus-4-6": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-opus-4-6",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-sonnet-4-6": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-sonnet-4-6",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "claude-opus-4-5-20251101": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-opus-4-5-20251101",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "claude-sonnet-4-5-20250929": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-sonnet-4-5-20250929",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "claude-haiku-4-5-20251001": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "together_ai/moonshotai/Kimi-K3": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/moonshotai/Kimi-K3",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "reasoning": {
+        "enabled": true
+      }
+    }
+  },
+  "together_ai/moonshotai/Kimi-K2.6": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/moonshotai/Kimi-K2.6",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "reasoning": {
+        "enabled": true
+      }
+    }
+  },
+  "together_ai/moonshotai/Kimi-K2.5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/moonshotai/Kimi-K2.5",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "reasoning": {
+        "enabled": true
+      }
+    }
+  },
+  "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key"
+  },
+  "together_ai/deepseek-ai/DeepSeek-V3.1": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/deepseek-ai/DeepSeek-V3.1",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "fireworks_ai/accounts/fireworks/models/glm-5p3": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "fireworks_ai/accounts/fireworks/models/glm-5p3",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_headers": {
+      "x-session-affinity": "golden-run"
+    }
+  },
+  "fireworks_ai/accounts/fireworks/models/glm-5p3-flash": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "fireworks_ai/accounts/fireworks/models/glm-5p3-flash",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_headers": {
+      "x-session-affinity": "golden-run"
+    }
+  },
+  "together_ai/zai-org/GLM-5.2": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/zai-org/GLM-5.2",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "together_ai/zai-org/GLM-5.1": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/zai-org/GLM-5.1",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/Qwen/Qwen3.8-2.4T-A95B",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key"
+  },
+  "openai/o1": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/o1",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run"
+    }
+  },
+  "openai/o3": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/o3",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run"
+    }
+  },
+  "openai/gpt-5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run"
+    }
+  },
+  "openai/gpt-5.1": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.1",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run"
+    }
+  },
+  "openai/gpt-5.2": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.2",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run"
+    }
+  },
+  "openai/gpt-5.4": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.4",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run"
+    }
+  },
+  "openai/gpt-5.5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.5",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run"
+    }
+  },
+  "openai/gpt-6-astra": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/responses/gpt-6-astra",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run",
+      "reasoning_summary": "detailed"
+    }
+  },
+  "openai/gpt-6-sol": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/responses/gpt-6-sol",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run",
+      "reasoning_summary": "detailed"
+    }
+  },
+  "openai/gpt-6-luna": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/responses/gpt-6-luna",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run",
+      "reasoning_summary": "detailed"
+    }
+  },
+  "openai/gpt-5.6": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.6",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run",
+      "reasoning_summary": "detailed"
+    }
+  },
+  "openai/gpt-5.6-sol": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.6-sol",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run",
+      "reasoning_summary": "detailed"
+    }
+  },
+  "openai/gpt-5.6-terra": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.6-terra",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run",
+      "reasoning_summary": "detailed"
+    }
+  },
+  "openai/gpt-5.6-luna": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.6-luna",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run",
+      "reasoning_summary": "detailed"
+    }
+  },
+  "minimax/MiniMax-M3": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "minimax/MiniMax-M3",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "minimax/MiniMax-M2.5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "minimax/MiniMax-M2.5",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "vertex_ai/gemini-3.1-pro-preview": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "vertex_ai/gemini-3.1-pro-preview",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
+  "vertex_ai/gemini-3.8-flash": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "vertex_ai/gemini-3.8-flash",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
+  "vertex_ai/gemini-3.7-flash": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "vertex_ai/gemini-3.7-flash",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
+  "xai/grok-4.7": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "xai/grok-4.7",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_headers": {
+      "x-grok-conv-id": "golden-run"
+    }
+  },
+  "xai/grok-4.6": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "xai/grok-4.6",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_headers": {
+      "x-grok-conv-id": "golden-run"
+    }
+  },
+  "xai/grok-4.3": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "xai/grok-4.3",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_headers": {
+      "x-grok-conv-id": "golden-run"
+    }
+  },
+  "meta/muse-spark-1.3": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "meta/responses/muse-spark-1.3",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "reasoning_summary": "detailed"
+    }
+  },
+  "meta/muse-spark-1.2": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "meta/responses/muse-spark-1.2",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "reasoning_summary": "detailed"
+    }
+  },
+  "__karotte_special__/training": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "__karotte_special__/training",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "anthropic/claude-opus-5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-opus-5",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "openai/gpt-5.3-codex": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.3-codex",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run"
+    }
+  },
+  "openai/gpt-5.6-2026-04-01": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/gpt-5.6-2026-04-01",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run",
+      "reasoning_summary": "detailed"
+    }
+  },
+  "fireworks_ai/accounts/fireworks/models/kimi-k2p5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "fireworks_ai/accounts/fireworks/models/kimi-k2p5",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "extra_headers": {
+      "x-session-affinity": "golden-run"
+    }
+  },
+  "mistral/mistral-medium-3.5": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "mistral/mistral-medium-3.5",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "gemini/gemini-3-pro": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "gemini/gemini-3-pro",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
+  "vertex_ai/claude-opus-4-6": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "vertex_ai/claude-opus-4-6",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
+  "pt/some-training-checkpoint": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "pt/some-training-checkpoint",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  },
+  "some-unknown-model": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "some-unknown-model",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key"
+  }
+}

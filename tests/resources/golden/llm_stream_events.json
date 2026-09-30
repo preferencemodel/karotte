@@ -1,0 +1,373 @@
+[
+  {
+    "type": "task_started",
+    "run_id": "characterization-run",
+    "task_id": "characterization-single-step-task",
+    "model": "test_model",
+    "n_steps": 1,
+    "reasoning_effort": null
+  },
+  {
+    "metadata": {},
+    "type": "task_pre_hook_completed"
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "You are being evaluated. Follow the step instructions.",
+      "role": "system",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "step_started",
+    "step": 0
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Single step: echo, then show an image.",
+      "role": "user",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": "Calling ",
+      "role": "assistant",
+      "tool_calls": null,
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": "echo.",
+      "role": null,
+      "tool_calls": null,
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": null,
+      "role": null,
+      "tool_calls": [
+        {
+          "id": "call_echo",
+          "function": {
+            "name": "echo",
+            "arguments": "{\"text\": "
+          },
+          "type": "function",
+          "index": 0
+        }
+      ],
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": null,
+      "role": null,
+      "tool_calls": [
+        {
+          "id": null,
+          "function": {
+            "name": null,
+            "arguments": "\"hello\"}"
+          },
+          "type": null,
+          "index": 0
+        }
+      ],
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": null,
+      "role": null,
+      "tool_calls": null,
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Calling echo.",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "id": "call_echo",
+          "function": {
+            "name": "echo",
+            "arguments": "{\"text\": \"hello\"}"
+          },
+          "type": "function"
+        }
+      ],
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": "tool_calls",
+    "raw": null
+  },
+  {
+    "type": "token_usage",
+    "input_tokens": 11,
+    "output_tokens": 7,
+    "cache_read_tokens": null,
+    "cache_write_tokens": null,
+    "estimated": false,
+    "service_tier": null
+  },
+  {
+    "type": "tool_call_started",
+    "tool_call": {
+      "id": "call_echo",
+      "function": {
+        "name": "echo",
+        "arguments": "{\"text\": \"hello\"}"
+      },
+      "type": "function"
+    }
+  },
+  {
+    "type": "tool_call_completed",
+    "tool_call_id": "call_echo",
+    "result": {
+      "meta": null,
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"echo\":\"hello\"}",
+          "annotations": null,
+          "meta": null
+        }
+      ],
+      "structuredContent": {
+        "echo": "hello"
+      },
+      "isError": false
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"echo\":\"hello\"}"
+        }
+      ],
+      "role": "tool",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": "call_echo"
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": "Calling ",
+      "role": "assistant",
+      "tool_calls": null,
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": "get_image.",
+      "role": null,
+      "tool_calls": null,
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": null,
+      "role": null,
+      "tool_calls": [
+        {
+          "id": "call_image",
+          "function": {
+            "name": "get_image",
+            "arguments": "{}"
+          },
+          "type": "function",
+          "index": 0
+        }
+      ],
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": null,
+      "role": null,
+      "tool_calls": null,
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "Calling get_image.",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "id": "call_image",
+          "function": {
+            "name": "get_image",
+            "arguments": "{}"
+          },
+          "type": "function"
+        }
+      ],
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": "tool_calls",
+    "raw": null
+  },
+  {
+    "type": "token_usage",
+    "input_tokens": 23,
+    "output_tokens": 5,
+    "cache_read_tokens": null,
+    "cache_write_tokens": null,
+    "estimated": false,
+    "service_tier": null
+  },
+  {
+    "type": "tool_call_started",
+    "tool_call": {
+      "id": "call_image",
+      "function": {
+        "name": "get_image",
+        "arguments": "{}"
+      },
+      "type": "function"
+    }
+  },
+  {
+    "type": "tool_call_completed",
+    "tool_call_id": "call_image",
+    "result": {
+      "meta": null,
+      "content": [
+        {
+          "type": "image",
+          "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mMIDLL5DwADtgHfYCywCgAAAABJRU5ErkJggg==",
+          "mimeType": "image/png",
+          "annotations": null,
+          "meta": null
+        }
+      ],
+      "structuredContent": null,
+      "isError": false
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mMIDLL5DwADtgHfYCywCgAAAABJRU5ErkJggg=="
+          }
+        }
+      ],
+      "role": "tool",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": "call_image"
+    },
+    "finish_reason": null,
+    "raw": null
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": "All ",
+      "role": "assistant",
+      "tool_calls": null,
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": "done.",
+      "role": null,
+      "tool_calls": null,
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_chunk",
+    "delta": {
+      "content": null,
+      "role": null,
+      "tool_calls": null,
+      "reasoning_content": null
+    }
+  },
+  {
+    "type": "message_added",
+    "message": {
+      "content": "All done.",
+      "role": "assistant",
+      "tool_calls": null,
+      "reasoning_content": null,
+      "tool_call_id": null
+    },
+    "finish_reason": "stop",
+    "raw": null
+  },
+  {
+    "type": "token_usage",
+    "input_tokens": 31,
+    "output_tokens": 3,
+    "cache_read_tokens": null,
+    "cache_write_tokens": null,
+    "estimated": false,
+    "service_tier": null
+  },
+  {
+    "type": "scoring",
+    "scoring": {
+      "score": 1.0,
+      "metadata": {},
+      "continue_task": true
+    },
+    "resource_metrics": null
+  },
+  {
+    "type": "step_completed",
+    "step": 0
+  },
+  {
+    "type": "task_completed",
+    "status": "passed"
+  }
+]

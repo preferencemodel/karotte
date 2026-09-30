@@ -1,0 +1,86 @@
+_default:
+  @just --list
+
+# Recipes shipped by add-on templates; `import?` tolerates the file being absent.
+import? 'toolchains.just'
+import? 'internal.just'
+
+# Static analysis
+lint:
+  uv run --frozen --extra dev ruff format --check
+  uv run --frozen --extra dev ruff check
+  uv run --frozen --extra dev scripts/check_supply_chain_config.py
+
+# Apply automatic fixes for linting
+fix:
+  uv run --frozen --extra dev ruff check --fix
+
+# Formatting
+fmt:
+  uv run --frozen --extra dev ruff format
+
+# Run tests for the environment
+test:
+  uv run --frozen --extra test pytest
+
+# Lock all venv dependencies
+lock-venvs:
+  for dir in venvs/*/; do (cd "$dir" && uv lock); done
+
+# Vendor karotte for local development. Source can be a local path or a git ref (default: main).
+# Examples:
+#   just vendor-karotte                    # clone from main
+#   just vendor-karotte ~/code/karotte      # copy from local checkout
+#   just vendor-karotte my-feature-branch  # clone a specific branch
+vendor-karotte source="main":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  rm -rf .karotte
+  if [ -d "{{ "{{source}}" }}" ]; then
+    # Local path: copy source tree
+    mkdir -p .karotte/src
+    cp "{{ "{{source}}" }}"/LICENSE "{{ "{{source}}" }}"/README.md .karotte/
+    # templates/ isn't vendored, and neither is its MIT-0 license.
+    perl -pe 's|"MIT AND MIT-0"|"MIT"|; s|, "src/karotte/templates/LICENSE"||' "{{ "{{source}}" }}"/pyproject.toml > .karotte/pyproject.toml
+    cp -RL "{{ "{{source}}" }}"/src/karotte .karotte/src/karotte
+    find .karotte/src/karotte -name __pycache__ -type d -prune -exec rm -rf {} +
+    rm -rf .karotte/src/karotte/.ruff_cache .karotte/src/karotte/.venv .karotte/src/karotte/templates
+  else
+    # Git ref: clone and checkout
+    git clone https://github.com/preferencemodel/karotte.git .karotte
+    git -C .karotte checkout "{{ "{{source}}" }}"
+    rm -rf .karotte/.git
+  fi
+  grep -q '\[tool.uv.sources\]' pyproject.toml || printf '\n[tool.uv.sources]\nkarotte = { path = ".karotte" }\n' >> pyproject.toml
+  perl -i -pe 's|^\.karotte/\*$|# vendored: .karotte/*|' .gitignore
+  perl -i -pe 's|^!\.karotte/\.gitkeep$|# vendored: !.karotte/.gitkeep|' .gitignore
+  rm -rf .venv
+  uv lock
+
+# Revert to using karotte from the registry
+unvendor-karotte:
+  rm -rf .karotte && mkdir .karotte && touch .karotte/.gitkeep
+  perl -i -ne 'if (/^\[tool\.uv\.sources\]/ .. /^$$/) { next } print' pyproject.toml
+  perl -i -pe 's/^# vendored: //' .gitignore
+  rm -rf .venv
+  uv lock
+
+# Create a new task (task_id can contain hyphens, e.g., "my-cool-task")
+create-task task_id dir_name=(replace(task_id, "-", "_")):
+  cp -r src/environment/tasks/_template "src/environment/tasks/{% raw %}{{ dir_name }}{% endraw %}"
+  perl -i -pe 's/id = ""/id = "{% raw %}{{ task_id }}{% endraw %}"/' "src/environment/tasks/{% raw %}{{ dir_name }}{% endraw %}/__init__.py"
+
+# Create a new task suite: tasks generated from axes of variation (suite_id can contain hyphens)
+create-task-suite suite_id dir_name=(replace(suite_id, "-", "_")):
+  #!/usr/bin/env bash
+  set -euo pipefail
+  dest="src/environment/tasks/{% raw %}{{ dir_name }}{% endraw %}"
+  cp -r src/environment/tasks/_template_suite "$dest"
+  find "$dest" -name __pycache__ -type d -exec rm -rf {} +
+  grep -rl _template_suite "$dest" | xargs perl -i -pe 's/_template_suite/{% raw %}{{ dir_name }}{% endraw %}/g'
+  perl -i -pe 's/^SUITE_ID = ".*"/SUITE_ID = "{% raw %}{{ suite_id }}{% endraw %}"/' "$dest/task_configs/create_task_configs.py"
+  just gen-configs {% raw %}{{ dir_name }}{% endraw %}
+
+# Regenerate a suite's committed task and calibration config JSON
+gen-configs suite dir_name=(replace(suite, "-", "_")):
+  uv run --frozen python -m environment.suite {% raw %}{{ dir_name }}{% endraw %}

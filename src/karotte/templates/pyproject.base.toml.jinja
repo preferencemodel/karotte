@@ -1,0 +1,19 @@
+{% block head %}{% endblock %}
+# Never depend on a public release younger than 7 days.
+[tool.uv]
+exclude-newer = "7 days"
+exclude-newer-package.karotte = false
+{#- Templates extend this table via `partials/uv_extra.toml.jinja`; add exemptions as dotted keys. #}
+{% for t in templates %}{% include t ~ "/partials/uv_extra.toml.jinja" ignore missing %}{% endfor -%}
+{#- Venv-specific `[tool.uv]` settings. Must stay inside the table. -#}
+{% block uv_extra %}{% endblock %}
+
+{% block indexes -%}
+{#- Templates add indexes via `partials/indexes.toml.jinja`. -#}
+{% for t in templates %}{% include t ~ "/partials/indexes.toml.jinja" ignore missing %}{% endfor -%}
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+{%- endblock %}
+{% block tail %}{% endblock %}

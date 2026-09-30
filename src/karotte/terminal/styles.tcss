@@ -1,0 +1,224 @@
+/* karotte Dashboard Styles */
+/* Using Coral Sea Color Palette */
+
+/* Color definitions */
+$sea-foam-green: #9ee2c7;
+$sea-foam-green-dark: #065f46;
+$sea-foam-green-bg: #e8f7f1;
+
+$light-sea-green: #25a9b2;
+
+$sea-blue: #076f94;
+$sea-blue-light: #d6eef5;
+
+$light-coral: #e48080;
+$light-coral-dark: #7f1d1d;
+$light-coral-bg: #fce8e8;
+
+$peach-orange: #f6bb99;
+$peach-orange-dark: #92400e;
+
+/* Main layout: sidebar on left, content on right */
+Horizontal {
+    width: 100%;
+    height: 100%;
+}
+
+/* Sidebar styling */
+Sidebar {
+    width: 35;
+    border-right: solid $sea-blue;
+    background: $panel;
+}
+
+NavItem {
+    height: auto;
+    padding: 1 2;
+}
+
+NavItem.-highlight .nav-item-content {
+    text-style: bold;
+}
+
+.nav-item-content {
+    width: 100%;
+}
+
+/* Right side detail view */
+RunView {
+    width: 1fr;
+}
+
+/* Header section (fixed at top of detail view) */
+RunHeader {
+    height: auto;
+    min-height: 3;
+    max-height: 5;
+    border-bottom: solid $sea-blue;
+    background: $panel;
+    padding: 1;
+}
+
+#run-header-content {
+    width: 100%;
+}
+
+/* Transcript view (scrollable) */
+TranscriptView {
+    height: 1fr;
+    padding: 1;
+    overflow-y: auto;
+}
+
+/* Container styling for JSON and Logs modes */
+#transcript-json-container,
+#transcript-logs-container {
+    width: 100%;
+    height: 1fr;
+}
+
+/* TextArea styling for JSON and Logs modes */
+#transcript-json,
+#transcript-logs {
+    width: 100%;
+    height: auto;
+    background: transparent;
+    border: none;
+    overflow: hidden;
+}
+
+#transcript-json:focus,
+#transcript-logs:focus {
+    border: none;
+}
+
+/* Container for event widgets */
+#transcript-events-container {
+    width: 100%;
+    height: 1fr;
+}
+
+/* Individual event RichLog styling */
+.event-richlog {
+    width: 100%;
+    height: auto;
+    background: $panel;
+    margin-top: 1;
+    margin-bottom: 1;
+    margin-left: 2;
+    margin-right: 2;
+    padding: 1 2;
+    scrollbar-size: 0 0;
+    overflow-x: hidden;
+    overflow-y: hidden;
+}
+
+.event-richlog:focus {
+    border: none;
+}
+
+.initial-message {
+    padding: 1;
+    color: $text-muted;
+}
+
+/* Status indicators with colors */
+.status-connecting {
+    color: $peach-orange;
+}
+
+.status-connected {
+    color: $sea-foam-green;
+}
+
+.status-completed {
+    color: $sea-foam-green;
+}
+
+.status-failed {
+    color: $light-coral;
+}
+
+/* Hidden elements */
+.hidden {
+    display: none;
+}
+
+/* Status colors for navbar items */
+.status-transparent {
+    background: $surface;
+}
+
+.status-transparent:hover {
+    background: $surface-lighten-1;
+}
+
+NavItem.-highlight.status-transparent {
+    background: $surface-lighten-2;
+    border-left: thick $sea-blue;
+}
+
+.status-running {
+    background: $light-sea-green 25%;
+}
+
+.status-running:hover {
+    background: $light-sea-green 35%;
+}
+
+NavItem.-highlight.status-running {
+    background: $light-sea-green 45%;
+    border-left: thick $sea-blue;
+}
+
+.status-passed {
+    background: $sea-foam-green-dark 50%;
+}
+
+.status-passed:hover {
+    background: $sea-foam-green-dark 65%;
+}
+
+NavItem.-highlight.status-passed {
+    background: $sea-foam-green-dark 80%;
+    border-left: thick $sea-blue;
+}
+
+.status-failed {
+    background: $light-coral-dark 50%;
+}
+
+.status-failed:hover {
+    background: $light-coral-dark 65%;
+}
+
+NavItem.-highlight.status-failed {
+    background: $light-coral-dark 80%;
+    border-left: thick $sea-blue;
+}
+
+.status-error {
+    background: $peach-orange-dark 50%;
+}
+
+.status-error:hover {
+    background: $peach-orange-dark 65%;
+}
+
+NavItem.-highlight.status-error {
+    background: $peach-orange-dark 80%;
+    border-left: thick $sea-blue;
+}
+
+
+
+/* Main console view */
+ConsoleView {
+    height: 1fr;
+    padding: 1;
+    overflow-y: auto;
+}
+
+#console-content {
+    width: 100%;
+}

@@ -1,0 +1,15 @@
+{% extends "pyproject.base.toml.jinja" %}
+{% block head -%}
+[project]
+name = "student-env"
+version = "0.1.0"
+description = "Student virtual environment dependencies."
+requires-python = "==3.12.*"
+# Add any Python dependencies the student needs for solving tasks
+dependencies = []
+{% endblock %}
+{% block tail %}
+[tool.karotte]
+access = "student:rw"
+path = "/workdir/.venv"
+{% endblock %}

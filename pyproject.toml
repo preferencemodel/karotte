@@ -1,0 +1,124 @@
+[project]
+name = "karotte"
+version = "0.1.0" # Gets set on publish
+description = "Let an LLM execute tasks in an environment."
+classifiers = ["Typing :: Typed"]
+requires-python = ">=3.12"
+license = "MIT AND MIT-0"
+license-files = ["LICENSE", "src/karotte/templates/LICENSE"]
+readme = "README.md"
+dependencies = [
+    "fastmcp>=3,<4",
+    "litellm>=1.93.0",
+    "psutil>=7.2.1",
+    "typer>=0.19.0",
+    "websockets>=14.0",
+    "loguru>=0.7.3",
+    "textual>=6.2.1",
+    "jinja2>=3.1.6",
+    "pydantic>=2.12.5",
+    "rich>=14.2.0",
+    "tenacity>=8.0",
+    "aiohttp>=3.10",
+    "httpx>=0.27",
+]
+
+[project.urls]
+Repository = "https://github.com/preferencemodel/karotte"
+
+[project.optional-dependencies]
+dev = [
+  "karotte[test]",
+  "karotte[gcs]",
+  "ruff",
+  "rust-just>=1.40",
+  "textual-dev>=1.8.0",
+  "basedpyright>=1.37.1"
+]
+
+test = [
+  "pytest>=8.4.1",
+  "pytest-randomly>=3.16.0",
+  "pytest-xdist",
+  "pytest-asyncio",
+  "pytest-httpx>=0.35.0",
+]
+
+gcs = [
+  "google-cloud-storage>=3.9.0",
+]
+
+[project.scripts]
+karotte = "karotte.cli:entry"
+
+# Supply-chain age-delay (7 days), client-side via uv.
+[tool.uv]
+exclude-newer = "7 days"
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
+
+[build-system]
+requires = ["uv_build>=0.6.5"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "tomlkit>=0.15.1",
+]
+
+[tool.uv.build-backend]
+module-name = "karotte"
+source-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = [
+  "E4",
+  "E7",
+  "E9",
+  "F",
+  "UP",
+  "I"
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["environment"]
+
+[tool.basedpyright]
+exclude = [
+  "**/node_modules",
+  "**/__pycache__",
+  "**/.*",
+  "src/karotte/templates",
+  "tmp",
+]
+reportMissingTypeStubs = false
+reportUnknownParameterType = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnusedCallResult = false
+reportAny = false
+reportExplicitAny = false
+reportImplicitOverride = false
+
+[tool.pytest.ini_options]
+addopts = """
+    -vv
+    --doctest-modules
+    --import-mode=append
+    --ignore="src/karotte/templates"
+    --ignore="tmp"
+    --numprocesses=4
+    """
+markers = [
+  "real_cohort_kill: let kill_processes really fork a helper and kill(-1) its uid cohort",
+  "requires_root: needs Linux and root; skipped otherwise, run in CI by `just test-root`",
+]
+filterwarnings = [
+  # multiprocessing fork warning in tests
+  "ignore:This process .* is multi-threaded, use of fork.*may lead to deadlocks.*:DeprecationWarning",
+  # LiteLLM is sometimes a bit slow in moving away from deprecated APIs
+  "ignore:.*:DeprecationWarning:litellm.*",
+]

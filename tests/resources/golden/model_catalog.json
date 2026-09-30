@@ -1,0 +1,1104 @@
+{
+  "models": [
+    {
+      "model": "claude-opus-5-5",
+      "model_display_name": "Opus 5.5",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-opus-5-5",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-fable-5-1",
+      "model_display_name": "Fable 5.1",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-fable-5-1",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-fable-5",
+      "model_display_name": "Fable 5",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-fable-5",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-opus-5",
+      "model_display_name": "Opus 5",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-opus-5",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "model_display_name": "Sonnet 5.5",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-sonnet-5-5",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-sonnet-5",
+      "model_display_name": "Sonnet 5",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-sonnet-5",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-opus-4-8",
+      "model_display_name": "Opus 4.8",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-opus-4-8",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-opus-4-7",
+      "model_display_name": "Opus 4.7",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-opus-4-7",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-opus-4-6",
+      "model_display_name": "Opus 4.6",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-opus-4-6",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-sonnet-4-6",
+      "model_display_name": "Sonnet 4.6",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-sonnet-4-6",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-opus-4-5-20251101",
+      "model_display_name": "Opus 4.5",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-opus-4-5-20251101",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-sonnet-4-5-20250929",
+      "model_display_name": "Sonnet 4.5",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-sonnet-4-5-20250929",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "claude-haiku-4-5-20251001",
+      "model_display_name": "Haiku 4.5",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-haiku-4-5-20251001",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "together_ai/moonshotai/Kimi-K3",
+      "model_display_name": "Kimi K3",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/moonshotai/Kimi-K3",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "together_ai/moonshotai/Kimi-K2.6",
+      "model_display_name": "Kimi K2.6",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/moonshotai/Kimi-K2.6",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "together_ai/moonshotai/Kimi-K2.5",
+      "model_display_name": "Kimi K2.5",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/moonshotai/Kimi-K2.5",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813",
+      "model_display_name": "DeepSeek V4 Pro 0813",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "high",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "high",
+        "max"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [
+        "deepseek"
+      ],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "together_ai/deepseek-ai/DeepSeek-V3.1",
+      "model_display_name": "DeepSeek V3.1",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/deepseek-ai/DeepSeek-V3.1",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [
+        "deepseek"
+      ],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "fireworks_ai/accounts/fireworks/models/glm-5p3",
+      "model_display_name": "GLM 5.3",
+      "provider": "fireworks_ai",
+      "provider_display_name": "Fireworks AI",
+      "litellm_model": "fireworks_ai/accounts/fireworks/models/glm-5p3",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "fireworks_ai/accounts/fireworks/models/glm-5p3-flash",
+      "model_display_name": "GLM 5.3 Flash",
+      "provider": "fireworks_ai",
+      "provider_display_name": "Fireworks AI",
+      "litellm_model": "fireworks_ai/accounts/fireworks/models/glm-5p3-flash",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "together_ai/zai-org/GLM-5.2",
+      "model_display_name": "GLM 5.2",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/zai-org/GLM-5.2",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "together_ai/zai-org/GLM-5.1",
+      "model_display_name": "GLM 5.1",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/zai-org/GLM-5.1",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "together_ai/Qwen/Qwen3.8-2.4T-A95B",
+      "model_display_name": "Qwen3.8 2.4T A95B",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/Qwen/Qwen3.8-2.4T-A95B",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "xhigh"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "openai/o1",
+      "model_display_name": "O1",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/o1",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/o3",
+      "model_display_name": "O3",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/o3",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/gpt-5",
+      "model_display_name": "GPT-5",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/gpt-5",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "minimal",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/gpt-5.1",
+      "model_display_name": "GPT-5.1",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/gpt-5.1",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/gpt-5.2",
+      "model_display_name": "GPT-5.2",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/gpt-5.2",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/gpt-5.4",
+      "model_display_name": "GPT-5.4",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/gpt-5.4",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/gpt-5.5",
+      "model_display_name": "GPT-5.5",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/gpt-5.5",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/gpt-6-astra",
+      "model_display_name": "GPT-6 Astra",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/responses/gpt-6-astra",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "openai/gpt-6-sol",
+      "model_display_name": "GPT-6 Sol",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/responses/gpt-6-sol",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "openai/gpt-6-luna",
+      "model_display_name": "GPT-6 Luna",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/responses/gpt-6-luna",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "openai/gpt-5.6",
+      "model_display_name": "GPT-5.6",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/gpt-5.6",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/gpt-5.6-sol",
+      "model_display_name": "GPT-5.6 Sol",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/gpt-5.6-sol",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/gpt-5.6-terra",
+      "model_display_name": "GPT-5.6 Terra",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/gpt-5.6-terra",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "openai/gpt-5.6-luna",
+      "model_display_name": "GPT-5.6 Luna",
+      "provider": "openai",
+      "provider_display_name": "OpenAI",
+      "litellm_model": "openai/gpt-5.6-luna",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "minimax/MiniMax-M3",
+      "model_display_name": "MiniMax M3",
+      "provider": "minimax",
+      "provider_display_name": "MiniMax",
+      "litellm_model": "minimax/MiniMax-M3",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "minimax/MiniMax-M2.5",
+      "model_display_name": "MiniMax M2.5",
+      "provider": "minimax",
+      "provider_display_name": "MiniMax",
+      "litellm_model": "minimax/MiniMax-M2.5",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "vertex_ai/gemini-3.1-pro-preview",
+      "model_display_name": "Gemini 3.1 Pro Preview",
+      "provider": "vertex_ai",
+      "provider_display_name": "Google Vertex AI",
+      "litellm_model": "vertex_ai/gemini-3.1-pro-preview",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": false,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "vertex_ai/gemini-3.8-flash",
+      "model_display_name": "Gemini 3.8 Flash",
+      "provider": "vertex_ai",
+      "provider_display_name": "Google Vertex AI",
+      "litellm_model": "vertex_ai/gemini-3.8-flash",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": false,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "vertex_ai/gemini-3.7-flash",
+      "model_display_name": "Gemini 3.7 Flash",
+      "provider": "vertex_ai",
+      "provider_display_name": "Google Vertex AI",
+      "litellm_model": "vertex_ai/gemini-3.7-flash",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": false,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "xai/grok-4.7",
+      "model_display_name": "Grok 4.7",
+      "provider": "xai",
+      "provider_display_name": "xAI",
+      "litellm_model": "xai/grok-4.7",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [
+        "xai"
+      ],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "xai/grok-4.6",
+      "model_display_name": "Grok 4.6",
+      "provider": "xai",
+      "provider_display_name": "xAI",
+      "litellm_model": "xai/grok-4.6",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [
+        "xai"
+      ],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "xai/grok-4.3",
+      "model_display_name": "Grok 4.3",
+      "provider": "xai",
+      "provider_display_name": "xAI",
+      "litellm_model": "xai/grok-4.3",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [
+        "xai"
+      ],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "meta/muse-spark-1.3",
+      "model_display_name": "Muse Spark 1.3",
+      "provider": "meta",
+      "provider_display_name": "Meta",
+      "litellm_model": "meta/responses/muse-spark-1.3",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "minimal",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "meta/muse-spark-1.2",
+      "model_display_name": "Muse Spark 1.2",
+      "provider": "meta",
+      "provider_display_name": "Meta",
+      "litellm_model": "meta/responses/muse-spark-1.2",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "minimal",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "__karotte_special__/training",
+      "model_display_name": "Training",
+      "provider": "__karotte_special__",
+      "provider_display_name": "Training",
+      "litellm_model": "__karotte_special__/training",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": null,
+      "max_reasoning_effort": null,
+      "reasoning_effort_levels": [],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": false,
+      "extra_allowed_openai_params": []
+    }
+  ],
+  "families": [
+    {
+      "prefix": "pt/",
+      "description": "Training checkpoint; the training backend brokers inference."
+    },
+    {
+      "prefix": "together_ai/",
+      "description": "Any model Together AI hosts."
+    },
+    {
+      "prefix": "fireworks_ai/",
+      "description": "Any model Fireworks AI hosts."
+    }
+  ]
+}

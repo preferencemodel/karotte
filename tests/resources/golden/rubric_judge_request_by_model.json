@@ -1,0 +1,515 @@
+{
+  "claude-opus-5-5": {
+    "model": "anthropic/claude-opus-5-5",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-fable-5-1": {
+    "model": "anthropic/claude-fable-5-1",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-fable-5": {
+    "model": "anthropic/claude-fable-5",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-opus-5": {
+    "model": "anthropic/claude-opus-5",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-sonnet-5-5": {
+    "model": "anthropic/claude-sonnet-5-5",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-sonnet-5": {
+    "model": "anthropic/claude-sonnet-5",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-opus-4-8": {
+    "model": "anthropic/claude-opus-4-8",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-opus-4-7": {
+    "model": "anthropic/claude-opus-4-7",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-opus-4-6": {
+    "model": "anthropic/claude-opus-4-6",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-sonnet-4-6": {
+    "model": "anthropic/claude-sonnet-4-6",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-opus-4-5-20251101": {
+    "model": "anthropic/claude-opus-4-5-20251101",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-sonnet-4-5-20250929": {
+    "model": "anthropic/claude-sonnet-4-5-20250929",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "claude-haiku-4-5-20251001": {
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "together_ai/moonshotai/Kimi-K3": {
+    "model": "together_ai/moonshotai/Kimi-K3",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "together_ai/moonshotai/Kimi-K2.6": {
+    "model": "together_ai/moonshotai/Kimi-K2.6",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "together_ai/moonshotai/Kimi-K2.5": {
+    "model": "together_ai/moonshotai/Kimi-K2.5",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813": {
+    "model": "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "together_ai/deepseek-ai/DeepSeek-V3.1": {
+    "model": "together_ai/deepseek-ai/DeepSeek-V3.1",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "fireworks_ai/accounts/fireworks/models/glm-5p3": {
+    "model": "fireworks_ai/accounts/fireworks/models/glm-5p3",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "fireworks_ai/accounts/fireworks/models/glm-5p3-flash": {
+    "model": "fireworks_ai/accounts/fireworks/models/glm-5p3-flash",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "together_ai/zai-org/GLM-5.2": {
+    "model": "together_ai/zai-org/GLM-5.2",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "together_ai/zai-org/GLM-5.1": {
+    "model": "together_ai/zai-org/GLM-5.1",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
+    "model": "together_ai/Qwen/Qwen3.8-2.4T-A95B",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/o1": {
+    "model": "openai/o1",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/o3": {
+    "model": "openai/o3",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5": {
+    "model": "openai/gpt-5",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.1": {
+    "model": "openai/gpt-5.1",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.2": {
+    "model": "openai/gpt-5.2",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.4": {
+    "model": "openai/gpt-5.4",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.5": {
+    "model": "openai/gpt-5.5",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-6-astra": {
+    "model": "openai/responses/gpt-6-astra",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-6-sol": {
+    "model": "openai/responses/gpt-6-sol",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-6-luna": {
+    "model": "openai/responses/gpt-6-luna",
+    "max_tokens": 200,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.6": {
+    "model": "openai/gpt-5.6",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.6-sol": {
+    "model": "openai/gpt-5.6-sol",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.6-terra": {
+    "model": "openai/gpt-5.6-terra",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.6-luna": {
+    "model": "openai/gpt-5.6-luna",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "minimax/MiniMax-M3": {
+    "model": "minimax/MiniMax-M3",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "minimax/MiniMax-M2.5": {
+    "model": "minimax/MiniMax-M2.5",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "vertex_ai/gemini-3.1-pro-preview": {
+    "model": "vertex_ai/gemini-3.1-pro-preview",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "vertex_ai/gemini-3.8-flash": {
+    "model": "vertex_ai/gemini-3.8-flash",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "vertex_ai/gemini-3.7-flash": {
+    "model": "vertex_ai/gemini-3.7-flash",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "xai/grok-4.7": {
+    "model": "xai/grok-4.7",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "xai/grok-4.6": {
+    "model": "xai/grok-4.6",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "xai/grok-4.3": {
+    "model": "xai/grok-4.3",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "meta/muse-spark-1.3": {
+    "model": "meta/responses/muse-spark-1.3",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "meta/muse-spark-1.2": {
+    "model": "meta/responses/muse-spark-1.2",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "__karotte_special__/training": {
+    "model": "__karotte_special__/training",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "anthropic/claude-opus-5": {
+    "model": "anthropic/claude-opus-5",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.3-codex": {
+    "model": "openai/gpt-5.3-codex",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "openai/gpt-5.6-2026-04-01": {
+    "model": "openai/gpt-5.6-2026-04-01",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "fireworks_ai/accounts/fireworks/models/kimi-k2p5": {
+    "model": "fireworks_ai/accounts/fireworks/models/kimi-k2p5",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "mistral/mistral-medium-3.5": {
+    "model": "mistral/mistral-medium-3.5",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "gemini/gemini-3-pro": {
+    "model": "gemini/gemini-3-pro",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "vertex_ai/claude-opus-4-6": {
+    "model": "vertex_ai/claude-opus-4-6",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "pt/some-training-checkpoint": {
+    "model": "pt/some-training-checkpoint",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "some-unknown-model": {
+    "model": "some-unknown-model",
+    "max_tokens": 200,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  }
+}

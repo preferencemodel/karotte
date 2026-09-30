@@ -1,0 +1,3 @@
+description = "A CPU environment with an example task."
+requires = []
+do_not_recreate_if_deleted = ["CLAUDE.md", "src/environment/tasks/example_task"]

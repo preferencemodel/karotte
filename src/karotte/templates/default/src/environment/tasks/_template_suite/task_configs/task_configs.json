@@ -1,0 +1,14 @@
+[
+    {
+        "task_id": "template-suite-one",
+        "instructions": "\nDo something cool. This is variant one.\n\nWrite your answer to {STUDENT_WORKDIR}/solution.txt.\n",
+        "submission": "{STUDENT_WORKDIR}/solution.txt",
+        "variant": "one"
+    },
+    {
+        "task_id": "template-suite-two",
+        "instructions": "\nDo something cool. This is variant two.\n\nWrite your answer to {STUDENT_WORKDIR}/solution.txt.\n",
+        "submission": "{STUDENT_WORKDIR}/solution.txt",
+        "variant": "two"
+    }
+]

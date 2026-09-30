@@ -1,0 +1,135 @@
+{% extends "default/Containerfile" %}
+
+{% block builder_stages -%}
+# Language toolchains are built here and nowhere else. Several cannot be
+# unpacked into a usable state without a C compiler on hand, so this stage has
+# gcc and make and the final image copies out only /opt/toolchains — which is
+# what keeps the student's image free of a compiler until a task asks for one.
+#
+# Which languages are built is decided by src/environment/toolchain_config.py;
+# with none enabled this stage produces an empty /opt/toolchains.
+FROM docker.io/library/amazonlinux:2023.8.20250818.0 AS toolchains
+
+RUN dnf install -y \
+  gcc gcc-c++ make \
+  curl-minimal tar gzip xz unzip findutils \
+  # The image's own `python3` is 3.9, which is older than the code below.
+  python3.12 \
+  # GHC's `make install` runs the compiler it just unpacked, which wants these.
+  gmp-devel ncurses-libs numactl-libs libffi \
+  # Erlang has no binary distribution for this platform, so OTP is compiled
+  # here. Its configure wants a termcap, and its build drives perl.
+  ncurses-devel perl \
+  # The .NET SDK will not start without an ICU, and the C# installer runs it
+  # here to fill the package cache a task's offline build restores from.
+  libicu \
+  # jlink, which the JVM cells' compiler-free runtimes are linked with, and the
+  # jmods it links them from — the RPM JDK carries none. Both stay in this
+  # stage; what reaches the image is the linked runtime. Keep the major in step
+  # with toolchains.JVM_JDK.
+  java-24-amazon-corretto-devel java-24-amazon-corretto-jmods \
+  && dnf clean all
+
+# toolchains.py finds toolchain_config.py beside itself, so both go together.
+COPY src/environment/toolchains.py src/environment/toolchain_config.py /tmp/toolchains/
+RUN python3.12 /tmp/toolchains/toolchains.py archives && rm -rf /tmp/toolchain_build /tmp/toolchains
+
+# The confinement a compiled run gets, and the probe that checks it holds. Both
+# are built here because this is the only stage with a C compiler — keeping one
+# out of the student's image is the point of the split.
+#
+# Three shims from the one source: the strict one, the one a cell whose runtime
+# maps its own code out of the artifact gets, and the one a cell whose runtime
+# compiles as it runs gets (see shim.c).
+COPY src/environment/shim.c src/environment/sandbox_probe.c /tmp/sandbox/
+RUN mkdir -p /opt/grader-bin \
+  && gcc -shared -fPIC -O2 -Wall -Wextra -Werror \
+  -o /opt/grader-bin/sandbox_shim.so /tmp/sandbox/shim.c \
+  && gcc -shared -fPIC -O2 -Wall -Wextra -Werror -DALLOW_MAPPED_CODE \
+  -o /opt/grader-bin/sandbox_shim_mapped.so /tmp/sandbox/shim.c \
+  && gcc -shared -fPIC -O2 -Wall -Wextra -Werror -DALLOW_JIT \
+  -o /opt/grader-bin/sandbox_shim_jit.so /tmp/sandbox/shim.c \
+  && gcc -O2 -Wall -Wextra -Werror \
+  -o /opt/grader-bin/sandbox_probe /tmp/sandbox/sandbox_probe.c \
+  && rm -rf /tmp/sandbox
+
+{% endblock %}
+{% block extra_env_vars -%}\
+  # Without one, a shell in here has whatever locale its launcher happened to
+  # leak in, and a runtime that takes its default encoding from the locale —
+  # Ruby, the BEAM, the JVM — answers differently depending on who started the
+  # container.
+  LC_CTYPE=C.UTF-8
+{% endblock -%}
+{% block extra_system_dependencies -%}
+# Provides `dnf download`, which stages each language's RPMs below
+dnf-plugins-core \
+  # Unpackers for the toolchain archives that are not tar.gz
+  xz \
+  unzip \
+  # Shared libraries the copied-in toolchains link against. None is a compiler.
+  gmp-devel \
+  ncurses-libs \
+  numactl-libs \
+  libffi \
+  libxml2 \
+  libedit \
+  libuuid \
+  sqlite-libs \
+  libicu \
+  zlib \
+  {% endblock %}
+{% block extra_build_steps -%}
+# One directory per language, all sealed shut. A task's `pre_hook` opens exactly
+# one; until then the image has no compiler on PATH.
+#
+# The RPM half is staged here rather than in the builder stage: `dnf download
+# --resolve` stages what the rpm database it runs against is missing, so it has
+# to run against this image's, after every other dnf install and with nothing
+# installed between.
+# The copy is one line per language for better caching and faster compression.
+COPY --from=toolchains /opt/toolchains/assembly /opt/toolchains/assembly
+COPY --from=toolchains /opt/toolchains/c_cpp /opt/toolchains/c_cpp
+COPY --from=toolchains /opt/toolchains/clojure /opt/toolchains/clojure
+COPY --from=toolchains /opt/toolchains/cobol /opt/toolchains/cobol
+COPY --from=toolchains /opt/toolchains/csharp /opt/toolchains/csharp
+COPY --from=toolchains /opt/toolchains/dart /opt/toolchains/dart
+COPY --from=toolchains /opt/toolchains/erlang_elixir /opt/toolchains/erlang_elixir
+COPY --from=toolchains /opt/toolchains/fortran /opt/toolchains/fortran
+COPY --from=toolchains /opt/toolchains/go /opt/toolchains/go
+COPY --from=toolchains /opt/toolchains/haskell /opt/toolchains/haskell
+COPY --from=toolchains /opt/toolchains/java /opt/toolchains/java
+COPY --from=toolchains /opt/toolchains/js_ts /opt/toolchains/js_ts
+COPY --from=toolchains /opt/toolchains/julia /opt/toolchains/julia
+COPY --from=toolchains /opt/toolchains/kotlin /opt/toolchains/kotlin
+COPY --from=toolchains /opt/toolchains/llvm_ir /opt/toolchains/llvm_ir
+COPY --from=toolchains /opt/toolchains/mojo /opt/toolchains/mojo
+COPY --from=toolchains /opt/toolchains/ocaml /opt/toolchains/ocaml
+COPY --from=toolchains /opt/toolchains/pascal /opt/toolchains/pascal
+COPY --from=toolchains /opt/toolchains/prolog /opt/toolchains/prolog
+COPY --from=toolchains /opt/toolchains/python /opt/toolchains/python
+COPY --from=toolchains /opt/toolchains/ruby /opt/toolchains/ruby
+COPY --from=toolchains /opt/toolchains/rust /opt/toolchains/rust
+COPY --from=toolchains /opt/toolchains/scala /opt/toolchains/scala
+COPY --from=toolchains /opt/toolchains/swift /opt/toolchains/swift
+COPY --from=toolchains /opt/toolchains/zig /opt/toolchains/zig
+# The confinement a compiled run gets, and the probe that checks it holds.
+COPY --from=toolchains /opt/grader-bin/ /opt/grader/
+COPY src/environment/toolchains.py src/environment/toolchain_config.py /tmp/toolchains/
+# The image's own `python3` is 3.9; uv's is the 3.12 the rest of this runs under.
+RUN uv run --python=${PYTHON_VERSION} /tmp/toolchains/toolchains.py rpms \
+  && rm -rf /tmp/toolchains \
+  && dnf clean all
+
+# Where graders build submissions (see environment/toolchain_grading.py):
+# outside /opt/toolchains so sealing leaves grader artifacts alone, 0711 so a
+# demoted build can reach its own random-named subdirectory without being able
+# to list what else is there.
+#
+# The shim and its probe were copied in above: root-owned and unwritable,
+# reachable by name from a demoted run because the directory is traversable.
+COPY src/environment/shim.c src/environment/sandbox.py /opt/grader/
+RUN mkdir -p /opt/grader && chmod 0711 /opt/grader \
+  && chmod 0555 /opt/grader/sandbox_shim.so /opt/grader/sandbox_shim_mapped.so \
+  /opt/grader/sandbox_shim_jit.so /opt/grader/sandbox_probe \
+  && chmod 0444 /opt/grader/shim.c /opt/grader/sandbox.py{% endblock %}
