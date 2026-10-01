@@ -1,8 +1,6 @@
 from textwrap import dedent
 from typing import Any, Final, TypedDict, cast, override
 
-import litellm
-
 from karotte.judges.judge import Judge
 from karotte.judges.rubric_context import AnswersContext, RubricContext
 from karotte.model_spec import spec_for
@@ -140,6 +138,8 @@ class RubricJudge(Judge):
             params["api_base"] = api_base
         if spec.supports_sampling_params:
             params["temperature"] = self.temperature
+
+        import litellm
 
         try:
             response = cast(litellm.ModelResponse, litellm.completion(**params))

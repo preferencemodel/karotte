@@ -401,7 +401,7 @@ def _rubric_judge_request(model: str, monkeypatch: pytest.MonkeyPatch) -> Any:
             ]
         )
 
-    monkeypatch.setattr("karotte.judges.rubric_judge.litellm.completion", completion)
+    monkeypatch.setattr("litellm.completion", completion)
 
     is_met, reasoning = judge._evaluate_criterion("some content", "is correct")  # pyright: ignore[reportPrivateUsage]
     return {
