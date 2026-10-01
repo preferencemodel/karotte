@@ -14,12 +14,12 @@ from loguru import logger
 from karotte import Runtime
 from karotte.build import build_container, require_buildx, require_runtime
 from karotte.container import is_containerized
+from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
 from karotte.hardware import container_run_args
 from karotte.judges import RubricJudge
 from karotte.load_tasks import load_task, require_environment
 from karotte.run_config_preprocessors import apply_run_config_preprocessors
 from karotte.run_helpers import (
-    EXIT_ON_RUN_ERROR_ENV_VAR,
     build_configs,
     chown_outputs,
     clean_up_old_containers,

@@ -6,6 +6,7 @@ import socket
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Never
 
@@ -16,11 +17,18 @@ from loguru import logger
 
 from karotte import Runtime
 from karotte.check_paths import split_loader_path
-from karotte.confinement import Confinement, Sandbox, current_sandbox, prepare_vm_guest
-from karotte.container import is_containerized
+from karotte.confinement import (
+    Confinement,
+    Sandbox,
+    current_sandbox,
+    firewall_canaries,
+    prepare_vm_guest,
+    reachable_as,
+)
+from karotte.container import demoted_uid_gid, is_containerized
+from karotte.forwarded_env import sandbox_env
 from karotte.hardware import container_run_args
 from karotte.load_tasks import load_task
-from karotte.providers import SERVICE_TIER_ENV
 from karotte.runtime import get_engine
 from karotte.save_artifact import local_artifact_dir
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -35,10 +43,6 @@ from karotte.transcript_streaming.stream_transcript_to_websocket import (
 
 if TYPE_CHECKING:
     from karotte.evaluation_runner import EvaluationRunner
-
-
-EXIT_ON_RUN_ERROR_ENV_VAR = "KAROTTE_EXIT_ON_RUN_ERROR"
-"""Set by the host on its containers so the inner run exits non-zero when the run ends in an error."""
 
 
 def parse_config(config: str, prepare_only: bool = False) -> EvaluationRunConfig:
@@ -237,7 +241,6 @@ def get_container_run_command(
     else:
         command.extend(["--env", "KAROTTE_SANDBOX=runc"])
 
-    command.extend(["--env", f"{EXIT_ON_RUN_ERROR_ENV_VAR}=1"])
     command.extend(["--security-opt", "seccomp=unconfined"])
 
     command.extend(
@@ -301,9 +304,8 @@ def get_container_run_command(
         # Anthropic-specific base URL the builtin loop uses.
         command.extend(["--env", f"KAROTTE_PROXY_URL={proxy_url}"])
 
-    for var in ("LOGURU_LEVEL", SERVICE_TIER_ENV):
-        if value := os.environ.get(var):
-            command.extend(["--env", f"{var}={value}"])
+    for var, value in sandbox_env().items():
+        command.extend(["--env", f"{var}={value}"])
 
     command.append("localhost/karotte" if engine == "podman" else "karotte")
 
@@ -385,6 +387,7 @@ def _set_up_runner(run_config: EvaluationRunConfig, task: Task) -> "EvaluationRu
         # endpoint.
         if proxy := os.environ.get("KAROTTE_PROXY_URL"):
             allowed_hosts = _resolve_host_ips(proxy)
+            _pin_host(proxy, allowed_hosts)
 
     runner.network_firewall = _maybe_block_internet(
         blocked_ports=blocked_ports, allowed_ips=allowed_hosts
@@ -393,19 +396,63 @@ def _set_up_runner(run_config: EvaluationRunConfig, task: Task) -> "EvaluationRu
     return runner
 
 
+_RESOLVE_ATTEMPTS = 3
+_RESOLVE_RETRY_SECONDS = 2.0
+
+
 def _resolve_host_ips(url: str) -> list[str]:
-    """IPv4 addresses the URL's host resolves to, for firewall allow rules."""
+    """IPv4 addresses the URL's host resolves to, for firewall allow rules.
+
+    Retries a lookup that fails, then raises: without the addresses the
+    firewall shuts the agent off from its model, and the run would fail later
+    with nothing pointing here."""
     from urllib.parse import urlparse
 
     host = urlparse(url).hostname
     if not host:
         return []
+    for attempt in range(1, _RESOLVE_ATTEMPTS + 1):
+        try:
+            infos = socket.getaddrinfo(host, None, family=socket.AF_INET)
+        except OSError as exc:
+            if attempt == _RESOLVE_ATTEMPTS:
+                raise RuntimeError(
+                    f"Could not resolve the model proxy host {host} ({exc}); the"
+                    + " student firewall would block the agent from its model"
+                ) from exc
+            logger.warning(f"Could not resolve proxy host {host} ({exc}); retrying")
+            time.sleep(_RESOLVE_RETRY_SECONDS)
+            continue
+        return sorted({str(info[4][0]) for info in infos})
+    raise AssertionError("unreachable")
+
+
+HOSTS_FILE = Path("/etc/hosts")
+
+
+def _pin_host(url: str, ips: list[str]) -> None:
+    """Write the URL's host and addresses to /etc/hosts, so the student can
+    reach it by name without DNS: the firewall lets it reach no resolver."""
+    from urllib.parse import urlparse
+
+    host = urlparse(url).hostname
+    if not host or not ips or not is_containerized():
+        return
     try:
-        infos = socket.getaddrinfo(host, None, family=socket.AF_INET)
+        existing = HOSTS_FILE.read_text()
     except OSError:
-        logger.warning("Could not resolve proxy host {} for firewall allow", host)
-        return []
-    return sorted({str(info[4][0]) for info in infos})
+        existing = ""
+    lines = [f"{ip} {host}" for ip in ips]
+    missing = [line for line in lines if line not in existing.splitlines()]
+    if not missing:
+        return
+    try:
+        with HOSTS_FILE.open("a") as f:
+            if existing and not existing.endswith("\n"):
+                _ = f.write("\n")
+            _ = f.write("\n".join(missing) + "\n")
+    except OSError as exc:
+        logger.warning(f"Could not pin {host} in {HOSTS_FILE}: {exc}")
 
 
 async def run_non_containerized(
@@ -585,9 +632,33 @@ def _maybe_block_internet(
     blocked_ports: list[int] | None = None,
     allowed_ips: list[str] | None = None,
 ) -> bool:
-    return Confinement(current_sandbox()).restrict_to_internal_network(
+    """Firewall the student, then check it holds; returns whether the rules took.
+
+    Refused rules already abort inside ``restrict_to_internal_network`` unless
+    ``KAROTTE_FIREWALL_TOLERATE`` hands isolation to an outer harness. Where the
+    rules can't be trusted (gVisor, the tolerate var, no container) that is
+    logged; where they took, the student must fail to reach every canary, or
+    the run stops."""
+    sandbox = current_sandbox()
+    took = Confinement(sandbox).restrict_to_internal_network(
         "student", blocked_ports=blocked_ports, allowed_ips=allowed_ips
     )
+    if not took:
+        if is_containerized():
+            logger.warning(
+                f"{sandbox}: the student firewall is not enforced; only the network namespace on student sessions, or the outer harness, isolates the student"
+            )
+        return False
+    uid = demoted_uid_gid()
+    if uid is None:
+        return True
+    reached = reachable_as(uid, firewall_canaries(allowed_ips or ()))
+    if reached:
+        raise RuntimeError(
+            f"The student firewall took but the student reached {reached}; refusing to run"
+        )
+    logger.info("Student firewall checked: every canary was refused")
+    return True
 
 
 _DAEMON_JSON_PATH = Path("/etc/docker/daemon.json")

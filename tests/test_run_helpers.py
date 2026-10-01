@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import sys
 from pathlib import Path
 from typing import Any, final
@@ -8,13 +9,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 import typer
 
+from karotte import run_helpers
 from karotte.cli.run import (
     _expand_mount_file_references,  # pyright: ignore[reportPrivateUsage]
     _validate_mount_specs,  # pyright: ignore[reportPrivateUsage]
 )
+from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
 from karotte.providers import SERVICE_TIER_ENV
 from karotte.run_helpers import (
-    EXIT_ON_RUN_ERROR_ENV_VAR,
     _maybe_block_internet,  # pyright: ignore[reportPrivateUsage]
     _set_up_runner,  # pyright: ignore[reportPrivateUsage]
     build_configs,
@@ -688,6 +690,18 @@ class TestGetContainerRunCommand:
 
         envs = [command[i + 1] for i, arg in enumerate(command) if arg == "--env"]
         assert f"{SERVICE_TIER_ENV}=auto" in envs
+
+    def test_the_student_network_setting_is_forwarded(
+        self, sample_config: EvaluationRunConfig, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The firewall reads it inside the container."""
+        monkeypatch.setenv("KAROTTE_STUDENT_NETWORK", "internal")
+        command, _ = get_container_run_command(
+            sample_config, "podman", dev=False, keep_container=False
+        )
+
+        envs = [command[i + 1] for i, arg in enumerate(command) if arg == "--env"]
+        assert "KAROTTE_STUDENT_NETWORK=internal" in envs
 
     def test_custom_proxy_url(self, sample_config: EvaluationRunConfig):
         """--proxy with a custom URL should use that URL."""
@@ -1442,6 +1456,20 @@ class TestDockerGvisorCleanUp:
         assert "rm" in rm_cmd
 
 
+@pytest.fixture(autouse=True)
+def _fixed_network_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):  # pyright: ignore[reportUnusedFunction]
+    """The strict firewall allows the sandbox's own addresses; pin them so rule
+    lists don't depend on the machine running the tests. Proxy pinning writes
+    to a temp hosts file, never the real /etc/hosts."""
+    monkeypatch.setattr("karotte.run_helpers.HOSTS_FILE", tmp_path / "etc-hosts")
+    monkeypatch.setattr("karotte.run_helpers.reachable_as", lambda _uid, _targets: [])  # pyright: ignore[reportUnknownLambdaType]
+    monkeypatch.delenv("KAROTTE_STUDENT_NETWORK", raising=False)
+    # A karotte container always names its student; the firewall check needs it.
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
+    own: tuple[list[str], list[str]] = (["10.1.2.3"], [])
+    monkeypatch.setattr("karotte.confinement._own_addresses", lambda: own)
+
+
 class TestMaybeBlockInternetGvisor:
     """Tests for _maybe_block_internet firewall rule generation under gvisor."""
 
@@ -1532,7 +1560,7 @@ class TestMaybeBlockInternetGvisor:
     def test_applies_all_expected_rules_under_gvisor(
         self, monkeypatch: pytest.MonkeyPatch
     ):
-        """Should apply 7 IPv4 + 5 IPv6 = 12 firewall rules total."""
+        """IPv4: localhost, the own address, reject. IPv6: localhost, reject."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
         monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
 
@@ -1542,7 +1570,7 @@ class TestMaybeBlockInternetGvisor:
         ) as mock_run:
             _maybe_block_internet()
 
-        assert mock_run.call_count == 12
+        assert mock_run.call_count == 5
 
 
 class TestMaybeBlockInternetBlockedPorts:
@@ -1609,15 +1637,15 @@ class TestMaybeBlockInternetBlockedPorts:
 
         port_rules = [r for r in rules if "--dport" in r]
         assert len(port_rules) == 0
-        # Original rule count: 7 IPv4 + 5 IPv6 = 12
-        assert len(rules) == 12
+        # 3 IPv4 (localhost, own address, reject) + 2 IPv6 (localhost, reject)
+        assert len(rules) == 5
 
     def test_rule_count_with_blocked_ports(self, monkeypatch: pytest.MonkeyPatch):
         """Each blocked port adds one IPv4 and one IPv6 rule."""
         rules = self._get_rules(monkeypatch, blocked_ports=[8001, 8080])
 
-        # 12 base rules + 2 ports * 2 (IPv4 + IPv6) = 16
-        assert len(rules) == 16
+        # 5 base rules + 2 ports * 2 (IPv4 + IPv6) = 9
+        assert len(rules) == 9
 
     def test_allowed_ips_generate_accept_before_reject(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1758,6 +1786,56 @@ class TestSetUpRunnerFirewall:
                 with patch("karotte.run_helpers._maybe_block_internet") as mock_block:
                     _set_up_runner(sample_config, _EmptyTask(sample_config))
         assert mock_block.call_args.kwargs["allowed_ips"] == ["203.0.113.7"]
+
+    def test_student_agent_pins_the_proxy_host(
+        self,
+        sample_config: EvaluationRunConfig,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        """The firewall lets the student reach no DNS resolver, so the proxy's
+        name has to resolve from /etc/hosts."""
+        hosts = tmp_path / "hosts"
+        _ = hosts.write_text("127.0.0.1 localhost")
+        monkeypatch.setattr("karotte.run_helpers.HOSTS_FILE", hosts)
+        monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "https://proxy.example:8443/v1")
+        runner = MagicMock()
+        runner.allows_student_mcp_access = True
+        with patch("karotte.evaluation_runner.EvaluationRunner", return_value=runner):
+            with patch(
+                "karotte.run_helpers._resolve_host_ips",
+                return_value=["203.0.113.7", "203.0.113.8"],
+            ):
+                with patch("karotte.run_helpers._maybe_block_internet"):
+                    _set_up_runner(sample_config, _EmptyTask(sample_config))
+                    _set_up_runner(sample_config, _EmptyTask(sample_config))
+
+        assert hosts.read_text() == (
+            "127.0.0.1 localhost\n203.0.113.7 proxy.example\n203.0.113.8 proxy.example\n"
+        )
+
+    def test_outside_a_container_the_hosts_file_is_left_alone(
+        self,
+        sample_config: EvaluationRunConfig,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        hosts = tmp_path / "hosts"
+        _ = hosts.write_text("127.0.0.1 localhost\n")
+        monkeypatch.setattr("karotte.run_helpers.HOSTS_FILE", hosts)
+        monkeypatch.delenv("KAROTTE_CONTAINERIZED", raising=False)
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "https://proxy.example")
+        runner = MagicMock()
+        runner.allows_student_mcp_access = True
+        with patch("karotte.evaluation_runner.EvaluationRunner", return_value=runner):
+            with patch(
+                "karotte.run_helpers._resolve_host_ips", return_value=["203.0.113.7"]
+            ):
+                with patch("karotte.run_helpers._maybe_block_internet"):
+                    _set_up_runner(sample_config, _EmptyTask(sample_config))
+
+        assert hosts.read_text() == "127.0.0.1 localhost\n"
 
     def test_builtin_agent_allows_no_egress(self, sample_config: EvaluationRunConfig):
         with patch("karotte.run_helpers._maybe_block_internet") as mock_block:
@@ -2179,3 +2257,114 @@ class TestRunNonContainerizedResult:
         result = await self._run(sample_config, [TaskCompletedEvent(status=status)])
 
         assert result is None
+
+
+class TestResolveProxy:
+    def test_a_lookup_that_keeps_failing_stops_the_run(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Without the address the firewall cuts the agent off from its model."""
+        calls: list[str] = []
+
+        def fail(host: str, *_args: object, **_kwargs: object) -> object:
+            calls.append(host)
+            raise socket.gaierror("Temporary failure in name resolution")
+
+        monkeypatch.setattr("karotte.run_helpers.socket.getaddrinfo", fail)
+        monkeypatch.setattr("karotte.run_helpers.time.sleep", lambda _s: None)  # pyright: ignore[reportUnknownLambdaType]
+
+        with pytest.raises(RuntimeError, match="proxy.example"):
+            _ = run_helpers._resolve_host_ips("https://proxy.example/v1")  # pyright: ignore[reportPrivateUsage]
+        assert len(calls) == 3
+
+    def test_a_brief_failure_is_retried(self, monkeypatch: pytest.MonkeyPatch):
+        answers: list[object] = [
+            socket.gaierror("Temporary failure"),
+            [(socket.AF_INET, 0, 0, "", ("203.0.113.7", 0))],
+        ]
+
+        def lookup(*_args: object, **_kwargs: object) -> object:
+            answer = answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        monkeypatch.setattr("karotte.run_helpers.socket.getaddrinfo", lookup)
+        monkeypatch.setattr("karotte.run_helpers.time.sleep", lambda _s: None)  # pyright: ignore[reportUnknownLambdaType]
+
+        assert run_helpers._resolve_host_ips("https://proxy.example") == ["203.0.113.7"]  # pyright: ignore[reportPrivateUsage]
+
+
+class TestFirewallSelfTest:
+    """After the rules take, the student must fail to reach every canary."""
+
+    def _block(self, monkeypatch: pytest.MonkeyPatch, reached: list[tuple[str, int]]):
+        monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
+        monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
+        monkeypatch.setenv("KAROTTE_SANDBOX", "vm")
+        seen: list[tuple[int, list[tuple[str, int]]]] = []
+
+        def fake_reachable(uid: int, targets: list[tuple[str, int]]):
+            seen.append((uid, targets))
+            return reached
+
+        monkeypatch.setattr("karotte.run_helpers.reachable_as", fake_reachable)
+        with patch(
+            "karotte.confinement.subprocess.run",
+            return_value=MagicMock(returncode=0, stderr=""),
+        ):
+            _maybe_block_internet()
+        return seen
+
+    def test_a_refused_student_passes(self, monkeypatch: pytest.MonkeyPatch):
+        seen = self._block(monkeypatch, [])
+        assert [uid for uid, _ in seen] == [1000]
+
+    def test_a_student_that_gets_through_stops_the_run(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        with pytest.raises(RuntimeError, match="169.254.169.254"):
+            _ = self._block(monkeypatch, [("169.254.169.254", 80)])
+
+    def test_allowed_ips_are_left_out_of_the_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr(
+            "karotte.confinement._default_gateway", lambda: "192.168.64.1"
+        )
+        monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
+        monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
+        monkeypatch.setenv("KAROTTE_SANDBOX", "vm")
+        seen: list[list[tuple[str, int]]] = []
+
+        def fake_reachable(_uid: int, targets: list[tuple[str, int]]):
+            seen.append(targets)
+            return []
+
+        monkeypatch.setattr("karotte.run_helpers.reachable_as", fake_reachable)
+        with patch(
+            "karotte.confinement.subprocess.run",
+            return_value=MagicMock(returncode=0, stderr=""),
+        ):
+            _maybe_block_internet(allowed_ips=["192.168.64.1"])
+
+        assert all(host != "192.168.64.1" for host, _ in seen[0])
+
+    def test_rules_that_did_not_take_skip_the_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """gVisor accepts rules without enforcing them; a check there would
+        only restate that."""
+        monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
+        monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
+        called: list[object] = []
+        monkeypatch.setattr(
+            "karotte.run_helpers.reachable_as",
+            lambda *args: called.append(args) or [],  # pyright: ignore[reportUnknownLambdaType]
+        )
+        with patch(
+            "karotte.confinement.subprocess.run",
+            return_value=MagicMock(returncode=0, stderr=""),
+        ):
+            _maybe_block_internet()
+        assert called == []
