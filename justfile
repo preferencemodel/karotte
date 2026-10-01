@@ -21,7 +21,8 @@ test *args:
 test-root:
   sudo -E env HOME=/root PATH="$PATH" \
     "$(uv run --frozen --extra test python -c 'import sys; print(sys.executable)')" \
-    -m pytest -m requires_root --numprocesses=0 -p no:cacheprovider tests
+    -m pytest -m requires_root --numprocesses=0 -p no:cacheprovider \
+    $(grep -l requires_root tests/test_*.py)
 
 # Run tests for templates
 test-template template *run_args:

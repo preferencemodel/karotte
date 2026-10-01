@@ -36,7 +36,7 @@ from karotte.update_env import INDEX_OVERRIDE_VARS
 
 # The characterization env is an `environment` package that only the MCP server
 # subprocess may import (via PYTHONPATH). Importing it in the test process (e.g.
-# through --doctest-modules collection) would make `environment.tools` visible
+# through test collection) would make `environment.tools` visible
 # to in-process `discover_tools` calls.
 collect_ignore = ["resources/characterization_env"]
 
