@@ -103,6 +103,7 @@ class StudentCgroup:
     _freezer: Path | None = None
     _memory_limit_file: str = "memory.max"
     _no_memory_limit: str = "max"
+    _swap_limit_file: str | None = "memory.swap.max"
 
     def join_self(self) -> None:
         """Put the calling process in the group so its descendants inherit membership."""
@@ -115,7 +116,30 @@ class StudentCgroup:
     def set_memory_limit(self, nbytes: int | None) -> bool:
         """Cap the group's memory, or lift the cap when ``nbytes`` is ``None``."""
         value = self._no_memory_limit if nbytes is None else str(nbytes)
-        return self._write(self.path / self._memory_limit_file, value)
+        if not self._write(self.path / self._memory_limit_file, value):
+            return False
+        # Without this, on a host with swap the group pages out past its cap
+        # instead of being OOM-killed. Absent when swap accounting is off.
+        if self._swap_limit_file is not None:
+            swap = self.path / self._swap_limit_file
+            if swap.exists():
+                _ = self._write(swap, "max" if nbytes is None else "0")
+        return True
+
+    def swap_limit(self) -> str | None:
+        """The raw swap cap, or ``None`` where this layout has no swap file."""
+        if self._swap_limit_file is None:
+            return None
+        try:
+            return (self.path / self._swap_limit_file).read_text().strip()
+        except OSError:
+            return None
+
+    def set_swap_limit(self, value: str) -> bool:
+        """Put back a raw swap cap that :meth:`swap_limit` read."""
+        if self._swap_limit_file is None:
+            return False
+        return self._write(self.path / self._swap_limit_file, value)
 
     def set_process_limit(self, count: int | None) -> bool:
         """Cap the group's process count, or lift the cap when ``count`` is ``None``."""
@@ -343,6 +367,9 @@ class V1Cgroup:
             _freezer=(freezer / name) if freezer else None,
             _memory_limit_file="memory.limit_in_bytes",
             _no_memory_limit="-1",
+            # memory.memsw.limit_in_bytes must stay at or above the limit, so
+            # it can't simply be zeroed; v1 hosts keep swap as they are.
+            _swap_limit_file=None,
         )
 
 
@@ -352,6 +379,11 @@ _student_groups: dict[int, StudentCgroup] = {}
 def register_student_cgroup(uid: int, group: StudentCgroup) -> None:
     """Make ``uid``'s group findable by the kill path."""
     _student_groups[uid] = group
+
+
+def unregister_student_cgroup(uid: int) -> None:
+    """Forget ``uid``'s group, e.g. after destroying it."""
+    _ = _student_groups.pop(uid, None)
 
 
 def student_cgroup(uid: int) -> StudentCgroup | None:

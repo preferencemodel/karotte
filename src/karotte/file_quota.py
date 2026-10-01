@@ -31,15 +31,22 @@ class FileQuota:
 
 
 def mount_file_quota(
-    paths: tuple[Path, ...], max_bytes: int, max_count: int | None
+    paths: tuple[Path, ...],
+    max_bytes: int,
+    max_count: int | None,
+    quota_dir: Path | None = None,
 ) -> FileQuota | None:
     """Cap what may be written under ``paths`` at ``max_bytes`` (and
     ``max_count`` files), enforced by the kernel; ``None`` where this sandbox
-    cannot mount, so the caller can fall back to detection."""
+    cannot mount, so the caller can fall back to detection.
+
+    ``quota_dir`` holds the backing image and its mount, ``QUOTA_DIR`` by
+    default. A probe passes its own so it never touches the run's."""
     if os.geteuid() != 0:
         return None
-    backing = QUOTA_DIR / _BACKING
-    mount_point = QUOTA_DIR / _MOUNT
+    quota_dir = QUOTA_DIR if quota_dir is None else quota_dir
+    backing = quota_dir / _BACKING
+    mount_point = quota_dir / _MOUNT
 
     # A privileged helper outside this container may have prepared the quota
     # filesystem already (on k8s, loop devices are unreachable in-container
@@ -55,7 +62,7 @@ def mount_file_quota(
         return None
     else:
         try:
-            QUOTA_DIR.mkdir(mode=0o700, exist_ok=True)
+            quota_dir.mkdir(mode=0o700, exist_ok=True)
             with open(backing, "wb") as f:
                 # Preallocate rather than truncate: a sparse image that runs out
                 # of backing space mid-write surfaces as EIO / remount-ro inside
@@ -76,7 +83,7 @@ def mount_file_quota(
             )
         except (OSError, RuntimeError) as exc:
             logger.debug(f"No kernel file quota on this sandbox: {exc}")
-            _remove_quota_dir(backing, mount_point)
+            _remove_quota_dir(quota_dir)
             return None
 
     overlaid: list[Path] = []
@@ -84,7 +91,7 @@ def mount_file_quota(
         for index, path in enumerate(paths):
             _mount_overlay(mount_point, index, path)
             overlaid.append(path)
-        _ = (QUOTA_DIR / _MANIFEST).write_text(
+        _ = (quota_dir / _MANIFEST).write_text(
             json.dumps({"paths": [str(p) for p in paths]})
         )
     except (OSError, RuntimeError) as exc:
@@ -95,7 +102,7 @@ def mount_file_quota(
             _unmount_all(overlaid)
         else:
             _unmount_all([*overlaid, mount_point])
-            _remove_quota_dir(backing, mount_point)
+            _remove_quota_dir(quota_dir)
         return None
 
     _reenter_cwd()
@@ -221,13 +228,27 @@ def _unmount_all(mounted: list[Path]) -> None:
             continue
 
 
-def _remove_quota_dir(backing: Path, mount_point: Path) -> None:
-    for path in (QUOTA_DIR / _MANIFEST, backing):
+def unmount_file_quota(quota: FileQuota, quota_dir: Path) -> bool:
+    """Undo :func:`mount_file_quota` for a quota mounted under ``quota_dir``.
+    Returns whether everything came off; what was written under the quota is
+    gone with it."""
+    mounted = [*quota.paths, quota_dir / _MOUNT]
+    _unmount_all(mounted)
+    left = [path for path in mounted if os.path.ismount(path)]
+    if left:
+        logger.warning(f"Could not unmount the file quota at {list(map(str, left))}")
+        return False
+    _remove_quota_dir(quota_dir)
+    return True
+
+
+def _remove_quota_dir(quota_dir: Path) -> None:
+    for path in (quota_dir / _MANIFEST, quota_dir / _BACKING):
         try:
             path.unlink(missing_ok=True)
         except OSError:
             pass
-    for directory in (mount_point, QUOTA_DIR):
+    for directory in (quota_dir / _MOUNT, quota_dir):
         try:
             directory.rmdir()
         except OSError:

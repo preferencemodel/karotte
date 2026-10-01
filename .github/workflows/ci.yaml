@@ -58,8 +58,15 @@ jobs:
         run: |
           sudo chmod o+x /home/runner
           namei -l "$(readlink -f .venv/bin/python)"
+      # The sandbox checks OOM-kill a student in a child cgroup. In the runner
+      # service's own cgroup, systemd's default OOMPolicy=stop would then stop
+      # the runner, so the tests get a scope of their own.
       - name: Run root-only tests
-        run: just test-root
+        run: >-
+          sudo --preserve-env=HOME,PATH,UV_PYTHON_INSTALL_DIR,UV_CACHE_DIR
+          systemd-run --scope --quiet -p OOMPolicy=continue
+          --uid="$(id -u)" --gid="$(id -g)"
+          just test-root
 
   default-template:
     name: Default Template Tests
