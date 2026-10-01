@@ -127,6 +127,62 @@ def test_make_demote_fn_calls_setgroups_setgid_setuid(
     mock_setuid.assert_called_once_with(1000)
 
 
+def test_student_processes_are_the_first_oom_victims(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """Both ways a student process starts raise its OOM score before it runs."""
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
+    score = tmp_path / "oom_score_adj"
+    demote = make_demote_fn()
+    assert demote is not None
+    root_preexec = karotte_subprocess._make_root_preexec(1000)  # pyright: ignore[reportPrivateUsage]
+
+    for preexec in (demote, root_preexec):
+        score.unlink(missing_ok=True)
+        with (
+            patch("karotte.subprocess.os.setsid"),
+            patch("karotte.subprocess.os.setgroups"),
+            patch("karotte.subprocess.os.setgid"),
+            patch("karotte.subprocess.os.setuid"),
+        ):
+            preexec()
+        assert score.read_text() == "1000"
+
+
+def test_an_unwritable_oom_score_does_not_stop_the_student(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """A sandbox without the proc file still runs the student."""
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
+    monkeypatch.setattr(
+        "karotte.subprocess.OOM_SCORE_ADJ", str(tmp_path / "missing" / "oom_score_adj")
+    )
+    demote = make_demote_fn()
+    assert demote is not None
+    with (
+        patch("karotte.subprocess.os.setgroups"),
+        patch("karotte.subprocess.os.setgid"),
+        patch("karotte.subprocess.os.setuid") as mock_setuid,
+    ):
+        demote()
+    mock_setuid.assert_called_once_with(1000)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="needs /proc")
+def test_a_child_inherits_the_raised_oom_score(monkeypatch: pytest.MonkeyPatch):
+    """Against the real proc file: raising needs no privilege, and what the
+    session's first process sets, everything it forks inherits."""
+    monkeypatch.setattr("karotte.subprocess.OOM_SCORE_ADJ", "/proc/self/oom_score_adj")
+    out = subprocess.run(
+        ["sh", "-c", "sh -c 'cat /proc/self/oom_score_adj'"],
+        preexec_fn=karotte_subprocess._prefer_for_oom_kill,  # pyright: ignore[reportPrivateUsage]
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert out.stdout.strip() == "1000"
+
+
 def test_make_demote_fn_clears_groups_before_dropping_privileges(
     monkeypatch: pytest.MonkeyPatch,
 ):

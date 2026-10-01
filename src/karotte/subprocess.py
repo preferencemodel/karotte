@@ -276,6 +276,24 @@ def platform_tooling_dirs() -> tuple[str, ...]:
     return tuple(sorted(path for path in paths if os.path.isdir(path)))
 
 
+OOM_SCORE_ADJ = "/proc/self/oom_score_adj"
+STUDENT_OOM_SCORE_ADJ = 1000
+"""Past anything the harness runs at, so when the whole sandbox runs out of
+memory the kernel kills a student process first."""
+
+
+def _prefer_for_oom_kill() -> None:
+    """Make this process and its children the first victims of a sandbox-wide OOM.
+
+    Without CAP_SYS_RESOURCE the student can lower its score back to 0, never below.
+    """
+    try:
+        with open(OOM_SCORE_ADJ, "w") as f:
+            f.write(str(STUDENT_OOM_SCORE_ADJ))
+    except OSError:
+        pass
+
+
 def make_demote_fn(
     *chown_fds: int,
     uid_gid: int | None = None,
@@ -335,6 +353,7 @@ def make_demote_fn(
             _isolate_mounts(ephemeral_dirs, read_only_dirs, covered_dirs)
         if unshare_ipc:
             _try_unshare_ipc()
+        _prefer_for_oom_kill()
         os.setgroups([])
         os.setgid(uid_gid)
         os.setuid(uid_gid)
@@ -503,6 +522,7 @@ def _make_root_preexec(uid_gid: int, *chown_fds: int) -> Callable[[], None]:
             os.fchown(fd, uid_gid, uid_gid)
         if unshare_ipc:
             _try_unshare_ipc()
+        _prefer_for_oom_kill()
         os.setgroups([])
 
     return _preexec

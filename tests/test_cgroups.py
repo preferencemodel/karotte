@@ -211,6 +211,15 @@ def test_v2_second_process_shares_the_limited_group(tmp_path: Path) -> None:
     assert second.process_limit() == 2048
 
 
+def test_v2_student_group_is_oom_killed_as_a_whole(tmp_path: Path) -> None:
+    root = tmp_path / "cgroup"
+    _write_v2_tree(root, "memory pids")
+
+    student = V2Cgroup(root).create("student")
+
+    assert (student.path / "memory.oom.group").read_text() == "1"
+
+
 def test_v2_writes_limits_with_v2_filenames(tmp_path: Path) -> None:
     root = tmp_path / "cgroup"
     _write_v2_tree(root, "memory pids")

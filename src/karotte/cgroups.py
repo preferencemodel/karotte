@@ -266,7 +266,17 @@ class V2Cgroup:
         path = self.parent / name
         path.mkdir(exist_ok=True)
         self._delegate()
+        self._kill_as_a_group(path)
         return _V2StudentCgroup(path=path, join_paths=[path])
+
+    @staticmethod
+    def _kill_as_a_group(path: Path) -> None:
+        """An OOM kill in the group takes every process in it, not the largest
+        alone, so no half-killed process tree is left behind."""
+        try:
+            (path / "memory.oom.group").write_text("1")
+        except OSError as exc:
+            logger.warning(f"Could not set memory.oom.group on {path}: {exc}")
 
     def _delegate(self) -> None:
         """Enable the controllers on children.
