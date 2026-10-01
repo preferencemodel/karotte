@@ -677,3 +677,45 @@ def test_empty_context_returns_error(
 
     assert scoring.score == 0.0
     assert "error" in scoring.metadata
+
+
+def test_render_context_joins_providers(transcript: Transcript) -> None:
+    """render_context is what evaluate judges against, usable without a model."""
+    judge = RubricJudge(
+        rubric=[{"criterion": "c", "weight": 1.0}],
+        context=[AnswersContext(), AnswersContext()],
+    )
+    transcript.events.append(AnswersSubmittedEvent(answers={"response": "Hello"}))
+
+    rendered = judge.render_context(transcript)
+
+    single = AnswersContext().render(transcript)
+    assert rendered == f"{single}\n\n{single}"
+
+
+def test_criterion_prompt_is_what_the_model_receives(
+    transcript: Transcript, mock_completion: MagicMock
+) -> None:
+    judge = RubricJudge(rubric=[{"criterion": "Is it polite?", "weight": 1.0}])
+    transcript.events.append(AnswersSubmittedEvent(answers={"response": "Hello"}))
+
+    judge.evaluate(transcript)
+
+    sent = mock_completion.call_args.kwargs["messages"][0]["content"]
+    assert sent == RubricJudge.criterion_prompt(
+        judge.render_context(transcript), "Is it polite?"
+    )
+
+
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [
+        ("YES\nit is", (True, "it is")),
+        ("  yes, mostly\n  because  ", (True, "because")),
+        ("NO\nit is not", (False, "it is not")),
+        ("YES", (True, "No explanation provided")),
+        ("Maybe\nunsure", (False, "unsure")),
+    ],
+)
+def test_parse_reply(reply: str, expected: tuple[bool, str]) -> None:
+    assert RubricJudge.parse_reply(reply) == expected
