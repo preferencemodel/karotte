@@ -99,7 +99,13 @@ def mount_file_quota(
         return None
 
     _reenter_cwd()
-    logger.info(f"File quota of {max_bytes} bytes mounted over {list(map(str, paths))}")
+    over = list(map(str, paths))
+    if premounted:
+        logger.info(
+            f"Adopted pre-mounted file quota of {max_bytes} bytes at {mount_point} over {over}"
+        )
+    else:
+        logger.info(f"Created loop file quota of {max_bytes} bytes over {over}")
     return FileQuota(max_bytes, tuple(paths))
 
 

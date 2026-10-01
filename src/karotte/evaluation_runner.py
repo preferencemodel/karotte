@@ -28,6 +28,7 @@ from karotte.confinement import (
     describe_confinement,
 )
 from karotte.container import is_containerized
+from karotte.durable_write import write_durably
 from karotte.mcp_servers.resource_sampler import ResourceSampler
 from karotte.protected_store import ProtectedStore
 from karotte.save_artifact import save_artifact
@@ -303,9 +304,9 @@ class EvaluationRunner:
 
     def _maybe_save_transcript_to_file(self):
         if hasattr(self, "transcript") and self.config.transcript_file:
-            Path(self.config.transcript_file).parent.mkdir(parents=True, exist_ok=True)
-            Path(self.config.transcript_file).write_text(
-                self.transcript.model_dump_json(indent=2)
+            write_durably(
+                Path(self.config.transcript_file),
+                self.transcript.model_dump_json(indent=2),
             )
             _ = print(f"\n📁 Transcript saved to: {self.config.transcript_file}")
 
