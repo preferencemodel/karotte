@@ -1,6 +1,8 @@
 import asyncio
 import json
 import os
+import stat
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -10,6 +12,7 @@ from mcp.types import TextContent
 
 from karotte.tools.view_lines_in_file import (
     _MAX_CONTENT_BYTES,  # pyright: ignore[reportPrivateUsage]
+    _count_lines,  # pyright: ignore[reportPrivateUsage]
     view_lines_in_file,
 )
 from karotte.truncation import json_encoded_len
@@ -493,6 +496,80 @@ async def test_rejects_fifo(tmp_path: Path):
     os.mkfifo(fifo)
     with pytest.raises(ValueError, match="Not a regular file"):
         await view_lines_in_file()(fifo, from_line=1, to_line=20)
+
+
+@pytest.mark.asyncio
+async def test_fifo_swapped_in_after_stat_is_refused_without_waiting(tmp_path: Path):
+    """A FIFO flipped in after the S_ISREG check must be refused at open, not
+    block sed until the timeout."""
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    real_stat = os.stat
+
+    def fake_stat(path: object, *args: object, **kwargs: object):
+        if str(path) == str(fifo):
+            return os.stat_result((stat.S_IFREG | 0o644, *real_stat(tmp_path)[1:]))
+        return real_stat(path, *args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    stub = _access_stub({"-r": True})
+    with (
+        patch("karotte.tools.view_lines_in_file._check_access", stub),
+        patch("karotte.tools.view_lines_in_file.os.stat", fake_stat),
+        pytest.raises(ValueError, match="^Not a regular file: "),
+    ):
+        async with asyncio.timeout(5):
+            await view_lines_in_file()(fifo, from_line=1, to_line=1)
+
+
+@pytest.mark.asyncio
+async def test_out_of_range_request_reports_line_count(tmp_path: Path):
+    file_path = tmp_path / "test.txt"
+    file_path.write_text("a\nb\nc\n")
+    with pytest.raises(ValueError, match="has 3 lines, but you requested lines 10-12"):
+        await view_lines_in_file()(file_path, from_line=10, to_line=12)
+
+
+@pytest.mark.asyncio
+async def test_count_lines_refuses_fifo_without_blocking(tmp_path: Path):
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    async with asyncio.timeout(5):
+        assert await _count_lines(str(fifo)) is None
+
+
+@pytest.mark.asyncio
+async def test_stalled_read_times_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stalling_binary: str
+):
+    file_path = tmp_path / "test.txt"
+    file_path.write_text("Line 1\n")
+    monkeypatch.setattr("karotte.tools.view_lines_in_file.SED_PATH", stalling_binary)
+    monkeypatch.setattr("karotte.demoted.SUBPROCESS_TIMEOUT_S", 0.5)
+
+    stub = _access_stub({"-r": True})
+    with (
+        patch("karotte.tools.view_lines_in_file._check_access", stub),
+        pytest.raises(RuntimeError, match="Timed out reading"),
+    ):
+        async with asyncio.timeout(10):
+            await view_lines_in_file()(file_path, from_line=1, to_line=1)
+
+
+@pytest.mark.asyncio
+async def test_hanging_open_times_out(
+    tmp_path: Path, hanging_open: Callable[[Path], None]
+):
+    file_path = tmp_path / "test.txt"
+    file_path.write_text("Line 1\n")
+    hanging_open(file_path)
+
+    stub = _access_stub({"-r": True})
+    with (
+        patch("karotte.tools.view_lines_in_file._check_access", stub),
+        pytest.raises(TimeoutError, match="^Timed out opening: "),
+    ):
+        async with asyncio.timeout(10):
+            await view_lines_in_file()(file_path, from_line=1, to_line=1)
 
 
 @pytest.mark.asyncio

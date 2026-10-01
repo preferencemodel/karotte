@@ -4,6 +4,7 @@ import re
 import shutil
 import socket
 import sys
+import time
 from collections.abc import AsyncGenerator, Callable
 from contextlib import closing
 from pathlib import Path
@@ -263,6 +264,32 @@ def resource_dir_fixture() -> Path:
         LocalPath: The resource directory path.
     """
     return Path(__file__).parent.joinpath("resources")
+
+
+@pytest.fixture
+def stalling_binary(tmp_path: Path) -> str:
+    """An executable that hangs for 30s, to stand in for a stalled subprocess."""
+    path = tmp_path / "stalling_binary"
+    path.write_text("#!/bin/sh\nexec sleep 30\n")
+    path.chmod(0o755)
+    return str(path)
+
+
+@pytest.fixture
+def hanging_open(monkeypatch: pytest.MonkeyPatch) -> Callable[[Path], None]:
+    """Make opening a given path hang, as a stalled FUSE or NFS open would."""
+    real_open = os.open
+    monkeypatch.setattr("karotte.demoted.OPEN_TIMEOUT_S", 0.3)
+
+    def hang_on(path: Path) -> None:
+        def fake_open(p: Any, *args: Any, **kwargs: Any) -> int:
+            if os.fspath(p) == str(path):
+                time.sleep(30)
+            return real_open(p, *args, **kwargs)
+
+        monkeypatch.setattr(os, "open", fake_open)
+
+    return hang_on
 
 
 def register_harness_secrets(monkeypatch: pytest.MonkeyPatch, **names: object) -> None:

@@ -3,6 +3,8 @@ import base64
 import os
 import stat
 import subprocess
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,24 +20,15 @@ from karotte.tools.view_image_file import (
 )
 
 
-def pillow_installed() -> bool:
-    try:
-        import PIL  # noqa: F401  # pyright: ignore[reportUnusedImport, reportMissingImports]
-
-        return True
-    except ImportError:
-        return False
-
-
-@pytest.mark.skipif(pillow_installed(), reason="Pillow is installed")
 @pytest.mark.asyncio
 async def test_prints_instructions_if_pillow_not_installed(resource_dir: Path):
-    """Test that an ImportError with instructions is raised if Pillow is not installed."""
-    with pytest.raises(ImportError):
+    with (
+        patch.dict(sys.modules, {"PIL": None}),
+        pytest.raises(ImportError, match="uv add Pillow"),
+    ):
         await view_image_file()((resource_dir / "image_1px.png").absolute())
 
 
-@pytest.mark.skipif(not pillow_installed(), reason="Pillow is not installed")
 @pytest.mark.usefixtures("gnu_base64")
 @pytest.mark.asyncio
 async def test_ignores_malicious_base64_in_path(
@@ -65,7 +58,7 @@ _GNU_BASE64_SHIM = """\
 #!/usr/bin/env python3
 import base64, sys
 
-sys.stdout.write(base64.b64encode(open(sys.argv[3], "rb").read()).decode() + "\\n")
+sys.stdout.write(base64.b64encode(sys.stdin.buffer.read()).decode() + "\\n")
 """
 
 
@@ -73,10 +66,13 @@ sys.stdout.write(base64.b64encode(open(sys.argv[3], "rb").read()).decode() + "\\
 def gnu_base64(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ):
-    """The tool hardcodes GNU `base64 -w 0 <file>`; macOS base64 supports neither
-    the flag nor a file argument, so swap in a shim where the real one is missing."""
+    """The tool hardcodes GNU `base64 -w 0`; macOS base64 lacks the flag, so swap
+    in a shim where the real one is missing."""
     probe = subprocess.run(
-        [BASE64_PATH, "-w", "0", "/dev/null"], capture_output=True, check=False
+        [BASE64_PATH, "-w", "0"],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        check=False,
     )
     if probe.returncode == 0:
         yield
@@ -159,7 +155,6 @@ async def test_read_capped_stops_just_past_cap():
     assert len(data) == 1000
 
 
-@pytest.mark.skipif(not pillow_installed(), reason="Pillow is not installed")
 @pytest.mark.asyncio
 async def test_oversized_file_rejected_before_read(tmp_path: Path):
     big = tmp_path / "big.png"
@@ -173,7 +168,6 @@ async def test_oversized_file_rejected_before_read(tmp_path: Path):
     assert str(5 * 1024 * 1024) in text
 
 
-@pytest.mark.skipif(not pillow_installed(), reason="Pillow is not installed")
 @pytest.mark.asyncio
 async def test_max_file_bytes_is_configurable(tmp_path: Path):
     tool = view_image_file()
@@ -188,7 +182,6 @@ async def test_max_file_bytes_is_configurable(tmp_path: Path):
         await tool(f.absolute())
 
 
-@pytest.mark.skipif(not pillow_installed(), reason="Pillow is not installed")
 @pytest.mark.usefixtures("gnu_base64")
 @pytest.mark.asyncio
 async def test_file_exactly_at_cap_passes_the_size_gate(tmp_path: Path):
@@ -202,7 +195,6 @@ async def test_file_exactly_at_cap_passes_the_size_gate(tmp_path: Path):
     assert "too large" not in str(exc_info.value).lower()
 
 
-@pytest.mark.skipif(not pillow_installed(), reason="Pillow is not installed")
 @pytest.mark.usefixtures("gnu_base64")
 @pytest.mark.asyncio
 async def test_small_valid_image_roundtrip(resource_dir: Path):
@@ -211,7 +203,6 @@ async def test_small_valid_image_roundtrip(resource_dir: Path):
     assert result.content is not None
 
 
-@pytest.mark.skipif(not pillow_installed(), reason="Pillow is not installed")
 @pytest.mark.usefixtures("gnu_base64")
 @pytest.mark.asyncio
 async def test_read_stays_bounded_when_stat_gate_is_bypassed(tmp_path: Path):
@@ -227,20 +218,41 @@ async def test_read_stays_bounded_when_stat_gate_is_bypassed(tmp_path: Path):
         await view_image_file()(big.absolute())
 
 
-@pytest.mark.skipif(not pillow_installed(), reason="Pillow is not installed")
 @pytest.mark.usefixtures("gnu_base64")
 @pytest.mark.asyncio
-async def test_fifo_swapped_in_after_stat_times_out(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    """A FIFO flipped in after the checks must time out, not hang the call on
-    the blocked open."""
+async def test_fifo_swapped_in_after_stat_is_refused_without_waiting(tmp_path: Path):
+    """A FIFO flipped in after the checks must be refused at open, not block
+    base64 until the timeout."""
     fifo = tmp_path / "fifo"
     os.mkfifo(fifo)
-    monkeypatch.setattr("karotte.demoted.SUBPROCESS_TIMEOUT_S", 0.5)
 
     with patch(
         "karotte.tools.view_image_file.os.stat", _stat_faking_regular_file(fifo)
     ):
-        with pytest.raises(RuntimeError, match="Timed out"):
-            await view_image_file()(fifo.absolute())
+        with pytest.raises(ValueError, match="^Not a regular file: "):
+            async with asyncio.timeout(5):
+                await view_image_file()(fifo.absolute())
+
+
+@pytest.mark.asyncio
+async def test_stalled_read_times_out(
+    resource_dir: Path, monkeypatch: pytest.MonkeyPatch, stalling_binary: str
+):
+    monkeypatch.setattr("karotte.tools.view_image_file.BASE64_PATH", stalling_binary)
+    monkeypatch.setattr("karotte.demoted.SUBPROCESS_TIMEOUT_S", 0.5)
+
+    with pytest.raises(RuntimeError, match="Timed out reading image"):
+        async with asyncio.timeout(10):
+            await view_image_file()((resource_dir / "image_1px.png").absolute())
+
+
+@pytest.mark.asyncio
+async def test_hanging_open_times_out(
+    resource_dir: Path, hanging_open: Callable[[Path], None]
+):
+    image = (resource_dir / "image_1px.png").absolute()
+    hanging_open(image)
+
+    with pytest.raises(TimeoutError, match="^Timed out opening: "):
+        async with asyncio.timeout(10):
+            await view_image_file()(image)

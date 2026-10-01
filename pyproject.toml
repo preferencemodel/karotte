@@ -42,6 +42,7 @@ test = [
   "pytest-xdist",
   "pytest-asyncio",
   "pytest-httpx>=0.35.0",
+  "pillow>=11",
 ]
 
 gcs = [

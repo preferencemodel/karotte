@@ -9,7 +9,7 @@ from fastmcp.tools.tool import ToolResult
 from fastmcp.utilities.types import Image as FastMCPImage
 from karotte import ToolBase, demoted
 from karotte.demoted import drain_bounded as _drain_bounded
-from karotte.demoted import kill_quietly as _kill
+from karotte.demoted import open_error, open_regular_as_stdin
 from karotte.subprocess import make_demote_fn
 from pydantic import BaseModel
 
@@ -59,7 +59,7 @@ class view_image_file(ToolBase[ViewImageFileConfig]):
         The image must be a .jpeg, .png, .gif, or .webp and must be at most 5MB.
         """
         try:
-            from PIL import Image as PILImage  # pyright: ignore[reportMissingImports]
+            from PIL import Image as PILImage
         except ImportError:
             raise ImportError(
                 "Pillow is required to use the view_image_file tool. "
@@ -82,8 +82,7 @@ class view_image_file(ToolBase[ViewImageFileConfig]):
             BASE64_PATH,
             "-w",
             "0",
-            str(file_path),
-            preexec_fn=make_demote_fn(),
+            preexec_fn=open_regular_as_stdin(str(file_path), make_demote_fn()),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -99,7 +98,7 @@ class view_image_file(ToolBase[ViewImageFileConfig]):
             async with asyncio.timeout(demoted.SUBPROCESS_TIMEOUT_S):
                 stdout, hit_cap = await _read_capped(proc.stdout, output_cap)
                 if hit_cap:
-                    _kill(proc)
+                    await demoted.reap(proc)
                 try:
                     stderr = await stderr_task
                 except Exception:  # noqa: BLE001 - stderr is diagnostic only
@@ -110,6 +109,9 @@ class view_image_file(ToolBase[ViewImageFileConfig]):
         finally:
             stderr_task.cancel()
             await demoted.reap(proc)
+
+        if err := open_error(file_path, proc.returncode, stderr):
+            raise err
 
         if hit_cap:
             raise _too_large(None, self.config.max_file_bytes)
