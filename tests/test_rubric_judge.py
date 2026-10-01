@@ -44,7 +44,7 @@ def reset_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def mock_completion() -> Iterator[MagicMock]:
-    with patch("karotte.judges.rubric_judge.litellm.completion") as completion:
+    with patch("litellm.completion") as completion:
         completion.return_value = _response("YES\nCriterion is met.")
         yield completion
 
