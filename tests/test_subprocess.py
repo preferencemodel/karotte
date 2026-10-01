@@ -994,7 +994,7 @@ def test_named_pipes_end_up_owned_by_the_demoted_uid(
 def test_wrap_to_disable_networking_outside_gvisor(monkeypatch: pytest.MonkeyPatch):
     """Outside gVisor, --map-current-user is included so the inside uid
     matches the outer uid."""
-    monkeypatch.delenv("KAROTTE_GVISOR", raising=False)
+    monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
     assert wrap_to_disable_networking(["echo", "hi"]) == [
         trusted_binary("unshare"),
         "--user",
@@ -1009,7 +1009,7 @@ def test_wrap_to_disable_networking_outside_gvisor(monkeypatch: pytest.MonkeyPat
 def test_wrap_to_disable_networking_under_gvisor(monkeypatch: pytest.MonkeyPatch):
     """Under gVisor, --map-current-user is omitted because gVisor's procfs
     doesn't support uid_map / gid_map writes."""
-    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
     assert wrap_to_disable_networking(["echo", "hi"]) == [
         trusted_binary("unshare"),
         "--user",
@@ -1023,7 +1023,7 @@ def test_wrap_to_disable_networking_under_gvisor(monkeypatch: pytest.MonkeyPatch
 def test_wrap_to_disable_networking_preserves_argv(monkeypatch: pytest.MonkeyPatch):
     """Original argv is appended after `--` so flags in the wrapped command
     aren't interpreted by `unshare(1)`."""
-    monkeypatch.delenv("KAROTTE_GVISOR", raising=False)
+    monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
     wrapped = wrap_to_disable_networking(["bash", "-c", "--help"])
     sep = wrapped.index("--")
     assert wrapped[sep + 1 :] == ["bash", "-c", "--help"]
@@ -1060,7 +1060,7 @@ def test_student_session_runs_under_a_pid_namespace_on_gvisor(
     """The namespace is the guaranteed killer: SIGKILLing its init reaps every
     process inside atomically, including fork-and-die chains no ``/proc`` sweep
     can see."""
-    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
     _ = _probe_returns(monkeypatch, 0)
 
@@ -1078,7 +1078,7 @@ def test_student_session_demotes_via_unshare_not_the_preexec(
     """``unshare`` needs CAP_SYS_ADMIN to make the namespace, so it has to still
     be root when it runs; it drops to the student itself via ``--setuid``. A
     preexec that demoted first would leave it unable to create the namespace."""
-    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
     _ = _probe_returns(monkeypatch, 0)
 
@@ -1106,7 +1106,7 @@ def test_student_session_keeps_the_sweep_fallback_on_runc(
     """A PID namespace on runc leaves an incoherent ``/proc`` (it is masked, so
     ``--mount-proc`` cannot replace it), which breaks the ``ps``/``pkill`` that
     students rely on. runc keeps demoting in the preexec and reaping by sweep."""
-    monkeypatch.delenv("KAROTTE_GVISOR", raising=False)
+    monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
     probes = _probe_returns(monkeypatch, 0)
 
@@ -1132,7 +1132,7 @@ def test_student_session_falls_back_when_the_namespace_cannot_be_made(
     """A gVisor pod without CAP_SYS_ADMIN can't make the namespace. Degrade to
     the best-effort sweep rather than refusing to run, and demote in the preexec
     again since no ``unshare`` will do it."""
-    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
     _ = _probe_returns(monkeypatch, 1)
 
@@ -1152,7 +1152,7 @@ def test_student_session_falls_back_when_the_namespace_cannot_be_made(
 
 def test_student_session_probes_only_once(monkeypatch: pytest.MonkeyPatch):
     """The probe forks a process; a session start is not the place to repeat it."""
-    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
     probes = _probe_returns(monkeypatch, 0)
 
@@ -1168,7 +1168,7 @@ def test_student_session_nests_the_network_namespace_inside(
     """The network namespace stays exactly as it was, just nested inside the PID
     namespace: it is unshared by the demoted student, so it keeps being an
     unprivileged user namespace rather than a root-owned one."""
-    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
     _ = _probe_returns(monkeypatch, 0)
 
@@ -1186,7 +1186,7 @@ def test_student_session_outside_a_container_is_untouched(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """No demotion target means no grading to protect and no uid for --setuid."""
-    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
     monkeypatch.delenv("KAROTTE_DEMOTE_ID", raising=False)
     monkeypatch.delenv("KAROTTE_CONTAINERIZED", raising=False)
     probes = _probe_returns(monkeypatch, 0)
@@ -1200,7 +1200,7 @@ def test_student_session_outside_a_container_is_untouched(
 
 def test_student_session_chowns_named_fds(monkeypatch: pytest.MonkeyPatch):
     """The pipes still have to reach the student, whoever ends up demoting."""
-    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
     _ = _probe_returns(monkeypatch, 0)
 
@@ -1223,7 +1223,7 @@ def test_student_session_chowns_named_fds(monkeypatch: pytest.MonkeyPatch):
 def test_student_session_pidns_preexec_unshares_ipc(monkeypatch: pytest.MonkeyPatch):
     """With ``unshare(1)`` doing the demotion, the preexec enters the IPC
     namespace itself — it is the only part that still runs as root."""
-    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
     _ = _probe_returns(monkeypatch, 0)
     monkeypatch.setattr("karotte.subprocess._ipcns_available", True)

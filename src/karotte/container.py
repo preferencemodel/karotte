@@ -43,7 +43,7 @@ def is_containerized() -> bool:
 
 def is_gvisor() -> bool:
     """Return True if this container is sandboxed by gVisor."""
-    return "KAROTTE_GVISOR" in os.environ or os.path.exists(GVISOR_SENTRY_PROC)
+    return os.path.exists(GVISOR_SENTRY_PROC)
 
 
 def demoted_uid_gid() -> int | None:

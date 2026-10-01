@@ -151,6 +151,17 @@ def test_absent_env_var_still_detects_gvisor(monkeypatch: pytest.MonkeyPatch) ->
     assert current_sandbox() is Sandbox.GVISOR
 
 
+def test_only_the_sentry_file_detects_gvisor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sentry = tmp_path / "sentry-meminfo"
+    monkeypatch.setenv("KAROTTE_GVISOR", "1")
+    monkeypatch.setattr(container, "GVISOR_SENTRY_PROC", str(sentry))
+    assert not container.is_gvisor()
+    sentry.touch()
+    assert container.is_gvisor()
+
+
 @pytest.mark.usefixtures("watches")
 def test_gvisor_never_uses_cgroups(monkeypatch: pytest.MonkeyPatch) -> None:
     """gVisor accepts every write and enforces none, so a working-looking

@@ -225,8 +225,7 @@ def get_container_run_command(
     )
 
     if runtime == "docker:gvisor":
-        command.extend(["--runtime=runsc", "--env", "KAROTTE_GVISOR=1"])
-        command.extend(["--env", "KAROTTE_SANDBOX=gvisor"])
+        command.extend(["--runtime=runsc", "--env", "KAROTTE_SANDBOX=gvisor"])
         # SYS_ADMIN lets student sessions be put in a PID namespace, which is
         # how they get reaped race-free before grading. Safe to add under
         # gVisor, which services syscalls in userspace rather than passing them

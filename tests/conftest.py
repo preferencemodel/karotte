@@ -182,9 +182,7 @@ def test_task(sample_config: EvaluationRunConfig) -> TestTask:
 @pytest.fixture(autouse=True)
 def fresh_confinement():
     """Sandbox detection and the confinement are cached per process, but tests
-    flip the env vars they are derived from. The vars themselves are restored
-    too: ``_set_sandbox_env`` writes them to ``os.environ`` directly, past
-    monkeypatch's bookkeeping."""
+    flip the env var they are derived from."""
     from karotte.cgroups import (
         _student_groups,  # pyright: ignore[reportPrivateUsage]
     )
@@ -193,16 +191,15 @@ def fresh_confinement():
         current_sandbox,
     )
 
-    saved = {var: os.environ.get(var) for var in ("KAROTTE_SANDBOX", "KAROTTE_GVISOR")}
+    saved = os.environ.get("KAROTTE_SANDBOX")
     current_sandbox.cache_clear()
     _confinement_for.cache_clear()
     _student_groups.clear()
     yield
-    for var, value in saved.items():
-        if value is None:
-            os.environ.pop(var, None)
-        else:
-            os.environ[var] = value
+    if saved is None:
+        os.environ.pop("KAROTTE_SANDBOX", None)
+    else:
+        os.environ["KAROTTE_SANDBOX"] = saved
     current_sandbox.cache_clear()
     _confinement_for.cache_clear()
     _student_groups.clear()

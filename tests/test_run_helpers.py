@@ -1353,15 +1353,15 @@ class TestDockerGvisorRunCommand:
 
         assert ("--cap-add=SYS_PTRACE" in command) == (runtime == "docker:gvisor")
 
-    def test_sets_karotte_gvisor_env_var(self, sample_config: EvaluationRunConfig):
+    def test_declares_the_gvisor_sandbox(self, sample_config: EvaluationRunConfig):
         command, _ = get_container_run_command(
             sample_config, "docker:gvisor", dev=False, keep_container=False
         )
 
         env_indices = [i for i, arg in enumerate(command) if arg == "--env"]
         env_values = [command[i + 1] for i in env_indices]
-        assert "KAROTTE_GVISOR=1" in env_values
         assert "KAROTTE_SANDBOX=gvisor" in env_values
+        assert not [v for v in env_values if v.startswith("KAROTTE_GVISOR")]
 
     def test_uses_plain_image_name(self, sample_config: EvaluationRunConfig):
         """docker:gvisor should use 'karotte', not 'localhost/karotte'."""
@@ -1398,17 +1398,13 @@ class TestDockerGvisorRunCommand:
 
         assert "--runtime=runsc" not in command
 
-    def test_plain_docker_does_not_set_karotte_gvisor(
-        self, sample_config: EvaluationRunConfig
-    ):
-        """Sanity: plain docker runtime should not set KAROTTE_GVISOR."""
+    def test_plain_docker_declares_runc(self, sample_config: EvaluationRunConfig):
         command, _ = get_container_run_command(
             sample_config, "docker", dev=False, keep_container=False
         )
 
         env_indices = [i for i, arg in enumerate(command) if arg == "--env"]
         env_values = [command[i + 1] for i in env_indices]
-        assert "KAROTTE_GVISOR=1" not in env_values
         assert "KAROTTE_SANDBOX=runc" in env_values
 
     def test_podman_does_not_include_runsc(self, sample_config: EvaluationRunConfig):
@@ -1450,9 +1446,9 @@ class TestMaybeBlockInternetGvisor:
     """Tests for _maybe_block_internet firewall rule generation under gvisor."""
 
     def test_uses_iptables_nft_by_default(self, monkeypatch: pytest.MonkeyPatch):
-        """Without KAROTTE_GVISOR, should use standard iptables (nft)."""
+        """Outside gVisor, should use standard iptables (nft)."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.delenv("KAROTTE_GVISOR", raising=False)
+        monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
 
         rules: list[str] = []
         with patch(
@@ -1468,9 +1464,9 @@ class TestMaybeBlockInternetGvisor:
         assert not any("iptables-legacy" in r for r in rules)
 
     def test_uses_iptables_legacy_under_gvisor(self, monkeypatch: pytest.MonkeyPatch):
-        """With KAROTTE_GVISOR set, should use iptables-legacy."""
+        """Under gVisor, should use iptables-legacy."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.setenv("KAROTTE_GVISOR", "1")
+        monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
 
         rules: list[str] = []
         with patch(
@@ -1488,9 +1484,9 @@ class TestMaybeBlockInternetGvisor:
     def test_uses_drop_instead_of_reject_under_gvisor(
         self, monkeypatch: pytest.MonkeyPatch
     ):
-        """With KAROTTE_GVISOR set, catch-all rules should use DROP instead of REJECT."""
+        """Under gVisor, catch-all rules should use DROP instead of REJECT."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.setenv("KAROTTE_GVISOR", "1")
+        monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
 
         rules: list[str] = []
         with patch(
@@ -1506,9 +1502,9 @@ class TestMaybeBlockInternetGvisor:
         assert len(drop_rules) == 2  # one IPv4, one IPv6
 
     def test_uses_reject_without_gvisor(self, monkeypatch: pytest.MonkeyPatch):
-        """Without KAROTTE_GVISOR, catch-all rules should use REJECT."""
+        """Outside gVisor, catch-all rules should use REJECT."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.delenv("KAROTTE_GVISOR", raising=False)
+        monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
 
         rules: list[str] = []
         with patch(
@@ -1526,7 +1522,7 @@ class TestMaybeBlockInternetGvisor:
     def test_does_nothing_outside_container(self, monkeypatch: pytest.MonkeyPatch):
         """Should not apply any rules when KAROTTE_CONTAINERIZED is not set."""
         monkeypatch.delenv("KAROTTE_CONTAINERIZED", raising=False)
-        monkeypatch.delenv("KAROTTE_GVISOR", raising=False)
+        monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
 
         with patch("karotte.confinement.subprocess.run") as mock_run:
             _maybe_block_internet()
@@ -1538,7 +1534,7 @@ class TestMaybeBlockInternetGvisor:
     ):
         """Should apply 7 IPv4 + 5 IPv6 = 12 firewall rules total."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.setenv("KAROTTE_GVISOR", "1")
+        monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
 
         with patch(
             "karotte.confinement.subprocess.run",
@@ -1556,7 +1552,7 @@ class TestMaybeBlockInternetBlockedPorts:
         self, monkeypatch: pytest.MonkeyPatch, blocked_ports: list[int] | None = None
     ) -> list[str]:
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.delenv("KAROTTE_GVISOR", raising=False)
+        monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
 
         with patch(
             "karotte.confinement.subprocess.run",
@@ -1628,7 +1624,7 @@ class TestMaybeBlockInternetBlockedPorts:
     ):
         """Allowed egress IPs get an ACCEPT rule ahead of the catch-all reject."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.delenv("KAROTTE_GVISOR", raising=False)
+        monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
         with patch(
             "karotte.confinement.subprocess.run",
             return_value=MagicMock(returncode=0, stderr=""),
@@ -1645,7 +1641,7 @@ class TestMaybeBlockInternetBlockedPorts:
     def test_blocked_ports_under_gvisor(self, monkeypatch: pytest.MonkeyPatch):
         """Port-block rules should use iptables-legacy under gvisor."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.setenv("KAROTTE_GVISOR", "1")
+        monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
 
         with patch(
             "karotte.confinement.subprocess.run",
@@ -1665,7 +1661,7 @@ class TestMaybeBlockInternetBlockedPorts:
     ):
         """A failing iptables call should raise RuntimeError when gvisor is off."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.delenv("KAROTTE_GVISOR", raising=False)
+        monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
 
         with patch(
             "karotte.confinement.subprocess.run",
@@ -1680,7 +1676,7 @@ class TestMaybeBlockInternetBlockedPorts:
         """Under gvisor, a failing iptables call should warn and stop applying
         further rules instead of raising."""
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
-        monkeypatch.setenv("KAROTTE_GVISOR", "1")
+        monkeypatch.setenv("KAROTTE_SANDBOX", "gvisor")
 
         with patch(
             "karotte.confinement.subprocess.run",
