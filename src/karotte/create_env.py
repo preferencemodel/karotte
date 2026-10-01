@@ -1,6 +1,8 @@
 import importlib.resources
+import re
 import shutil
 import subprocess
+import tomllib
 from collections.abc import Sequence
 from importlib.metadata import version as pkg_version
 from pathlib import Path
@@ -173,12 +175,13 @@ def _populate(
             if out_relative_path.suffix == ".jinja":
                 out_relative_path = out_relative_path.with_suffix("")
 
-            if out_relative_path.name == "pyproject.toml":
-                if vendor_karotte:
-                    rendered = rendered.replace(
-                        '"karotte"',
-                        '"karotte @ file:///${PROJECT_ROOT}/.karotte"',
-                    )
+            if (
+                vendor_karotte
+                and out_relative_path.name == "pyproject.toml"
+                and "karotte"
+                in tomllib.loads(rendered).get("project", {}).get("dependencies", [])
+            ):
+                rendered = point_karotte_at_vendored_copy(rendered)
 
             # Write to output directory — later templates override earlier ones
             output_path = output_dir / out_relative_path
@@ -217,6 +220,21 @@ def _populate(
         # A PEP 723 script: uv resolves its inline dependencies with the
         # project — and the `exclude-newer` just written into it — ignored.
         run_uv(("run",), "--no-project", "post_create.py", cwd=output_dir, check=True)
+
+
+def point_karotte_at_vendored_copy(text: str) -> str:
+    """Set the karotte source to ``.karotte`` the way ``just vendor-karotte`` does,
+    commenting out any previous one so ``just unvendor-karotte`` can restore it."""
+    entry = 'karotte = { path = ".karotte" }'
+    header = re.search(r"^\[tool\.uv\.sources\][ \t]*\n", text, re.M)
+    if header is None:
+        return text.rstrip("\n") + f"\n\n[tool.uv.sources]\n{entry}\n"
+    next_table = re.search(r"^\[", text[header.end() :], re.M)
+    end = header.end() + next_table.start() if next_table else len(text)
+    body = re.sub(
+        r"^(karotte[ \t]*=)", r"# vendored: \1", text[header.end() : end], flags=re.M
+    )
+    return text[: header.end()] + entry + "\n" + body + text[end:]
 
 
 def _vendor_karotte(output_dir: Path) -> None:

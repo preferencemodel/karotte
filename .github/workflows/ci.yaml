@@ -78,7 +78,8 @@ jobs:
       - name: Set version
         id: version
         run: |
-          version="3.0.$(git rev-list --count HEAD)"
+          base="$(uv version --short --frozen)"
+          version="${base%.*}.$(git rev-list --count HEAD)"
           uv version --frozen "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Build package

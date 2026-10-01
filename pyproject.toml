@@ -1,6 +1,6 @@
 [project]
 name = "karotte"
-version = "0.1.0" # Gets set on publish
+version = "3.0.0" # Gets set on publish
 description = "Let an LLM execute tasks in an environment."
 classifiers = ["Typing :: Typed"]
 requires-python = ">=3.12"
