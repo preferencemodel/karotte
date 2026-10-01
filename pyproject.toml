@@ -112,6 +112,7 @@ addopts = """
     --ignore="tmp"
     --numprocesses=4
     """
+faulthandler_timeout = 300
 markers = [
   "real_cohort_kill: let kill_processes really fork a helper and kill(-1) its uid cohort",
   "requires_root: needs Linux and root; skipped otherwise, run in CI by `just test-root`",
