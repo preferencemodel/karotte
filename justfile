@@ -14,8 +14,8 @@ fix:
   uv run --frozen --extra dev ruff check --fix
 
 # Run tests for karotte
-test:
-  uv run --frozen --extra test pytest
+test *args:
+  uv run --frozen --extra test pytest {{ args }}
 
 # Run the `requires_root` tests as root. Serial: they share uids.
 test-root:
