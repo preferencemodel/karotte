@@ -17,6 +17,7 @@ from importlib.metadata import entry_points
 
 from loguru import logger
 
+from karotte.confinement import Sandbox, current_sandbox
 from karotte.container import demoted_uid_gid as demoted_uid_gid
 from karotte.trusted_bin import trusted_binary as trusted_binary
 
@@ -388,15 +389,14 @@ def wrap_to_disable_networking(argv: list[str]) -> list[str]:
     syscall, it's a fresh execve'd, single-threaded process.
 
     Outside gVisor, ``--map-current-user`` writes a uid_map / gid_map
-    so ``getuid()`` inside the new userns matches the outer uid. Under
-    gVisor (``KAROTTE_GVISOR`` env var set), gVisor's procfs does not
-    support those map writes, so we omit the flag and accept that the
-    child will see the overflow uid (typically 65534) inside the new
+    so ``getuid()`` inside the new userns matches the outer uid. gVisor's
+    procfs does not support those map writes, so there we omit the flag
+    and accept that the child will see the overflow uid (typically 65534) inside the new
     userns. Callers who care about a real uid view inside the sandbox
     must compensate (e.g. set ``HOME``/``USER`` explicitly).
     """
     unshare = trusted_binary("unshare")
-    if os.environ.get("KAROTTE_GVISOR") is not None:
+    if current_sandbox() is Sandbox.GVISOR:
         return [unshare, "--user", "--net", "--", *argv]
     return [unshare, "--user", "--net", "--map-current-user", "--", *argv]
 
@@ -447,7 +447,7 @@ def _pid_namespace_available(uid_gid: int) -> bool:
     if _pidns_probed:
         return _pidns_available
     _pidns_probed = True
-    if os.environ.get("KAROTTE_GVISOR") is None:
+    if current_sandbox() is not Sandbox.GVISOR:
         return False
     try:
         result = subprocess.run(
