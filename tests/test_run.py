@@ -42,6 +42,17 @@ def _stub_process_hardening():  # pyright: ignore[reportUnusedFunction]
         yield
 
 
+@pytest.fixture(autouse=True)
+def _docker_by_default(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+    """The real default depends on the OS running the tests and its VM setup."""
+    # The package re-exports the `run` function under the module's name.
+    monkeypatch.setattr(
+        sys.modules["karotte.cli.run"],
+        "default_runtime",
+        lambda _hardware=None: "docker",  # pyright: ignore[reportUnknownLambdaType]
+    )
+
+
 @pytest.fixture
 def in_karotte_image(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
@@ -620,7 +631,7 @@ class TestSanitizePathsTiming:
             patch("karotte.cli.run.build_configs", return_value=[run_config]),
             patch("karotte.cli.run._run_without_ui"),
         ):
-            run(config="{}", containerized=containerized, no_ui=True)
+            run(config="{}", containerized=containerized, no_ui=True, runtime="podman")
         return {
             "sanitize_paths_and_reexec": mock_sanitize,
             "harden_filesystem": mock_harden,
@@ -805,10 +816,12 @@ class TestChownOutputsAfterRun:
         chown.assert_called_once()
 
 
-def test_default_runtime_is_docker():
+def test_the_runtime_defaults_to_the_os_vm():
+    """No default in the signature: it is resolved from the platform and the
+    task's hardware (see `default_runtime`)."""
     import inspect
 
-    assert inspect.signature(run).parameters["runtime"].default == "docker"
+    assert inspect.signature(run).parameters["runtime"].default is None
 
 
 class TestMissingRuntime:

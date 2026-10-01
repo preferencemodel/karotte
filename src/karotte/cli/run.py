@@ -15,7 +15,7 @@ from karotte import Runtime, staged_mounts
 from karotte.build import build_container, require_buildx, require_runtime
 from karotte.container import is_containerized
 from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
-from karotte.hardware import container_run_args
+from karotte.hardware import container_run_args, default_runtime
 from karotte.judges import RubricJudge
 from karotte.load_tasks import load_task, require_environment
 from karotte.run_config_preprocessors import apply_run_config_preprocessors
@@ -86,12 +86,14 @@ def run(
         ),
     ] = True,
     runtime: Annotated[
-        Runtime,
+        Runtime | None,
         typer.Option(
             metavar="NAME",
-            help=f"Container runtime: {', '.join(get_args(Runtime))}.",
+            help=f"Container runtime: {', '.join(get_args(Runtime))}. Default: the"
+            + " OS's VM (`apple-container` on macOS, `firecracker` on Linux); docker for"
+            + " accelerator hardware and other platforms.",
         ),
-    ] = "docker",
+    ] = None,
     build_context: Annotated[
         str, typer.Option(help="Path to the build context for the container.")
     ] = ".",
@@ -225,13 +227,26 @@ def run(
                 os.environ[env_var] = "model_api_key"
 
     require_environment()
-    if containerized and not is_containerized():
+    # An explicit runtime is checked before anything else; the default needs
+    # the task's hardware, so it is checked once that is known.
+    on_host = containerized and not is_containerized()
+    if on_host and runtime is not None:
         require_runtime(runtime)
         if not dev:
             require_buildx(runtime)
 
     run_config = parse_config(config, prepare_only=prepare_only)
     run_config = apply_run_config_preprocessors(run_config)
+
+    if runtime is None:
+        runtime = default_runtime(
+            load_task(run_config).required_hardware if on_host else None
+        )
+        if on_host:
+            logger.info(f"Runtime: {runtime} (default; pass --runtime to change)")
+            require_runtime(runtime)
+            if not dev:
+                require_buildx(runtime)
 
     if runtime == "docker:gvisor":
         validate_gvisor_runtime()

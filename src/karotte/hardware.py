@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import platform
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib.metadata import entry_points
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from loguru import logger
@@ -107,3 +110,38 @@ def vm_size(hardware: str | None) -> VmSize:
         vm_memory_bytes=memory + VM_MEMORY_HEADROOM_BYTES,
         disk_bytes=limits.disk_bytes,
     )
+
+
+def default_runtime(required_hardware: str | None = None) -> Runtime:
+    """The runtime used when none is given: the OS's VM, so a local run gets
+    the confinement a guest kernel of its own gives (Apple `container` on
+    macOS, Firecracker on Linux), where the machine can run it. Hardware a
+    hardware plugin marks ``passthrough`` (a GPU, a TPU) stays on docker, as
+    do machines that can't run the VM: an Intel Mac or one before macOS 26,
+    Linux without KVM. A VM runtime the machine can run but that isn't set up
+    stops the run with what's missing instead."""
+    limits = hardware_limits(required_hardware)
+    if limits is not None and limits.passthrough:
+        return "docker"
+    if sys.platform == "darwin" and _mac_runs_apple_container():
+        return "apple-container"
+    if sys.platform.startswith("linux") and _linux_runs_firecracker():
+        return "firecracker"
+    return "docker"
+
+
+_MIN_MACOS_MAJOR = 26
+KVM_DEVICE = Path("/dev/kvm")
+
+
+def _mac_runs_apple_container() -> bool:
+    major = platform.mac_ver()[0].split(".")[0]
+    return (
+        platform.machine() == "arm64"
+        and major.isdigit()
+        and int(major) >= _MIN_MACOS_MAJOR
+    )
+
+
+def _linux_runs_firecracker() -> bool:
+    return platform.machine() in ("x86_64", "aarch64") and KVM_DEVICE.exists()
