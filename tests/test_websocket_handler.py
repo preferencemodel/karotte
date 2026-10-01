@@ -29,6 +29,7 @@ async def test_listen_to_websocket_receives_events():
     event_queue: deque[str] = deque()
     shutdown_event = anyio.Event()
     server_ready = asyncio.Event()
+    client_done = asyncio.Event()
 
     async def handler(websocket: ServerConnection) -> None:
         await websocket.send('{"type": "test", "data": "hello"}')
@@ -38,15 +39,18 @@ async def test_listen_to_websocket_receives_events():
     async def run_server():
         async with serve(handler, "127.0.0.1", port):
             server_ready.set()
-            await asyncio.sleep(2)
+            await client_done.wait()
 
     async def run_client():
         await server_ready.wait()
-        await listen_to_websocket(
-            f"127.0.0.1:{port}",
-            event_queue,
-            shutdown_event,
-        )
+        try:
+            await listen_to_websocket(
+                f"127.0.0.1:{port}",
+                event_queue,
+                shutdown_event,
+            )
+        finally:
+            client_done.set()
 
     await asyncio.gather(run_server(), run_client())
 
@@ -67,6 +71,7 @@ async def test_listen_to_websocket_handles_connection_closed_ok():
     shutdown_event = anyio.Event()
     status_updates: list[str] = []
     server_ready = asyncio.Event()
+    client_done = asyncio.Event()
 
     async def handler(websocket: ServerConnection) -> None:
         await websocket.send('{"type": "test"}')
@@ -76,16 +81,19 @@ async def test_listen_to_websocket_handles_connection_closed_ok():
     async def run_server():
         async with serve(handler, "127.0.0.1", port):
             server_ready.set()
-            await asyncio.sleep(2)
+            await client_done.wait()
 
     async def run_client():
         await server_ready.wait()
-        await listen_to_websocket(
-            f"127.0.0.1:{port}",
-            event_queue,
-            shutdown_event,
-            status_callback=lambda s: status_updates.append(s),
-        )
+        try:
+            await listen_to_websocket(
+                f"127.0.0.1:{port}",
+                event_queue,
+                shutdown_event,
+                status_callback=lambda s: status_updates.append(s),
+            )
+        finally:
+            client_done.set()
 
     await asyncio.gather(run_server(), run_client())
 
@@ -108,6 +116,7 @@ async def test_listen_to_websocket_handles_connection_closed_error():
     shutdown_event = anyio.Event()
     status_updates: list[str] = []
     server_ready = asyncio.Event()
+    client_done = asyncio.Event()
 
     async def handler(websocket: ServerConnection) -> None:
         await websocket.send('{"type": "test"}')
@@ -117,16 +126,19 @@ async def test_listen_to_websocket_handles_connection_closed_error():
     async def run_server():
         async with serve(handler, "127.0.0.1", port):
             server_ready.set()
-            await asyncio.sleep(2)
+            await client_done.wait()
 
     async def run_client():
         await server_ready.wait()
-        await listen_to_websocket(
-            f"127.0.0.1:{port}",
-            event_queue,
-            shutdown_event,
-            status_callback=lambda s: status_updates.append(s),
-        )
+        try:
+            await listen_to_websocket(
+                f"127.0.0.1:{port}",
+                event_queue,
+                shutdown_event,
+                status_callback=lambda s: status_updates.append(s),
+            )
+        finally:
+            client_done.set()
 
     await asyncio.gather(run_server(), run_client())
 
@@ -145,6 +157,7 @@ async def test_listen_to_websocket_status_callback():
     shutdown_event = anyio.Event()
     status_updates: list[str] = []
     server_ready = asyncio.Event()
+    client_done = asyncio.Event()
 
     async def handler(websocket: ServerConnection) -> None:
         await websocket.send('{"type": "test"}')
@@ -153,16 +166,19 @@ async def test_listen_to_websocket_status_callback():
     async def run_server():
         async with serve(handler, "127.0.0.1", port):
             server_ready.set()
-            await asyncio.sleep(2)
+            await client_done.wait()
 
     async def run_client():
         await server_ready.wait()
-        await listen_to_websocket(
-            f"127.0.0.1:{port}",
-            event_queue,
-            shutdown_event,
-            status_callback=lambda s: status_updates.append(s),
-        )
+        try:
+            await listen_to_websocket(
+                f"127.0.0.1:{port}",
+                event_queue,
+                shutdown_event,
+                status_callback=lambda s: status_updates.append(s),
+            )
+        finally:
+            client_done.set()
 
     await asyncio.gather(run_server(), run_client())
 
