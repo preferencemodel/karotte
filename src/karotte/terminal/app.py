@@ -22,10 +22,10 @@ from karotte.build import get_container_build_command
 from karotte.load_tasks import load_task
 from karotte.run_helpers import (
     clean_up_old_containers,
+    copy_hint,
     get_container_run_command,
     run_non_containerized,
 )
-from karotte.runtime import get_engine
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.run_state import RunState
 from karotte.schemas.transcript import (
@@ -434,9 +434,7 @@ class KarotteApp(App[None]):
             output_callback("\n=== All runs completed ===\n")
             if keep_containers:
                 output_callback("Containers preserved. To copy data:\n")
-                output_callback(
-                    f"  {get_engine(runtime)} cp karotte_run_{run_configs[0].run_id}:/workdir/ ./out/\n"
-                )
+                output_callback(f"  {copy_hint(runtime, run_configs[0].run_id)}\n")
 
     async def _run_non_containerized(
         self,
@@ -928,7 +926,19 @@ def _run_containerized_worker(
     # Write output to log file that can be tailed
     log_file = Path(f"/tmp/karotte_run_{run_config.run_id}.log")
     with open(log_file, "w") as f:
-        subprocess.run(run_command, check=True, stdout=f, stderr=subprocess.STDOUT)
+        if runtime == "apple-container":
+            from karotte.apple_container import run_with_watchdog
+
+            run_with_watchdog(
+                run_command,
+                run_config,
+                True,
+                run_config.websocket_config.port,
+                stdout=f,
+                stderr=subprocess.STDOUT,
+            )
+        else:
+            subprocess.run(run_command, check=True, stdout=f, stderr=subprocess.STDOUT)
 
 
 if __name__ == "__main__":

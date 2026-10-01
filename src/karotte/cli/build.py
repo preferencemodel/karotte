@@ -40,6 +40,10 @@ def build(
     """Build a container image for the environment."""
     require_runtime(runtime)
     require_buildx(runtime)
+    if runtime == "apple-container":
+        from karotte.apple_container import validate_container_runtime
+
+        validate_container_runtime()
     build_container(
         runtime,
         build_context,
