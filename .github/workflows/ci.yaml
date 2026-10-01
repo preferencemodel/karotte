@@ -23,6 +23,7 @@ jobs:
   core-tests:
     name: Core Tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Free disk space
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
