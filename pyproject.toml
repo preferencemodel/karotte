@@ -107,11 +107,11 @@ reportImplicitOverride = false
 [tool.pytest.ini_options]
 addopts = """
     -vv
-    --doctest-modules
     --import-mode=append
     --ignore="src/karotte/templates"
     --ignore="tmp"
     --numprocesses=4
+    --dist=worksteal
     """
 faulthandler_timeout = 300
 markers = [
