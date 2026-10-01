@@ -1,0 +1,142 @@
+#!/bin/bash
+# PID 1 of a karotte Firecracker VM, written into the base drive at
+# /.karotte/init.
+#
+# Stage 1 runs on the read-only base drive (/dev/vda): it puts an overlay over
+# it, with the upper layer on the scratch drive (/dev/vdb), and pivots into it.
+# Stage 2 sets the guest up from the io drive (/dev/vdc), runs karotte and
+# powers off. Firecracker exits when the guest reboots (reboot=k); if this
+# script dies instead, the kernel panics and panic=1 reboots it.
+#
+# io drive layout, written by the launcher:
+#   in/argv         the command to run, NUL-separated
+#   in/env          the environment, NUL-separated KEY=VALUE
+#   in/guest.conf   KEY=VALUE lines: WORKDIR, HEARTBEAT_PORT, RELAY_PORT
+#   in/hosts        lines appended to /etc/hosts
+#   in/resolv.conf  copied to /etc/resolv.conf when present
+#   in/mounts       device, kind (dir or file), name, target; tab-separated
+#   out/            bound on /out
+#   status/         exit_code, written after the run
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+K=/run/karotte
+AGENT=/.karotte/agent.py
+
+log() { echo "karotte-init: $*"; }
+
+python_bin() {
+  local p
+  for p in /root/.venv/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
+    if [ -x "$p" ]; then
+      echo "$p"
+      return
+    fi
+  done
+  echo python3
+}
+PY=$(python_bin)
+
+power_off() {
+  sync
+  "$PY" -I -S "$AGENT" poweroff
+  log "poweroff failed; exiting PID 1"
+  exit 1
+}
+
+if [ "$1" != stage2 ]; then
+  mount -t proc proc /proc
+  mount -t sysfs sysfs /sys
+  mountpoint -q /dev || mount -t devtmpfs devtmpfs /dev
+  mount -t tmpfs -o mode=0700,nosuid,nodev tmpfs /run || power_off
+  mkdir -p $K/scratch $K/root
+  mount -t ext4 /dev/vdb $K/scratch || { log "no scratch drive"; power_off; }
+  mkdir -p $K/scratch/upper $K/scratch/work
+  mount -t overlay overlay \
+    -o lowerdir=/,upperdir=$K/scratch/upper,workdir=$K/scratch/work \
+    $K/root || power_off
+  for m in proc sys dev; do mount --move /$m $K/root/$m; done
+  mkdir -p $K/root/.oldroot
+  cd $K/root || power_off
+  pivot_root . .oldroot || power_off
+  exec chroot . /.karotte/init stage2 <dev/console >dev/console 2>&1
+fi
+
+# Stage 2: / is the overlay.
+umount -l /.oldroot && rmdir /.oldroot
+mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run
+mkdir -p /dev/pts /dev/shm /dev/mqueue
+mount -t devpts -o gid=5,mode=620,ptmxmode=666 devpts /dev/pts
+mount -t tmpfs -o mode=1777,nosuid,nodev,size=64m tmpfs /dev/shm
+mount -t mqueue mqueue /dev/mqueue 2>/dev/null
+mount -t cgroup2 -o rw,nosuid,nodev,noexec cgroup2 /sys/fs/cgroup
+ln -sf /proc/self/fd /dev/fd
+ln -sf /proc/self/fd/0 /dev/stdin
+ln -sf /proc/self/fd/1 /dev/stdout
+ln -sf /proc/self/fd/2 /dev/stderr
+stty -onlcr 2>/dev/null
+
+mkdir -p -m 0700 $K/io
+mount -t ext4 /dev/vdc $K/io || { log "no io drive"; power_off; }
+chmod 0700 $K/io
+IN=$K/io/in
+mkdir -p $K/io/out $K/io/status /out
+chmod 0700 $K/io/out /out
+mount --bind $K/io/out /out
+
+while IFS='=' read -r key value; do
+  case "$key" in
+    WORKDIR) WORKDIR=$value ;;
+    HEARTBEAT_PORT) HEARTBEAT_PORT=$value ;;
+    RELAY_PORT) RELAY_PORT=$value ;;
+  esac
+done <$IN/guest.conf
+
+echo karotte-vm >/proc/sys/kernel/hostname
+{
+  echo "127.0.0.1 localhost karotte-vm"
+  echo "::1 localhost"
+  cat $IN/hosts 2>/dev/null
+} >/etc/hosts
+if [ -f $IN/resolv.conf ]; then
+  cp $IN/resolv.conf /etc/resolv.conf
+else
+  : >/etc/resolv.conf
+fi
+
+n=0
+while IFS=$'\t' read -r dev kind name target; do
+  [ -n "$dev" ] || continue
+  m=$K/mnt/$n
+  n=$((n + 1))
+  mkdir -p $m
+  mount -t ext4 -o ro,nodev,nosuid "/dev/$dev" $m || { log "cannot mount $dev"; power_off; }
+  if [ "$kind" = file ]; then
+    mkdir -p "$(dirname "$target")"
+    [ -e "$target" ] || : >"$target"
+    mount --bind "$m/$name" "$target" || power_off
+  else
+    mkdir -p "$target"
+    mount --bind $m "$target" || power_off
+  fi
+done <$IN/mounts
+
+"$PY" -I -S "$AGENT" lo-up
+"$PY" -I -S "$AGENT" serve --heartbeat-port "$HEARTBEAT_PORT" ${RELAY_PORT:+--relay-port "$RELAY_PORT"} &
+disown
+
+mapfile -d '' -t envv <$IN/env
+mapfile -d '' -t argv <$IN/argv
+cd "${WORKDIR:-/}" || cd /
+
+env -i "${envv[@]}" "${argv[@]}" </dev/null
+rc=$?
+log "karotte exited with $rc"
+
+# Nothing outlives the run: student strays and harness children die before
+# the drives are unmounted.
+kill -9 -1 2>/dev/null
+sleep 0.2
+echo "$rc" >$K/io/status/exit_code
+sync
+umount /out 2>/dev/null || umount -l /out
+umount $K/io 2>/dev/null || umount -l $K/io
+power_off

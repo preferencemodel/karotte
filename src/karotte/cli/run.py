@@ -246,6 +246,10 @@ def run(
         from karotte.apple_container import validate_container_runtime
 
         validate_container_runtime(load_task(run_config).required_hardware)
+    if runtime == "firecracker" and containerized and not is_containerized():
+        from karotte.firecracker.preflight import validate_firecracker_runtime
+
+        validate_firecracker_runtime(load_task(run_config).required_hardware, mount)
 
     if run_config.rubric_judge_api_key is not None:
         RubricJudge.default_api_key = run_config.rubric_judge_api_key
@@ -393,10 +397,17 @@ def _run_without_ui(
     # on the worker threads — otherwise the process hangs and orphans the
     # containers. Stopping is also the right response to interrupting a real run.
     def exit_code(config: EvaluationRunConfig) -> int:
+        from karotte.firecracker import FirecrackerError
+
         try:
             run_fn(config)
         except subprocess.CalledProcessError as e:
             return e.returncode
+        except FirecrackerError as e:
+            # One VM that can't start fails its run, not every run in the
+            # invocation.
+            logger.error(f"Run {config.run_id}: {e}")
+            return 1
         return 0
 
     executor = ThreadPoolExecutor(max_workers=len(run_configs))
@@ -414,7 +425,7 @@ def _run_without_ui(
         _print_output_paths(run_configs)
 
     # Log completion message with copy example if containers are preserved
-    if keep_containers:
+    if keep_containers and runtime != "firecracker":
         typer.secho(
             f"\nContainers preserved. To copy data:\n  {copy_hint(runtime, run_configs[0].run_id)}",
             fg=typer.colors.BLUE,

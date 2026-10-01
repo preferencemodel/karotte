@@ -117,6 +117,38 @@ def _restore_proxy_env(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[repo
         monkeypatch.delenv(var)
 
 
+class TestFirecrackerLaunchErrors:
+    @patch("karotte.cli.run._print_output_paths")
+    @patch("karotte.cli.run.clean_up_old_containers")
+    @patch("karotte.cli.run.build_container")
+    def test_a_vm_that_cant_start_fails_only_its_run(
+        self, _build: MagicMock, _cleanup: MagicMock, _paths: MagicMock
+    ):
+        """E.g. pasta can't start for one run: that run fails, the rest still run,
+        and nothing escapes as a traceback."""
+        from karotte.firecracker.network import NetworkError
+
+        ran: list[str] = []
+
+        def run_containerized(config: EvaluationRunConfig, **_kwargs: object) -> None:
+            if config.run_id == "b":
+                raise NetworkError("pasta can't set up a network namespace here")
+            ran.append(config.run_id)
+
+        configs = [
+            EvaluationRunConfig(run_id=r, task_id="t", model="m", model_api_key="k")
+            for r in ("a", "b", "c")
+        ]
+        with patch("karotte.cli.run.run_containerized", run_containerized):
+            with pytest.raises(typer.Exit) as exc_info:
+                _run_without_ui(
+                    configs, "firecracker", True, ".", keep_containers=False
+                )
+
+        assert exc_info.value.exit_code == 1
+        assert sorted(ran) == ["a", "c"]
+
+
 class TestRunWithoutUiCache:
     """Test that _run_without_ui forwards cache args to build_container."""
 
