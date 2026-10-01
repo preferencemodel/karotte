@@ -56,13 +56,17 @@ class RubricJudge(Judge):
         self.continue_threshold: Final = continue_threshold
         self.temperature: Final = temperature
 
-    @override
-    def evaluate(self, transcript: Transcript) -> Scoring:
-        # Gather context from all providers
+    def render_context(self, transcript: Transcript) -> str:
+        """The content the criteria are judged against: every context provider's
+        rendering, blank-line separated. Empty when no provider has anything."""
         context_parts = [
             rendered for ctx in self.context if (rendered := ctx.render(transcript))
         ]
-        context_text = "\n\n".join(context_parts)
+        return "\n\n".join(context_parts)
+
+    @override
+    def evaluate(self, transcript: Transcript) -> Scoring:
+        context_text = self.render_context(transcript)
 
         if not context_text:
             return Scoring(
@@ -107,25 +111,7 @@ class RubricJudge(Judge):
             Tuple of (is_met, reasoning) where is_met is True if the criterion
             is met, and reasoning is the LLM's explanation.
         """
-        prompt = dedent(f"""
-            You are evaluating whether the following content meets a specific criterion.
-
-            Content to evaluate:
-            {context}
-
-            Criterion:
-            {criterion}
-
-            Does the content meet this criterion? Respond with ONLY "YES" or "NO", followed by a brief explanation on a new line.
-
-            Format:
-            YES
-            [brief explanation]
-
-            or
-
-            NO
-            [brief explanation]""")
+        prompt = self.criterion_prompt(context, criterion)
 
         spec = spec_for(self.model)
         params: dict[str, Any] = {
@@ -147,16 +133,41 @@ class RubricJudge(Judge):
             if not content:
                 return False, "LLM returned no text"
 
-            # Parse response
-            lines = content.strip().split("\n", 1)
-            decision = lines[0].strip().upper()
-            reasoning = (
-                lines[1].strip() if len(lines) > 1 else "No explanation provided"
-            )
-
-            is_met = decision.startswith("YES")
-            return is_met, reasoning
+            return self.parse_reply(content)
 
         except Exception as e:
             error_msg = f"Error evaluating criterion: {str(e)}"
             return False, error_msg
+
+    @staticmethod
+    def criterion_prompt(context: str, criterion: str) -> str:
+        """The prompt asking whether ``context`` meets ``criterion``, answered
+        in the format :meth:`parse_reply` reads."""
+        return dedent(f"""
+            You are evaluating whether the following content meets a specific criterion.
+
+            Content to evaluate:
+            {context}
+
+            Criterion:
+            {criterion}
+
+            Does the content meet this criterion? Respond with ONLY "YES" or "NO", followed by a brief explanation on a new line.
+
+            Format:
+            YES
+            [brief explanation]
+
+            or
+
+            NO
+            [brief explanation]""")
+
+    @staticmethod
+    def parse_reply(content: str) -> tuple[bool, str]:
+        """``(is_met, reasoning)`` from a reply to :meth:`criterion_prompt`:
+        met when the first line starts with YES, the rest is the reasoning."""
+        lines = content.strip().split("\n", 1)
+        decision = lines[0].strip().upper()
+        reasoning = lines[1].strip() if len(lines) > 1 else "No explanation provided"
+        return decision.startswith("YES"), reasoning
