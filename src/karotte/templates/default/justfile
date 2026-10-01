@@ -51,7 +51,13 @@ vendor-karotte source="main":
     git -C .karotte checkout "{{ "{{source}}" }}"
     rm -rf .karotte/.git
   fi
-  grep -q '\[tool.uv.sources\]' pyproject.toml || printf '\n[tool.uv.sources]\nkarotte = { path = ".karotte" }\n' >> pyproject.toml
+  if grep -qx 'karotte = { path = ".karotte" }' pyproject.toml; then
+    :
+  elif grep -q '^\[tool\.uv\.sources\]' pyproject.toml; then
+    perl -i -pe 'if (/^\[/) { $s = /^\[tool\.uv\.sources\]\s*$/; $_ .= "karotte = { path = \".karotte\" }\n" if $s } elsif ($s) { s/^(karotte\s*=)/# vendored: $1/ }' pyproject.toml
+  else
+    printf '\n[tool.uv.sources]\nkarotte = { path = ".karotte" }\n' >> pyproject.toml
+  fi
   perl -i -pe 's|^\.karotte/\*$|# vendored: .karotte/*|' .gitignore
   perl -i -pe 's|^!\.karotte/\.gitkeep$|# vendored: !.karotte/.gitkeep|' .gitignore
   rm -rf .venv
@@ -60,7 +66,9 @@ vendor-karotte source="main":
 # Revert to using karotte from the registry
 unvendor-karotte:
   rm -rf .karotte && mkdir .karotte && touch .karotte/.gitkeep
-  perl -i -ne 'if (/^\[tool\.uv\.sources\]/ .. /^$$/) { next } print' pyproject.toml
+  perl -i -ne 'if (/^\[/) { $s = /^\[tool\.uv\.sources\]\s*$/ } elsif ($s) { next if /^karotte\s*=\s*\{\s*path\s*=\s*"\.karotte"\s*\}\s*$/; s/^# vendored: // } print' pyproject.toml
+  perl -0 -i -pe 's/\n+\[tool\.uv\.sources\][ \t]*\n\s*\z/\n/' pyproject.toml
+  perl -i -pe 's|"karotte \@ file:///\$\{PROJECT_ROOT\}/\.karotte"|"karotte"|' pyproject.toml
   perl -i -pe 's/^# vendored: //' .gitignore
   rm -rf .venv
   uv lock

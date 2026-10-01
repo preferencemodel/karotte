@@ -1,4 +1,5 @@
 import contextlib
+import os
 import re
 import shutil
 import subprocess
@@ -636,3 +637,78 @@ def test_cli_reports_a_failed_uv_lock_in_one_line(tmp_path: Path):
     assert isinstance(result.exception, SystemExit)
     assert "`uv lock` failed with exit code 1" in result.output
     assert not (tmp_path / "my_env").exists()
+
+
+_PINNED_SOURCES = '[tool.uv.sources]\nkarotte = { index = "pypi" }\n'
+
+
+def test_vendoring_points_the_karotte_source_at_the_copy(tmp_path: Path):
+    with patch("karotte.create_env.subprocess.check_call"):
+        create_env(tmp_path / "my_env", templates=["default"], vendor_karotte=True)
+    pyproject = tomllib.loads((tmp_path / "my_env" / "pyproject.toml").read_text())
+    assert "karotte" in pyproject["project"]["dependencies"]
+    assert pyproject["tool"]["uv"]["sources"]["karotte"] == {"path": ".karotte"}
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        (
+            '[project]\nname = "e"\n',
+            '[project]\nname = "e"\n\n[tool.uv.sources]\nkarotte = { path = ".karotte" }\n',
+        ),
+        (
+            _PINNED_SOURCES + '\n[[tool.uv.index]]\nname = "pypi"\n',
+            '[tool.uv.sources]\nkarotte = { path = ".karotte" }\n'
+            + '# vendored: karotte = { index = "pypi" }\n'
+            + '\n[[tool.uv.index]]\nname = "pypi"\n',
+        ),
+    ],
+)
+def test_vendoring_keeps_an_existing_karotte_source_for_unvendoring(
+    before: str, after: str
+):
+    assert create_env_module.point_karotte_at_vendored_copy(before) == after
+
+
+def test_an_unpublished_karotte_reports_its_major_version(tmp_path: Path):
+    """Plugins require `karotte>=3.0`; a vendored or editable copy must still satisfy it."""
+    from packaging.version import Version
+
+    with patch("karotte.create_env.subprocess.check_call"):
+        create_env(tmp_path / "my_env", templates=["default"], vendor_karotte=True)
+    vendored = tomllib.loads(
+        (tmp_path / "my_env" / ".karotte/pyproject.toml").read_text()
+    )
+    assert Version(vendored["project"]["version"]).major >= 3
+    assert Version(_read_manifest(tmp_path / "my_env").karotte_version).major >= 3
+
+
+@pytest.mark.skipif(shutil.which("just") is None, reason="needs just")
+@pytest.mark.parametrize("existing", ["", _PINNED_SOURCES])
+def test_unvendoring_restores_the_pyproject(tmp_path: Path, existing: str):
+    with patch("karotte.create_env.subprocess.check_call"):
+        create_env(tmp_path / "env", templates=["default"])
+    env = tmp_path / "env"
+    pyproject = env / "pyproject.toml"
+    original = pyproject.read_text().replace(
+        "[[tool.uv.index]]", existing + "\n[[tool.uv.index]]", 1
+    )
+    pyproject.write_text(original)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "uv").write_text("#!/bin/sh\nexit 0\n")
+    (fake_bin / "uv").chmod(0o755)
+    run_env = {**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"}
+    repo = Path(__file__).resolve().parents[1]
+
+    def just(*args: str) -> None:
+        subprocess.run(
+            ["just", *args], cwd=env, env=run_env, check=True, capture_output=True
+        )
+
+    just("vendor-karotte", str(repo))
+    vendored = tomllib.loads(pyproject.read_text())
+    assert vendored["tool"]["uv"]["sources"]["karotte"] == {"path": ".karotte"}
+    just("unvendor-karotte")
+    assert pyproject.read_text() == original
