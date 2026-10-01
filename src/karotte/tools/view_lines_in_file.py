@@ -5,9 +5,15 @@ from pathlib import Path
 from typing import final
 
 from fastmcp.tools.tool import ToolResult
-from karotte import ToolBase
+from karotte import ToolBase, demoted
 from karotte.demoted import check_access as _check_access
-from karotte.demoted import communicate_or_kill, drain_bounded, reap
+from karotte.demoted import (
+    communicate_or_kill,
+    drain_bounded,
+    open_error,
+    open_regular_as_stdin,
+    reap,
+)
 from karotte.subprocess import make_demote_fn
 from karotte.text_files import decode_text
 from karotte.truncation import head_within_json_bytes, json_encoded_len
@@ -33,12 +39,14 @@ async def _count_lines(file_path: str) -> int | None:
     proc = await asyncio.create_subprocess_exec(
         AWK_PATH,
         "END{print NR}",
-        file_path,
-        preexec_fn=make_demote_fn(),
+        preexec_fn=open_regular_as_stdin(file_path, make_demote_fn()),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )
-    stdout, _ = await communicate_or_kill(proc)
+    try:
+        stdout, _ = await communicate_or_kill(proc)
+    except TimeoutError:
+        return None
     if proc.returncode != 0:
         return None
     try:
@@ -98,8 +106,7 @@ class view_lines_in_file(ToolBase[ViewLinesInFileConfig]):
             SED_PATH,
             "-n",
             f"{from_line},{to_line}p;{to_line + 1}q",
-            str(file_path),
-            preexec_fn=make_demote_fn(),
+            preexec_fn=open_regular_as_stdin(path_str, make_demote_fn()),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -110,25 +117,31 @@ class view_lines_in_file(ToolBase[ViewLinesInFileConfig]):
         assert proc.stderr is not None
         stderr_task = asyncio.create_task(drain_bounded(proc.stderr, _MAX_STDERR_BYTES))
         try:
-            buf = bytearray()
-            while len(buf) <= _MAX_CONTENT_BYTES:
-                chunk = await proc.stdout.read(65536)
-                if not chunk:
-                    break
-                buf += chunk
-            truncated = len(buf) > _MAX_CONTENT_BYTES
-            if truncated:
-                del buf[_MAX_CONTENT_BYTES:]
-                await reap(proc)
+            async with asyncio.timeout(demoted.SUBPROCESS_TIMEOUT_S):
+                buf = bytearray()
+                while len(buf) <= _MAX_CONTENT_BYTES:
+                    chunk = await proc.stdout.read(65536)
+                    if not chunk:
+                        break
+                    buf += chunk
+                truncated = len(buf) > _MAX_CONTENT_BYTES
+                if truncated:
+                    del buf[_MAX_CONTENT_BYTES:]
+                    await reap(proc)
 
-            try:
-                stderr = await stderr_task
-            except Exception:  # noqa: BLE001 - stderr is diagnostic only
-                stderr = b""
-            await proc.wait()
+                try:
+                    stderr = await stderr_task
+                except Exception:  # noqa: BLE001 - stderr is diagnostic only
+                    stderr = b""
+                await proc.wait()
+        except TimeoutError:
+            raise RuntimeError(f"Timed out reading {file_path}") from None
         finally:
             stderr_task.cancel()
             await reap(proc)
+
+        if err := open_error(file_path, proc.returncode, stderr):
+            raise err
 
         # A cap-triggered kill yields a nonzero/negative returncode that is not an
         # error; only surface sed failures when we did NOT truncate.

@@ -1,8 +1,10 @@
+import asyncio
 import os
 import random
 import re
 import stat
 import time
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -389,19 +391,35 @@ async def test_read_stays_bounded_when_stat_gate_is_bypassed(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_fifo_swapped_in_after_stat_times_out(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    """A FIFO flipped in after the regular-file check must time out, not hang
-    the tool call forever on the blocked open."""
+async def test_fifo_swapped_in_after_stat_is_refused_without_waiting(tmp_path: Path):
+    """A FIFO flipped in after the regular-file check must be refused at open,
+    not block the read until the timeout."""
     fifo_path = tmp_path / "fifo"
     os.mkfifo(fifo_path)
-    monkeypatch.setattr("karotte.demoted.SUBPROCESS_TIMEOUT_S", 0.5)
 
     check_access, stat_gate = _bypass_stat_gate()
     with check_access, stat_gate:
-        with pytest.raises(OSError, match="Timed out reading"):
-            await replace_in_file(fifo_path, "old", "new")
+        with pytest.raises(ValueError, match="^Not a regular file: "):
+            async with asyncio.timeout(5):
+                await replace_in_file(fifo_path, "old", "new")
+
+
+@pytest.mark.asyncio
+async def test_fifo_swapped_in_before_write_is_refused_without_waiting(
+    tmp_path: Path,
+):
+    file_path = tmp_path / "f.txt"
+    file_path.write_text("old")
+
+    def swap_then_diff(*args: object, **kwargs: object) -> str:
+        file_path.unlink()
+        os.mkfifo(file_path)
+        return _replacement_diff(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    with patch("karotte.tools.replace_in_file._replacement_diff", swap_then_diff):
+        with pytest.raises(ValueError, match="^Not a regular file: "):
+            async with asyncio.timeout(5):
+                await replace_in_file(file_path, "old", "new")
 
 
 @pytest.mark.asyncio
@@ -612,3 +630,53 @@ def test_a_huge_replacement_is_cut_to_the_diff_budget():
     _, diff = _diff_of(content, "a", "b" * (2 * _MAX_DIFF_BYTES), False)
     assert json_encoded_len(diff) <= _MAX_DIFF_BYTES
     assert diff.endswith("(diff truncated)\n")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("binary", "message"),
+    [("HEAD_PATH", "Timed out reading file"), ("TEE_PATH", "Timed out writing file")],
+)
+async def test_stalled_subprocess_times_out(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stalling_binary: str,
+    binary: str,
+    message: str,
+):
+    file_path = tmp_path / "f.txt"
+    file_path.write_text("old")
+    monkeypatch.setattr(f"karotte.tools.replace_in_file.{binary}", stalling_binary)
+    monkeypatch.setattr("karotte.demoted.SUBPROCESS_TIMEOUT_S", 0.5)
+
+    with pytest.raises(OSError, match=message):
+        async with asyncio.timeout(10):
+            await replace_in_file(file_path, "old", "new")
+
+
+@pytest.mark.asyncio
+async def test_hanging_open_times_out(
+    tmp_path: Path, hanging_open: Callable[[Path], None]
+):
+    file_path = tmp_path / "f.txt"
+    file_path.write_text("old")
+    hanging_open(file_path)
+
+    with pytest.raises(TimeoutError, match="^Timed out opening: "):
+        async with asyncio.timeout(10):
+            await replace_in_file(file_path, "old", "new")
+
+
+@pytest.mark.asyncio
+async def test_missing_tee_leaves_the_file_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    file_path = tmp_path / "f.txt"
+    file_path.write_text("old")
+    monkeypatch.setattr(
+        "karotte.tools.replace_in_file.TEE_PATH", str(tmp_path / "missing-tee")
+    )
+
+    with pytest.raises(OSError, match="is not available"):
+        await replace_in_file(file_path, "old", "new")
+    assert file_path.read_text() == "old"

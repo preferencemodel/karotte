@@ -7,9 +7,13 @@ from pathlib import Path
 from fastmcp.tools.tool import ToolResult
 from karotte.demoted import check_access as _check_access
 from karotte.demoted import communicate_or_kill as _communicate_or_kill
+from karotte.demoted import open_error, open_regular_as_stdin, open_regular_as_stdout
 from karotte.subprocess import make_demote_fn
 from karotte.text_files import decode_text
 from karotte.truncation import head_within_json_bytes, json_encoded_len
+
+HEAD_PATH = "/usr/bin/head"
+TEE_PATH = "/usr/bin/tee"
 
 _MAX_FILE_BYTES = 10 * 1024 * 1024
 _DIFF_CONTEXT_LINES = 3
@@ -215,18 +219,19 @@ async def replace_in_file(
     # `head -c` (not `cat`) keeps the read bounded even if a symlink flip
     # defeats the os.stat() gate above; anything hitting the cap is rejected.
     read_proc = await asyncio.create_subprocess_exec(
-        "/usr/bin/head",
+        HEAD_PATH,
         "-c",
         str(_MAX_FILE_BYTES + 1),
-        path_str,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        preexec_fn=make_demote_fn(),
+        preexec_fn=open_regular_as_stdin(path_str, make_demote_fn()),
     )
     try:
         stdout, stderr = await _communicate_or_kill(read_proc)
     except TimeoutError:
         raise OSError(f"Timed out reading file {file_path}") from None
+    if err := open_error(file_path, read_proc.returncode, stderr):
+        raise err
     if read_proc.returncode != 0:
         raise OSError(
             f"Failed to read file {file_path}: {stderr.decode('utf-8', errors='replace').strip()}"
@@ -265,18 +270,21 @@ async def replace_in_file(
     # write time. Writing directly from this (root) process would be subject
     # to a TOCTOU race: the path could be swapped for a symlink to a
     # privileged file between the `_check_access` calls and the write.
+    # The preexec truncates the file before exec, so a missing tee must fail here.
+    if not os.access(TEE_PATH, os.X_OK):
+        raise OSError(f"Failed to write file {file_path}: {TEE_PATH} is not available")
     proc = await asyncio.create_subprocess_exec(
-        "/usr/bin/tee",
-        path_str,
+        TEE_PATH,
         stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.PIPE,
-        preexec_fn=make_demote_fn(),
+        preexec_fn=open_regular_as_stdout(path_str, make_demote_fn()),
     )
     try:
         _, stderr = await _communicate_or_kill(proc, new_content.encode("utf-8"))
     except TimeoutError:
         raise OSError(f"Timed out writing file {file_path}") from None
+    if err := open_error(file_path, proc.returncode, stderr):
+        raise err
     if proc.returncode != 0:
         raise OSError(
             f"Failed to write file {file_path}: {stderr.decode('utf-8', errors='replace').strip()}"
