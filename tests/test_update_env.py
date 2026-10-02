@@ -6,7 +6,7 @@ import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from loguru import logger
@@ -1466,3 +1466,91 @@ class TestUpdateMigrations:
 
         with pytest.raises(ValidationError, match="karotte_version"):
             self._update(project, [])
+
+
+class TestRelaunchWithTemplatePackages:
+    """`uvx karotte update` alone must still load the migrations the manifest's packages ship."""
+
+    def _project(self, tmp_path: Path, extra_deps: list[str]) -> Path:
+        project = tmp_path / "env"
+        project.mkdir()
+        (project / ".manifest.json").write_text(
+            json.dumps(
+                {
+                    "pm_env_version": "2.18.708",
+                    "templates": ["default"],
+                    "extra_deps": extra_deps,
+                }
+            )
+        )
+        (project / "pyproject.toml").write_text(
+            '[[tool.uv.index]]\nname = "extra"\nurl = "https://extra.example/simple/"\n'
+        )
+        return project
+
+    def _invoke(self, project: Path, *args: str, env: dict[str, str] | None = None):
+        from typer.testing import CliRunner
+
+        from karotte.cli import app
+
+        with (
+            patch("karotte.update_env.subprocess.run") as run,
+            patch("karotte.update_env.update_env") as update,
+        ):
+            run.return_value = subprocess.CompletedProcess([], 3)
+            result = CliRunner().invoke(app, ["update", str(project), *args], env=env)
+        return result, run, update
+
+    def test_relaunches_with_the_packages_it_cannot_import(self, tmp_path: Path):
+        project = self._project(tmp_path, ["not-installed-tmpl==1.0"])
+
+        result, run, update = self._invoke(project, "--add-template", "extra")
+
+        update.assert_not_called()
+        assert result.exit_code == 3
+        command = run.call_args.args[0]
+        assert command[:3] == ["uv", "tool", "run"]
+        assert "--index=extra=https://extra.example/simple/" in command
+        assert command[command.index("--with") + 1] == "not-installed-tmpl"
+        assert command[-4:] == ["update", str(project), "--add-template", "extra"]
+        assert run.call_args.kwargs["env"]["KAROTTE_UPDATE_RELAUNCHED"] == "1"
+
+    def test_runs_in_place_when_the_packages_are_installed(self, tmp_path: Path):
+        project = self._project(tmp_path, ["loguru==0.0.1"])
+
+        _, run, update = self._invoke(project)
+
+        run.assert_not_called()
+        update.assert_called_once()
+
+    def test_relaunches_only_once(self, tmp_path: Path):
+        project = self._project(tmp_path, ["not-installed-tmpl==1.0"])
+
+        _, run, update = self._invoke(project, env={"KAROTTE_UPDATE_RELAUNCHED": "1"})
+
+        run.assert_not_called()
+        update.assert_called_once()
+
+
+class TestThisKarotte:
+    def test_a_release_runs_by_version(self):
+        from importlib.metadata import PathDistribution
+
+        from karotte.update_env import _this_karotte
+
+        dist = MagicMock(spec=PathDistribution, version="3.0.14")
+        dist.read_text.return_value = None
+        with patch("karotte.update_env.distribution", return_value=dist):
+            assert _this_karotte() == ["karotte@3.0.14"]
+
+    def test_a_source_install_runs_from_its_tree(self, tmp_path: Path):
+        from importlib.metadata import PathDistribution
+
+        from karotte.update_env import _this_karotte
+
+        dist = MagicMock(spec=PathDistribution, version="3.0.0")
+        dist.read_text.return_value = json.dumps(
+            {"url": tmp_path.as_uri(), "dir_info": {"editable": True}}
+        )
+        with patch("karotte.update_env.distribution", return_value=dist):
+            assert _this_karotte() == ["--from", str(tmp_path), "karotte"]
