@@ -39,6 +39,7 @@ from karotte.confinement import (
     GIB,
     SANDBOX_ENV_VAR,
     SANDBOX_MEMORY_ENV_VAR,
+    VM_LAUNCHER_ENV_VAR,
     Sandbox,
 )
 from karotte.forwarded_env import sandbox_env
@@ -76,9 +77,11 @@ def get_run_command(
     mounts: list[str] | None = None,
     proxy_url: str | None = None,
     prepare_only: bool = False,
+    parallel_runs: int = 1,
 ) -> tuple[list[str], EvaluationRunConfig]:
     """The `container run` command for one run, and the config as the guest
-    sees it (transcript path moved under ``/root/out``)."""
+    sees it (transcript path moved under ``/root/out``). ``parallel_runs`` is
+    how many runs are launched together, which share the host's free disk."""
     size = vm_resources(task.required_hardware)
     command = [
         CONTAINER,
@@ -90,7 +93,9 @@ def get_run_command(
         "--env",
         f"{SANDBOX_MEMORY_ENV_VAR}={size.sandbox_memory_bytes}",
         "--env",
-        f"{DISK_BUDGET_ENV_VAR}={disk_budget_bytes(task.required_hardware)}",
+        f"{VM_LAUNCHER_ENV_VAR}=apple-container",
+        "--env",
+        f"{DISK_BUDGET_ENV_VAR}={disk_budget_bytes(task.required_hardware, runs=parallel_runs)}",
         "--cap-add",
         "CAP_NET_ADMIN",
         "--cap-add",
@@ -249,14 +254,16 @@ def vm_resources(required_hardware: str | None) -> VmSize:
 
 
 def disk_budget_bytes(
-    required_hardware: str | None, free_bytes: int | None = None
+    required_hardware: str | None, free_bytes: int | None = None, runs: int = 1
 ) -> int:
-    """The student's disk budget: the hardware plugin's, capped at a share of
-    the host's free space now. The guest's own `df` sees the sparse rootfs."""
+    """The student's disk budget: the hardware plugin's, capped at this run's
+    share of the host's free space now. The rootfs is sparse, so ``runs``
+    launched together split that share instead of each being promised all of
+    it. The guest's own `df` sees the sparse rootfs."""
     if free_bytes is None:
         root = APP_ROOT if APP_ROOT.is_dir() else Path.home()
         free_bytes = shutil.disk_usage(root).free
-    budget = int(free_bytes * _FREE_DISK_FRACTION)
+    budget = int(free_bytes * _FREE_DISK_FRACTION) // max(1, runs)
     class_budget = vm_resources(required_hardware).disk_bytes
     if class_budget is not None:
         budget = min(budget, class_budget)

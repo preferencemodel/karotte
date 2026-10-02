@@ -16,7 +16,7 @@ from karotte.cli.run import (
     run,
 )
 from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
-from karotte.run_helpers import sanitize_paths
+from karotte.run_helpers import build_configs, sanitize_paths
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.http_mcp_server_config import HttpMcpServerConfig
 from karotte.schemas.transcript import ErrorEvent
@@ -277,6 +277,20 @@ class TestRunWithoutUiCache:
             cache_to=None,
             build_secrets=["uv_env=/tmp/uv_env"],
         )
+
+    @patch("karotte.cli.run.run_containerized")
+    @patch("karotte.cli.run.clean_up_old_containers")
+    @patch("karotte.cli.run.build_container")
+    def test_tells_each_run_how_many_were_launched_together(
+        self, _mock_build: MagicMock, _mock_cleanup: MagicMock, mock_run: MagicMock
+    ):
+        """A VM runtime splits the host's free disk between them."""
+        configs = build_configs(self._make_config(), 3)
+
+        _run_without_ui(configs, "firecracker", False, ".", keep_containers=False)
+
+        assert mock_run.call_count == 3
+        assert {c.kwargs["parallel_runs"] for c in mock_run.call_args_list} == {3}
 
     @patch("karotte.cli.run.run_containerized")
     @patch("karotte.cli.run.clean_up_old_containers")

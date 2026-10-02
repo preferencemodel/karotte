@@ -138,6 +138,7 @@ def run_containerized(
     mounts: list[str] | None = None,
     proxy_url: str | None = None,
     prepare_only: bool = False,
+    parallel_runs: int = 1,
 ) -> None:
     """Run a single containerized evaluation.
 
@@ -152,6 +153,8 @@ def run_containerized(
         proxy_url: If set, route API calls through this proxy URL.
         prepare_only: If True, the container prepares the env and holds it open
             instead of running the task.
+        parallel_runs: How many runs are launched together; a VM runtime
+            splits the host's free disk between them.
     """
     if runtime == "firecracker":
         from karotte.firecracker.vm import run_firecracker
@@ -165,6 +168,7 @@ def run_containerized(
             mounts=mounts,
             proxy_url=proxy_url,
             prepare_only=prepare_only,
+            parallel_runs=parallel_runs,
         )
         return
 
@@ -177,6 +181,7 @@ def run_containerized(
         mounts,
         proxy_url,
         prepare_only,
+        parallel_runs,
     )
 
     # Only attach TTY when outputting to stdout (not when redirecting to log file)
@@ -225,6 +230,7 @@ def get_container_run_command(
     mounts: list[str] | None = None,
     proxy_url: str | None = None,
     prepare_only: bool = False,
+    parallel_runs: int = 1,
 ) -> tuple[list[str], EvaluationRunConfig]:
     """Build the command to run a container.
 
@@ -238,6 +244,8 @@ def get_container_run_command(
         proxy_url: If set, route API calls through this proxy URL.
         prepare_only: If True, the in-container invocation prepares the env and
             holds it open instead of running the task.
+        parallel_runs: How many runs are launched together; see
+            ``run_containerized``.
 
     Returns:
         A tuple of (command, updated_config). The config may be modified
@@ -258,6 +266,7 @@ def get_container_run_command(
             mounts,
             proxy_url,
             prepare_only,
+            parallel_runs,
         )
 
     command: list[str] = []

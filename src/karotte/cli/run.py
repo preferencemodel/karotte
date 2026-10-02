@@ -405,6 +405,7 @@ def _run_without_ui(
         mounts=mounts,
         proxy_url=proxy_url,
         prepare_only=prepare_only,
+        parallel_runs=len(run_configs),
     )
 
     # A held --prepare-only container blocks its `podman run` indefinitely, so a

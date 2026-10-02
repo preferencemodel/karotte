@@ -162,6 +162,7 @@ Environment variables a launcher or task may set:
 | `KAROTTE_STUDENT_NETWORK` | Unset or `strict`: the agent reaches localhost, the sandbox's own addresses and the model proxy. `internal`: also link-local and private ranges. |
 | `KAROTTE_DISK_BUDGET_BYTES` | Cap on the agent's disk quota, chosen where the host's free space is known. VM launchers set it. |
 | `KAROTTE_SANDBOX_MEMORY_BYTES` | Memory the sandbox holds for the agent, when no plugin says. VM launchers set it. |
+| `KAROTTE_VM_LAUNCHER` | Set by karotte's VM runtimes. `karotte check confinement` then fails a VM without 1 GiB above the sandbox's memory; in a VM another launcher sized, it only warns. |
 | `KAROTTE_FIRECRACKER_NETWORK` | `pasta` (the default) or `none`, for a VM without a network. |
 
 ## Writing tasks

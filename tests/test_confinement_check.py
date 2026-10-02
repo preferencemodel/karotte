@@ -3,6 +3,7 @@ import os
 import resource
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import typer
@@ -13,6 +14,7 @@ from karotte.cgroups import Mount, V1Cgroup
 from karotte.cli.check import confinement
 from karotte.confinement import GIB, Contract, Sandbox
 from karotte.confinement_check import (
+    Finding,
     Observations,
     SessionReport,
     evaluate,
@@ -132,6 +134,75 @@ def test_a_vm_short_of_one_mechanism_is_weak_there(
     changes: dict[str, object], weak: set[str]
 ) -> None:
     assert _weak(_vm_observations(**changes)) == weak
+
+
+def _ram_finding(obs: Observations) -> Finding:
+    return next(f for f in evaluate(obs) if f.name == "RAM vs student memory.max")
+
+
+def test_a_karotte_vm_without_headroom_is_weak() -> None:
+    """RAM of exactly the student's limit plus the harness reserve is the
+    size where a student spread over many processes got the harness killed
+    by a global OOM."""
+    obs = _vm_observations(ram_bytes=5 * GIB, vm_launcher="firecracker")
+    assert _weak(obs) == {"RAM vs student memory.max"}
+
+
+def test_a_karotte_vm_passes_despite_the_firmware_holes() -> None:
+    """A 6 GiB guest's RAM map has a few holes below 1 MiB."""
+    obs = _vm_observations(ram_bytes=6 * GIB - (1 << 20), vm_launcher="firecracker")
+    assert _ram_finding(obs).ok is True
+
+
+FIRECRACKER_IOMEM = """\
+00000000-00000fff : Reserved
+00001000-0009fbff : System RAM
+0009fc00-000fffff : Reserved
+00100000-bfffffff : System RAM
+  01000000-0230ffff : Kernel code
+c0001000-c0001fff : virtio-mmio.0
+100000000-17fffffff : System RAM
+"""
+
+
+def test_installed_ram_is_read_from_iomem(tmp_path: Path) -> None:
+    """A 5 GiB Firecracker guest, where MemTotal says 4.8 GiB."""
+    iomem = tmp_path / "iomem"
+    _ = iomem.write_text(FIRECRACKER_IOMEM)
+
+    ram = confinement_check.installed_ram_bytes(iomem)
+
+    assert 5 * GIB - (1 << 20) < ram <= 5 * GIB
+
+
+def test_installed_ram_without_root_falls_back_to_memtotal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    iomem = tmp_path / "iomem"
+    _ = iomem.write_text(
+        "00000000-00000000 : System RAM\n00000000-00000000 : System RAM\n"
+    )
+    monkeypatch.setattr(
+        "karotte.confinement_check.psutil.virtual_memory",
+        lambda: SimpleNamespace(total=1234),
+    )
+
+    assert confinement_check.installed_ram_bytes(iomem) == 1234
+
+
+def test_a_vm_another_launcher_sized_without_headroom_only_warns() -> None:
+    """Its RAM is the outer harness's choice; the check must not fail it."""
+    # As /proc/iomem counts it: the firmware's holes come off the top.
+    obs = _vm_observations(ram_bytes=5 * GIB - (1 << 20), vm_launcher=None)
+    finding = _ram_finding(obs)
+    assert finding.ok is None
+    assert "warning" in finding.value
+    assert passed(evaluate(obs))
+
+
+def test_a_vm_short_of_the_harness_reserve_is_weak_whoever_launched_it() -> None:
+    obs = _vm_observations(ram_bytes=4 * GIB, vm_launcher=None)
+    assert _weak(obs) == {"RAM vs student memory.max"}
 
 
 def test_a_root_student_is_weak() -> None:

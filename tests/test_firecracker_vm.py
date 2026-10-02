@@ -108,6 +108,33 @@ class TestSizing:
         free = 10 * GIB
         assert disk_budget(self.SIZE, tmp_path) == int(10 * GIB * 0.8)
 
+    def test_runs_launched_together_split_the_free_space(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        """Scratch drives are sparse: four runs each handed 80 GiB of 150 GiB
+        free could fill the disk together."""
+        usage = shutil.disk_usage(tmp_path)
+        monkeypatch.setattr(
+            "karotte.firecracker.vm.shutil.disk_usage",
+            lambda _: usage._replace(free=150 * GIB),  # pyright: ignore[reportUnknownLambdaType]
+        )
+
+        budget = disk_budget(self.SIZE, tmp_path, runs=4)
+
+        assert budget == int(150 * GIB * 0.8) // 4
+        assert 4 * budget <= 150 * GIB * 0.8
+
+    def test_disk_budget_is_whole_mib(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        usage = shutil.disk_usage(tmp_path)
+        monkeypatch.setattr(
+            "karotte.firecracker.vm.shutil.disk_usage",
+            lambda _: usage._replace(free=10 * GIB + 12345),  # pyright: ignore[reportUnknownLambdaType]
+        )
+
+        assert disk_budget(self.SIZE, tmp_path, runs=3) % (1 << 20) == 0
+
 
 class TestConfig:
     def test_boot_args(self):
@@ -259,6 +286,7 @@ class TestGuestInputs:
             "KAROTTE_SANDBOX=vm",
             "KAROTTE_DISK_BUDGET_BYTES=12345",
             "KAROTTE_SANDBOX_MEMORY_BYTES=4096",
+            "KAROTTE_VM_LAUNCHER=firecracker",
             "ANTHROPIC_BASE_URL=https://proxy.example",
             "KAROTTE_PROXY_URL=https://proxy.example",
             "KAROTTE_EXIT_ON_RUN_ERROR=1",
@@ -534,6 +562,23 @@ class TestDrives:
             text=True,
         ).stdout
         assert content == "f"
+
+    def test_the_e2fsprogs_1_47_3_large_file_failure_says_why(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """1.47.3's ``mkfs.ext4 -d <dir>`` fails on files over 2 GiB."""
+        src = tmp_path / "src"
+        src.mkdir()
+
+        def run(argv: list[str]) -> None:
+            raise drives.DriveError(
+                f"{argv[0]} failed: mkfs.ext4: Ext2 file too big while populating file system"
+            )
+
+        monkeypatch.setattr(drives, "_run", run)
+
+        with pytest.raises(drives.DriveError, match="1.47.3"):
+            _ = drives.make_mount_drive(tmp_path / "m.ext4", src)
 
     def test_a_mounted_file_keeps_its_mode_but_not_setuid(self, tmp_path: Path):
         """A 0755 script must still run in the guest."""
@@ -917,6 +962,7 @@ class TestWiring:
         assert run_firecracker.call_args.args == (config,)
         assert run_firecracker.call_args.kwargs["dev"] is True
         assert run_firecracker.call_args.kwargs["mounts"] == ["a:/b:ro"]
+        assert run_firecracker.call_args.kwargs["parallel_runs"] == 1
 
     def test_clean_up_and_stop(self):
         from karotte.run_helpers import clean_up_old_containers, stop_containers

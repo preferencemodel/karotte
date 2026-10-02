@@ -37,6 +37,7 @@ from karotte.confinement import (
     FIREWALL_TOLERATE_ENV_VAR,
     HARNESS_RESERVE_BYTES,
     STUDENT_PROCESS_LIMIT,
+    VM_LAUNCHER_ENV_VAR,
     CgroupConfinement,
     Confinement,
     Contract,
@@ -51,6 +52,7 @@ from karotte.confinement import (
     sandbox_memory_bytes,
 )
 from karotte.container import demoted_uid_gid, is_containerized
+from karotte.hardware import VM_MEMORY_HEADROOM_BYTES
 from karotte.subprocess import (
     STUDENT_OOM_SCORE_ADJ,
     student_env,
@@ -65,6 +67,11 @@ PROBE_QUOTA_FILES = 256
 _SESSION_TIMEOUT_SECONDS = 30
 
 _PROBE_UIDS = range(60000, 61000)
+
+_IOMEM = Path("/proc/iomem")
+_RAM_SLACK_BYTES = 64 << 20
+"""Allowance for the firmware's holes in a VM's RAM map: 5119.6 MiB of
+System RAM in a 5 GiB Firecracker guest."""
 
 # Only shell builtins: the student may not be able to read the harness's
 # Python, and nothing on disk needs to be trusted to echo these back.
@@ -120,6 +127,8 @@ class Observations:
     session: SessionReport = field(default_factory=SessionReport)
     ram_bytes: int | None = None
     student_memory_default: int | None = None
+    vm_launcher: str | None = None
+    """The karotte runtime that launched this VM, ``None`` for any other launcher."""
     left_behind: list[str] = field(default_factory=list)
 
 
@@ -285,20 +294,46 @@ def evaluate(obs: Observations) -> list[Finding]:
     findings.extend(_session_findings(obs, expect))
 
     if obs.ram_bytes is not None and obs.student_memory_default is not None:
-        needed = obs.student_memory_default + HARNESS_RESERVE_BYTES
         findings.append(
-            Finding(
-                "RAM vs student memory.max",
-                f"{_gib(obs.ram_bytes)} vs {_gib(obs.student_memory_default)}"
-                + f" (needs {_gib(needed)} with the harness reserve)",
-                obs.ram_bytes >= needed if expect.ram_headroom else None,
-            )
+            _ram_finding(obs, obs.ram_bytes, obs.student_memory_default, expect)
         )
 
     findings.append(
         Finding("left behind", "; ".join(obs.left_behind) or "nothing", None)
     )
     return findings
+
+
+def _ram_finding(
+    obs: Observations, ram: int, student_default: int, expect: Expectations
+) -> Finding:
+    """A VM needs RAM for the student, the harness reserve and the guest
+    kernel: sized to exactly the first two, a student spread over many
+    processes pushes the guest into a global OOM that can kill the harness.
+    karotte's launchers hold the headroom, so a VM one of them launched fails
+    without it. A VM someone else launched and sized only gets a warning."""
+    needed = student_default + HARNESS_RESERVE_BYTES
+    value = f"{_gib(ram)} vs {_gib(student_default)}"
+    if not expect.ram_headroom:
+        return Finding(
+            "RAM vs student memory.max",
+            value + f" (needs {_gib(needed)} with the harness reserve)",
+            None,
+        )
+    with_headroom = needed + VM_MEMORY_HEADROOM_BYTES
+    value += (
+        f" (needs {_gib(with_headroom)} with the harness reserve and"
+        + f" {_gib(VM_MEMORY_HEADROOM_BYTES)} VM headroom)"
+    )
+    if ram < needed - _RAM_SLACK_BYTES:
+        return Finding("RAM vs student memory.max", value, False)
+    if ram >= with_headroom - _RAM_SLACK_BYTES:
+        return Finding("RAM vs student memory.max", value, True)
+    if obs.vm_launcher is not None:
+        return Finding("RAM vs student memory.max", value, False)
+    warning = "no VM headroom; a student spread over many processes can get the harness OOM-killed"
+    logger.warning(f"{warning} ({value})")
+    return Finding("RAM vs student memory.max", f"{value}; warning: {warning}", None)
 
 
 def _session_findings(obs: Observations, expect: Expectations) -> list[Finding]:
@@ -389,7 +424,8 @@ def gather(hardware: str | None) -> Observations:
         cgroup_version=version,
         cgroup_writable=writable,
         firewall_tolerated=bool(os.environ.get(FIREWALL_TOLERATE_ENV_VAR)),
-        ram_bytes=psutil.virtual_memory().total,
+        ram_bytes=installed_ram_bytes(),
+        vm_launcher=os.environ.get(VM_LAUNCHER_ENV_VAR) or None,
     )
     ram = sandbox_memory_bytes(hardware)
     obs.student_memory_default = (
@@ -418,6 +454,33 @@ def gather(hardware: str | None) -> Observations:
             + " siblings, as every run does at start"
         )
     return obs
+
+
+def installed_ram_bytes(iomem: Path = _IOMEM) -> int:
+    """The RAM the machine (or VM) was given: the System RAM ranges root
+    reads in /proc/iomem. ``MemTotal`` leaves out what the kernel reserves at
+    boot, which grows with the RAM (182 MiB of a 5 GiB Firecracker guest), so
+    it can't tell a VM with headroom from one without. Falls back to
+    ``MemTotal`` where iomem shows no addresses (not root, or no iomem)."""
+    total = 0
+    try:
+        lines = iomem.read_text().splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        span, _, name = line.partition(" : ")
+        # Top-level ranges only: the kernel's own code and data nest inside.
+        if name.strip() != "System RAM" or line.startswith(" "):
+            continue
+        start, _, end = span.partition("-")
+        try:
+            first, last = int(start, 16), int(end, 16)
+        except ValueError:
+            continue
+        # Without root every range reads 00000000-00000000.
+        if last > first:
+            total += last - first + 1
+    return total or psutil.virtual_memory().total
 
 
 def _cgroup_layout(mounts: list[Mount]) -> tuple[int | None, bool]:

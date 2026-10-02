@@ -14,6 +14,10 @@ from loguru import logger
 # cgroup v2 paths for container-level metrics
 CGROUP_CPU_STAT = Path("/sys/fs/cgroup/cpu.stat")
 CGROUP_MEMORY_CURRENT = Path("/sys/fs/cgroup/memory.current")
+# The v2 root (a VM guest, which has no cgroup namespace) has no
+# memory.current; its memory.stat has the same charges broken down.
+CGROUP_MEMORY_STAT = Path("/sys/fs/cgroup/memory.stat")
+_ROOT_MEMORY_STAT_KEYS = ("anon", "file", "kernel", "sock")
 
 # cgroup v1 fallbacks for hybrid layouts (seen in Firecracker VMs), where the
 # v2 hierarchy carries no controllers and the numbers live on v1. cpuacct
@@ -50,18 +54,51 @@ def _read_cgroup_cpu_usage_usec() -> int | None:
 
 
 def _read_cgroup_memory_bytes() -> int | None:
-    """Current memory usage in bytes, from cgroup v2 or v1."""
+    """Current memory usage in bytes, from cgroup v2 (a group's
+    memory.current, or the root's memory.stat) or v1."""
     try:
         if CGROUP_MEMORY_CURRENT.exists():
             return int(CGROUP_MEMORY_CURRENT.read_text().strip())
     except (OSError, ValueError):
         pass
+    if (root := _read_root_memory_stat_bytes()) is not None:
+        return root
     if not _trust_cgroup_v1():
         return None
     try:
         return int(CGROUP_V1_MEMORY_USAGE.read_text().strip())
     except (OSError, ValueError):
         return None
+
+
+def _read_root_memory_stat_bytes() -> int | None:
+    """What the v2 root's memory.stat says is charged: anonymous, page cache,
+    kernel and socket memory, the parts memory.current counts elsewhere."""
+    try:
+        lines = CGROUP_MEMORY_STAT.read_text().splitlines()
+    except OSError:
+        return None
+    stat: dict[str, int] = {}
+    for line in lines:
+        key, _, value = line.partition(" ")
+        if key in _ROOT_MEMORY_STAT_KEYS and value.strip().isdigit():
+            stat[key] = int(value)
+    if "anon" not in stat or "file" not in stat:
+        return None
+    return sum(stat.values())
+
+
+_fallback_logged = False
+
+
+def _log_psutil_fallback() -> None:
+    """Once per process: samplers start on every tool call."""
+    global _fallback_logged
+    if not _fallback_logged:
+        _fallback_logged = True
+        logger.info(
+            "No cgroup CPU and memory numbers here; resource samples are system-wide (psutil)"
+        )
 
 
 @dataclass
@@ -138,7 +175,7 @@ class ResourceSampler:
             # Prime psutil CPU measurement - cpu_percent() stores internal state
             # and computes percentage since last call. First call establishes baseline.
             psutil.cpu_percent()
-            logger.debug("Using system-wide psutil metrics for resource sampling")
+            _log_psutil_fallback()
 
         self._task = asyncio.create_task(self._sample_loop())
 

@@ -51,6 +51,10 @@ DISK_BUDGET_ENV_VAR = "KAROTTE_DISK_BUDGET_BYTES"
 sandbox. Set by karotte's VM launchers, which see the host's real free space;
 inside the guest, ``df`` reports the VM's own disk, which may be sparse and
 larger than the host can back."""
+VM_LAUNCHER_ENV_VAR = "KAROTTE_VM_LAUNCHER"
+"""Set by karotte's own VM launchers to the runtime's name. They size the VM
+with :data:`karotte.hardware.VM_MEMORY_HEADROOM_BYTES` above the sandbox's
+RAM; a VM someone else launched may be sized differently."""
 STUDENT_CGROUP_NAME = "karotte_student"
 
 GIB = 1024**3
