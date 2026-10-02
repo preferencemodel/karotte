@@ -129,22 +129,30 @@ def make_mount_drive(path: Path, source: Path) -> MountDrive:
             os.chmod(content / name, stat.S_IMODE(source.stat().st_mode) & 0o777)
         content_bytes, entries = _tree_size(content)
         _sparse_file(path, mount_drive_size(content_bytes, entries))
-        _run(
-            [
-                e2fs_tool("mkfs.ext4"),
-                "-q",
-                "-F",
-                "-O",
-                "^has_journal",
-                "-N",
-                str(entries + 64),
-                "-E",
-                "root_owner=0:0",
-                "-d",
-                str(content),
-                str(path),
-            ]
-        )
+        try:
+            _run(
+                [
+                    e2fs_tool("mkfs.ext4"),
+                    "-q",
+                    "-F",
+                    "-O",
+                    "^has_journal",
+                    "-N",
+                    str(entries + 64),
+                    "-E",
+                    "root_owner=0:0",
+                    "-d",
+                    str(content),
+                    str(path),
+                ]
+            )
+        except DriveError as e:
+            if "file too big" in str(e):
+                raise DriveError(
+                    f"{e}\ne2fsprogs 1.47.3 can't copy a file over 2 GiB with"
+                    + " mkfs.ext4 -d; install another version"
+                ) from e
+            raise
     _run([e2fs_tool("debugfs"), "-w", "-R", "rmdir /lost+found", str(path)])
     return MountDrive(path=path, kind=kind, name=name)
 

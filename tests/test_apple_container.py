@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import signal
 import subprocess
 from pathlib import Path
@@ -186,7 +187,11 @@ class TestRunCommand:
     def test_runs_a_vm_sandbox_with_a_launcher_disk_budget(
         self, config: EvaluationRunConfig, monkeypatch: pytest.MonkeyPatch
     ):
-        monkeypatch.setattr(apple_container, "disk_budget_bytes", lambda _: 12345)  # pyright: ignore[reportUnknownLambdaType]
+        monkeypatch.setattr(
+            apple_container,
+            "disk_budget_bytes",
+            lambda *_, **__: 12345,  # pyright: ignore[reportUnknownLambdaType]
+        )
 
         command = run_command(config)
 
@@ -218,6 +223,8 @@ class TestRunCommand:
         assert flag_values(command, "--cpus") == ["2"]
         assert flag_values(command, "--memory") == ["5120M"]
         assert f"{SANDBOX_MEMORY_ENV_VAR}={4 * GIB}" in flag_values(command, "--env")
+        # Tells `karotte check confinement` this VM holds the headroom.
+        assert env_value(command, "KAROTTE_VM_LAUNCHER") == "apple-container"
 
     def test_publishes_the_websocket_port_on_localhost_only(
         self, config: EvaluationRunConfig
@@ -386,6 +393,31 @@ class TestDiskBudget:
 
     def test_capped_at_the_plugins_budget(self):
         assert disk_budget_bytes("cpu-2.6gb", free_bytes=1000 * GIB) == 80 * GIB
+
+    def test_runs_launched_together_split_the_free_space(self):
+        """The rootfs is sparse: four runs each promised 80 GiB of 150 GiB
+        free could fill the disk together."""
+        budget = disk_budget_bytes("cpu-2.6gb", free_bytes=150 * GIB, runs=4)
+
+        assert budget == int(150 * GIB * 0.8) // 4
+        assert 4 * budget <= 150 * GIB * 0.8
+
+    def test_parallel_runs_reach_the_guest_budget(
+        self,
+        config: EvaluationRunConfig,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        usage = shutil.disk_usage(Path.home())
+        monkeypatch.setattr(
+            "karotte.apple_container.shutil.disk_usage",
+            lambda _: usage._replace(free=150 * GIB),  # pyright: ignore[reportUnknownLambdaType]
+        )
+
+        command = run_command(config, parallel_runs=4)
+
+        assert env_value(command, "KAROTTE_DISK_BUDGET_BYTES") == str(
+            int(150 * GIB * 0.8) // 4
+        )
 
 
 class TestAssignHostPorts:

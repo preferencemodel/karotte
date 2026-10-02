@@ -37,6 +37,7 @@ from karotte.confinement import (
     FIREWALL_TOLERATE_ENV_VAR,
     HARNESS_RESERVE_BYTES,
     STUDENT_PROCESS_LIMIT,
+    VM_LAUNCHER_ENV_VAR,
     CgroupConfinement,
     Confinement,
     Contract,
@@ -51,6 +52,7 @@ from karotte.confinement import (
     sandbox_memory_bytes,
 )
 from karotte.container import demoted_uid_gid, is_containerized
+from karotte.hardware import VM_MEMORY_HEADROOM_BYTES
 from karotte.subprocess import (
     STUDENT_OOM_SCORE_ADJ,
     student_env,
@@ -65,6 +67,10 @@ PROBE_QUOTA_FILES = 256
 _SESSION_TIMEOUT_SECONDS = 30
 
 _PROBE_UIDS = range(60000, 61000)
+
+_GUEST_KERNEL_RESERVED_BYTES = 256 << 20
+"""Allowance for what a guest kernel keeps out of the RAM it reports: a 5
+GiB Apple `container` VM shows 5053 MiB."""
 
 # Only shell builtins: the student may not be able to read the harness's
 # Python, and nothing on disk needs to be trusted to echo these back.
@@ -120,6 +126,8 @@ class Observations:
     session: SessionReport = field(default_factory=SessionReport)
     ram_bytes: int | None = None
     student_memory_default: int | None = None
+    vm_launcher: str | None = None
+    """The karotte runtime that launched this VM, ``None`` for any other launcher."""
     left_behind: list[str] = field(default_factory=list)
 
 
@@ -285,20 +293,46 @@ def evaluate(obs: Observations) -> list[Finding]:
     findings.extend(_session_findings(obs, expect))
 
     if obs.ram_bytes is not None and obs.student_memory_default is not None:
-        needed = obs.student_memory_default + HARNESS_RESERVE_BYTES
         findings.append(
-            Finding(
-                "RAM vs student memory.max",
-                f"{_gib(obs.ram_bytes)} vs {_gib(obs.student_memory_default)}"
-                + f" (needs {_gib(needed)} with the harness reserve)",
-                obs.ram_bytes >= needed if expect.ram_headroom else None,
-            )
+            _ram_finding(obs, obs.ram_bytes, obs.student_memory_default, expect)
         )
 
     findings.append(
         Finding("left behind", "; ".join(obs.left_behind) or "nothing", None)
     )
     return findings
+
+
+def _ram_finding(
+    obs: Observations, ram: int, student_default: int, expect: Expectations
+) -> Finding:
+    """A VM needs RAM for the student, the harness reserve and the guest
+    kernel: sized to exactly the first two, a student spread over many
+    processes pushes the guest into a global OOM that can kill the harness.
+    karotte's launchers hold the headroom, so a VM one of them launched fails
+    without it. A VM someone else launched and sized only gets a warning."""
+    needed = student_default + HARNESS_RESERVE_BYTES
+    value = f"{_gib(ram)} vs {_gib(student_default)}"
+    if not expect.ram_headroom:
+        return Finding(
+            "RAM vs student memory.max",
+            value + f" (needs {_gib(needed)} with the harness reserve)",
+            None,
+        )
+    with_headroom = needed + VM_MEMORY_HEADROOM_BYTES
+    value += (
+        f" (needs {_gib(with_headroom)} with the harness reserve and"
+        + f" {_gib(VM_MEMORY_HEADROOM_BYTES)} VM headroom)"
+    )
+    if ram < needed:
+        return Finding("RAM vs student memory.max", value, False)
+    if ram >= with_headroom - _GUEST_KERNEL_RESERVED_BYTES:
+        return Finding("RAM vs student memory.max", value, True)
+    if obs.vm_launcher is not None:
+        return Finding("RAM vs student memory.max", value, False)
+    warning = "no VM headroom; a student spread over many processes can get the harness OOM-killed"
+    logger.warning(f"{warning} ({value})")
+    return Finding("RAM vs student memory.max", f"{value}; warning: {warning}", None)
 
 
 def _session_findings(obs: Observations, expect: Expectations) -> list[Finding]:
@@ -390,6 +424,7 @@ def gather(hardware: str | None) -> Observations:
         cgroup_writable=writable,
         firewall_tolerated=bool(os.environ.get(FIREWALL_TOLERATE_ENV_VAR)),
         ram_bytes=psutil.virtual_memory().total,
+        vm_launcher=os.environ.get(VM_LAUNCHER_ENV_VAR) or None,
     )
     ram = sandbox_memory_bytes(hardware)
     obs.student_memory_default = (

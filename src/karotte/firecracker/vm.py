@@ -26,7 +26,12 @@ from typing import IO
 
 from loguru import logger
 
-from karotte.confinement import DISK_BUDGET_ENV_VAR, GIB, SANDBOX_MEMORY_ENV_VAR
+from karotte.confinement import (
+    DISK_BUDGET_ENV_VAR,
+    GIB,
+    SANDBOX_MEMORY_ENV_VAR,
+    VM_LAUNCHER_ENV_VAR,
+)
 from karotte.firecracker import FirecrackerError, drives, network
 from karotte.firecracker.artifacts import cache_dir, ensure_artifacts, host_arch
 from karotte.firecracker.rootfs import build_base_drive
@@ -75,9 +80,13 @@ def vm_resources(size: VmSize) -> tuple[int, int]:
     return vcpus, size.vm_memory_bytes >> 20
 
 
-def disk_budget(size: VmSize, directory: Path) -> int:
-    """min(the hardware plugin's disk budget, 80% of the host's free space)."""
-    budget = int(shutil.disk_usage(directory).free * _FREE_DISK_FRACTION)
+def disk_budget(size: VmSize, directory: Path, runs: int = 1) -> int:
+    """min(the hardware plugin's disk budget, 80% of the host's free space
+    split between the ``runs`` launched together). The scratch drive is
+    sparse, so without the split each VM could be handed all of it."""
+    budget = int(shutil.disk_usage(directory).free * _FREE_DISK_FRACTION) // max(
+        1, runs
+    )
     if size.disk_bytes is not None:
         budget = min(budget, size.disk_bytes)
     return budget
@@ -181,6 +190,7 @@ def guest_env(
     env["KAROTTE_SANDBOX"] = "vm"
     env[DISK_BUDGET_ENV_VAR] = str(disk_budget_bytes)
     env[SANDBOX_MEMORY_ENV_VAR] = str(sandbox_memory_bytes)
+    env[VM_LAUNCHER_ENV_VAR] = "firecracker"
     if proxy_url:
         env["ANTHROPIC_BASE_URL"] = proxy_url
         env["KAROTTE_PROXY_URL"] = proxy_url
@@ -543,9 +553,12 @@ def run_firecracker(
     prepare_only: bool = False,
     image: str = "karotte",
     engine: str = "docker",
+    parallel_runs: int = 1,
 ) -> None:
     """Run one evaluation in a Firecracker VM, like ``docker run`` of the
-    image. Raises ``CalledProcessError`` when the run fails."""
+    image. ``parallel_runs`` is how many runs are launched together, which
+    share the host's free disk. Raises ``CalledProcessError`` when the run
+    fails."""
     task = load_task(run_config)
     guest_mounts = parse_mounts(mounts, dev, build_context)
     jailer = jailer_ids() if os.environ.get(JAILER_ENV_VAR) == "1" else None
@@ -588,7 +601,7 @@ def run_firecracker(
             size = vm_size(task.required_hardware)
         except ValueError as e:
             raise VmError(str(e)) from e
-        budget = disk_budget(size, run.path)
+        budget = disk_budget(size, run.path, parallel_runs)
         drives.make_scratch_drive(vm_root / "scratch.ext4", budget)
 
         mount_drives = [

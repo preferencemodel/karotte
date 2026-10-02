@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from loguru import logger
 
 from karotte.mcp_servers import resource_sampler
 from karotte.mcp_servers.resource_sampler import (
@@ -144,6 +145,7 @@ class TestCgroupV1Fallback:
         monkeypatch.setattr(
             resource_sampler, "CGROUP_MEMORY_CURRENT", tmp_path / "absent"
         )
+        monkeypatch.setattr(resource_sampler, "CGROUP_MEMORY_STAT", tmp_path / "absent")
 
     def test_cpu_falls_back_to_v1_cpuacct(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -197,3 +199,79 @@ class TestCgroupV1Fallback:
 
         assert _read_cgroup_cpu_usage_usec() == 42
         assert _read_cgroup_memory_bytes() == 1024
+
+
+ROOT_MEMORY_STAT = """\
+anon 1000
+file 200
+kernel 30
+kernel_stack 8
+sock 4
+shmem 50
+file_mapped 70
+"""
+
+
+class TestCgroupV2Root:
+    """A VM guest has no cgroup namespace, so /sys/fs/cgroup is the v2 root:
+    cpu.stat is there, memory.current isn't, and cgroup v1 is off."""
+
+    @pytest.fixture
+    def v2_root(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        monkeypatch.setenv("KAROTTE_SANDBOX", "vm")
+        stat = tmp_path / "cpu.stat"
+        stat.write_text("usage_usec 42\nuser_usec 20\n")
+        monkeypatch.setattr(resource_sampler, "CGROUP_CPU_STAT", stat)
+        monkeypatch.setattr(
+            resource_sampler, "CGROUP_MEMORY_CURRENT", tmp_path / "absent"
+        )
+        monkeypatch.setattr(resource_sampler, "CGROUP_V1_CPUACCT_USAGE", ())
+        monkeypatch.setattr(
+            resource_sampler, "CGROUP_V1_MEMORY_USAGE", tmp_path / "absent"
+        )
+        memory_stat = tmp_path / "memory.stat"
+        monkeypatch.setattr(resource_sampler, "CGROUP_MEMORY_STAT", memory_stat)
+        return memory_stat
+
+    def test_memory_comes_from_the_root_memory_stat(self, v2_root: Path):
+        """anon + file + kernel + sock; the finer keys are parts of those."""
+        _ = v2_root.write_text(ROOT_MEMORY_STAT)
+
+        assert _read_cgroup_memory_bytes() == 1000 + 200 + 30 + 4
+
+    def test_an_older_kernel_without_the_kernel_key_still_counts(self, v2_root: Path):
+        _ = v2_root.write_text("anon 1000\nfile 200\nsock 4\n")
+
+        assert _read_cgroup_memory_bytes() == 1204
+
+    def test_an_unreadable_memory_stat_gives_nothing(self, v2_root: Path):
+        _ = v2_root.write_text("garbage\n")
+
+        assert _read_cgroup_memory_bytes() is None
+
+    @pytest.mark.asyncio
+    async def test_the_sampler_uses_the_cgroup_numbers(self, v2_root: Path):
+        _ = v2_root.write_text(ROOT_MEMORY_STAT)
+
+        async with ResourceSampler(sample_interval_s=0.01) as sampler:
+            await asyncio.sleep(0.05)
+
+        assert sampler._use_cgroup  # pyright: ignore[reportPrivateUsage]
+        assert sampler.metrics.peak_memory_mb == pytest.approx(1234 / (1024 * 1024))
+
+    @pytest.mark.asyncio
+    @pytest.mark.usefixtures("v2_root")
+    async def test_the_psutil_fallback_is_logged_once(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr(resource_sampler, "_fallback_logged", False)
+        messages: list[str] = []
+        handler = logger.add(messages.append, level="INFO", format="{message}")
+        try:
+            for _ in range(3):
+                async with ResourceSampler(sample_interval_s=0.01):
+                    pass
+        finally:
+            logger.remove(handler)
+
+        assert len([m for m in messages if "system-wide" in m]) == 1

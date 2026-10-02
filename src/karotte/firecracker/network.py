@@ -29,7 +29,7 @@ from loguru import logger
 from karotte.firecracker import FirecrackerError
 
 NETWORK_ENV_VAR = "KAROTTE_FIRECRACKER_NETWORK"
-"""``pasta``, ``tap``, ``none``, or unset for tap when set up, else pasta."""
+"""``pasta``, or ``none`` for a VM without a network; unset means pasta."""
 
 DNS_ENV_VAR = "KAROTTE_FIRECRACKER_DNS"
 """Comma-separated nameservers for the guest, instead of the host's."""

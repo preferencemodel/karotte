@@ -427,3 +427,23 @@ def test_the_confinement_check_leaves_nothing_behind(
     # Only the harness leaf may stay, which every run creates itself.
     assert all("karotte_harness" in item for item in observations.left_behind)
     assert (_firewall_state(), _cgroup_state(), read_mounts(), mount_points()) == before
+
+
+def test_the_confinement_check_sees_the_session_group_and_the_firewall_hold(
+    uid: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real student session lands in the student's group, and with the
+    rules in place the probe uid reaches none of the canaries."""
+    monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", str(uid))
+    student_subprocess.reset_pid_namespace_probe()
+
+    observations = gather(None)
+
+    assert observations.session.error is None
+    if observations.student_cgroup is not None:
+        assert observations.session.cgroup == observations.student_cgroup
+    if not observations.firewall_took:
+        pytest.skip(f"the firewall did not take here: {observations.firewall_error}")
+    assert observations.firewall_check_error is None
+    assert observations.reachable_with_rules == []

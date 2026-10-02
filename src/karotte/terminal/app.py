@@ -426,6 +426,7 @@ class KarotteApp(App[None]):
             build_context=build_context,
             mounts=mounts,
             proxy_url=proxy_url,
+            parallel_runs=len(run_configs),
         )
 
         with ThreadPoolExecutor(max_workers=len(run_configs)) as executor:
@@ -919,6 +920,7 @@ def _run_containerized_worker(
     build_context: str = ".",
     mounts: list[str] | None = None,
     proxy_url: str | None = None,
+    parallel_runs: int = 1,
 ):
     """Run a single containerized evaluation run. Must be a module-level function for pickling."""
     # Write output to log file that can be tailed
@@ -933,11 +935,19 @@ def _run_containerized_worker(
             build_context=build_context,
             mounts=mounts,
             proxy_url=proxy_url,
+            parallel_runs=parallel_runs,
         )
         return
 
     run_command, _ = get_container_run_command(
-        run_config, runtime, dev, keep_container, build_context, mounts, proxy_url
+        run_config,
+        runtime,
+        dev,
+        keep_container,
+        build_context,
+        mounts,
+        proxy_url,
+        parallel_runs=parallel_runs,
     )
 
     with open(log_file, "w") as f:

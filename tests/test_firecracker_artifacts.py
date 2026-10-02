@@ -15,7 +15,12 @@ from karotte.firecracker.artifacts import (
     firecracker_archive,
     kernel_archive,
 )
-from karotte.firecracker.helper import HELPER_BASE_IMAGE, helper_containerfile
+from karotte.firecracker.helper import (
+    HELPER_BASE_IMAGE,
+    HelperError,
+    check_mke2fs,
+    helper_containerfile,
+)
 
 
 def _sha(data: bytes) -> str:
@@ -89,6 +94,24 @@ class TestPinnedArchives:
     def test_helper_image_is_pinned_by_digest(self):
         assert "@sha256:" in HELPER_BASE_IMAGE
         assert helper_containerfile().startswith(f"FROM {HELPER_BASE_IMAGE}\n")
+
+
+class TestHelperMke2fs:
+    def test_a_helper_that_reads_a_tar_passes(self):
+        check_mke2fs("mke2fs 1.47.2 (1-Jan-2025)\ntar-ok\n", "helper")
+
+    def test_a_mke2fs_without_tar_input_is_refused(self):
+        with pytest.raises(HelperError, match=r"1\.47\.0; .* needs e2fsprogs 1\.47\.1"):
+            check_mke2fs("mke2fs 1.47.0 (5-Feb-2023)\ntar-ok\n", "helper")
+
+    def test_a_mke2fs_built_without_libarchive_is_refused(self):
+        """Alpine 3.23 and later: a new enough version that can't read a tar."""
+        with pytest.raises(HelperError, match="libarchive"):
+            check_mke2fs("mke2fs 1.47.4 (6-Mar-2025)\n", "helper")
+
+    def test_unreadable_output_is_refused(self):
+        with pytest.raises(HelperError, match="Could not read"):
+            check_mke2fs("sh: mke2fs: not found\n", "helper")
 
 
 class TestEnsureArchive:

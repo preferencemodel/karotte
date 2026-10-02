@@ -13,6 +13,7 @@ from karotte.cgroups import Mount, V1Cgroup
 from karotte.cli.check import confinement
 from karotte.confinement import GIB, Contract, Sandbox
 from karotte.confinement_check import (
+    Finding,
     Observations,
     SessionReport,
     evaluate,
@@ -132,6 +133,38 @@ def test_a_vm_short_of_one_mechanism_is_weak_there(
     changes: dict[str, object], weak: set[str]
 ) -> None:
     assert _weak(_vm_observations(**changes)) == weak
+
+
+def _ram_finding(obs: Observations) -> Finding:
+    return next(f for f in evaluate(obs) if f.name == "RAM vs student memory.max")
+
+
+def test_a_karotte_vm_without_headroom_is_weak() -> None:
+    """RAM of exactly the student's limit plus the harness reserve is the
+    size where a student spread over many processes got the harness killed
+    by a global OOM."""
+    obs = _vm_observations(ram_bytes=5 * GIB, vm_launcher="firecracker")
+    assert _weak(obs) == {"RAM vs student memory.max"}
+
+
+def test_a_karotte_vm_passes_with_what_the_guest_kernel_keeps() -> None:
+    """A 6 GiB guest reports a little less than 6 GiB."""
+    obs = _vm_observations(ram_bytes=6 * GIB - (67 << 20), vm_launcher="firecracker")
+    assert _ram_finding(obs).ok is True
+
+
+def test_a_vm_another_launcher_sized_without_headroom_only_warns() -> None:
+    """Its RAM is the outer harness's choice; the check must not fail it."""
+    obs = _vm_observations(ram_bytes=5 * GIB, vm_launcher=None)
+    finding = _ram_finding(obs)
+    assert finding.ok is None
+    assert "warning" in finding.value
+    assert passed(evaluate(obs))
+
+
+def test_a_vm_short_of_the_harness_reserve_is_weak_whoever_launched_it() -> None:
+    obs = _vm_observations(ram_bytes=4 * GIB, vm_launcher=None)
+    assert _weak(obs) == {"RAM vs student memory.max"}
 
 
 def test_a_root_student_is_weak() -> None:
