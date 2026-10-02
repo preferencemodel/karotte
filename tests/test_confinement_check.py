@@ -192,7 +192,8 @@ def test_installed_ram_without_root_falls_back_to_memtotal(
 
 def test_a_vm_another_launcher_sized_without_headroom_only_warns() -> None:
     """Its RAM is the outer harness's choice; the check must not fail it."""
-    obs = _vm_observations(ram_bytes=5 * GIB, vm_launcher=None)
+    # As /proc/iomem counts it: the firmware's holes come off the top.
+    obs = _vm_observations(ram_bytes=5 * GIB - (1 << 20), vm_launcher=None)
     finding = _ram_finding(obs)
     assert finding.ok is None
     assert "warning" in finding.value

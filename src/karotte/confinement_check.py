@@ -325,7 +325,7 @@ def _ram_finding(
         f" (needs {_gib(with_headroom)} with the harness reserve and"
         + f" {_gib(VM_MEMORY_HEADROOM_BYTES)} VM headroom)"
     )
-    if ram < needed:
+    if ram < needed - _RAM_SLACK_BYTES:
         return Finding("RAM vs student memory.max", value, False)
     if ram >= with_headroom - _RAM_SLACK_BYTES:
         return Finding("RAM vs student memory.max", value, True)
