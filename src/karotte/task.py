@@ -49,7 +49,7 @@ class Task(ABC, metaclass=_TaskMeta):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        # `system_prompt`, `steps`, `tools`, `required_hardware` and `data_mounts`
+        # `system_prompt`, `steps`, `tools`, `required_hardware`, `data_mounts` etc.
         # are declared as properties here and read as plain values elsewhere (e.g.
         # `karotte tasks list` serializes them to JSON). Overriding one with a bare
         # `def` — a forgotten @property — is silently accepted by ABCMeta, after
@@ -105,6 +105,14 @@ class Task(ABC, metaclass=_TaskMeta):
         Defaults to the plugin's default, or ``None`` without a plugin.
         """
         return default_hardware()
+
+    @property
+    def scoring_time_limit_seconds(self) -> float | None:
+        """How long the task's judges may need to score a step, end to end (pre-scoring
+        hook and judge together). A runtime that limits scoring, such as an exported
+        task's verifier, should allow at least this much. None, the default, means the
+        task does not say and the runtime applies its own limit."""
+        return None
 
     @property
     def submission_paths(self) -> tuple[Path, ...]:

@@ -87,3 +87,22 @@ def test_class_attribute_override_is_accepted() -> None:
         },
     )
     assert cls.__dict__["required_hardware"] == "small"
+
+
+def _scoring_limit(_self: Any) -> float:
+    return 60.0
+
+
+def test_scoring_time_limit_without_property_raises() -> None:
+    with pytest.raises(TypeError, match="scoring_time_limit_seconds"):
+        type(
+            "BadScoringLimitTask",
+            (Task,),
+            {
+                "id": "bad-scoring-limit",
+                "system_prompt": property(lambda _self: None),
+                "steps": property(_steps),
+                "tools": property(_tools),
+                "scoring_time_limit_seconds": _scoring_limit,
+            },
+        )

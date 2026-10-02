@@ -237,6 +237,31 @@ class TestCreateTaskBasic:
 # ---------------------------------------------------------------------------
 
 
+class TestCreateTaskScoringTimeLimit:
+    def test_tasks_do_not_declare_one_by_default(
+        self, config: EvaluationRunConfig, judge: RegexJudge
+    ) -> None:
+        cls = create_task(
+            id="t",
+            tools=[],
+            steps=[StepConfig(instructions="x", judge=judge)],
+            system_prompt=None,
+        )
+        assert cls(config=config).scoring_time_limit_seconds is None
+
+    def test_a_declared_limit_is_returned(
+        self, config: EvaluationRunConfig, judge: RegexJudge
+    ) -> None:
+        cls = create_task(
+            id="t",
+            tools=[],
+            steps=[StepConfig(instructions="x", judge=judge)],
+            scoring_time_limit_seconds=10800.0,
+            system_prompt=None,
+        )
+        assert cls(config=config).scoring_time_limit_seconds == 10800.0
+
+
 class TestCreateTaskRequiredHardware:
     def test_no_hardware_without_a_plugin(
         self,

@@ -35,6 +35,7 @@ def create_task(
     steps: list[StepConfig],
     system_prompt: str | None | Callable[[EvaluationRunConfig], str | None],
     required_hardware: str | None = None,
+    scoring_time_limit_seconds: float | None = None,
     data_mounts: list[DataMount] | None = None,
     configure_tools: Callable[[], None] | None = None,
     pre_hook: Callable[[EvaluationRunConfig], dict[str, Any]] | None = None,
@@ -63,6 +64,11 @@ def create_task(
 
     if required_hardware is not None:
         attributes["required_hardware"] = property(lambda self: required_hardware)
+
+    if scoring_time_limit_seconds is not None:
+        attributes["scoring_time_limit_seconds"] = property(
+            lambda self: scoring_time_limit_seconds
+        )
 
     if configure_tools is not None:
         attributes["configure_tools"] = lambda self, _f=configure_tools: _f()  # pyright: ignore[reportUnknownLambdaType]
