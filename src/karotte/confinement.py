@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import errno
+import ipaddress
 import os
 import shlex
 import shutil
+import socket
 import stat
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
 
+import psutil
 from loguru import logger
 
 import karotte.memory_watch as memory_watch
@@ -34,6 +37,11 @@ from karotte.hardware import hardware_limits
 from karotte.trusted_bin import trusted_binary
 
 SANDBOX_ENV_VAR = "KAROTTE_SANDBOX"
+STUDENT_NETWORK_ENV_VAR = "KAROTTE_STUDENT_NETWORK"
+"""What the student may reach besides ``allowed_ips``. Unset or ``strict``:
+localhost and the sandbox's own addresses. ``internal``: also the link-local
+and private ranges (the metadata server, the rest of the private network), for
+a task that needs them. Any other value is treated as ``strict``."""
 SANDBOX_MEMORY_ENV_VAR = "KAROTTE_SANDBOX_MEMORY_BYTES"
 """The sandbox's RAM in bytes, from the launcher of a VM that holds headroom
 above it for the guest kernel. Read when no hardware plugin knows the
@@ -280,15 +288,22 @@ class Confinement:
         blocked_ports: list[int] | None = None,
         allowed_ips: list[str] | None = None,
     ) -> bool:
-        """Keep a uid off the network, except localhost, metadata servers,
-        private ranges and ``allowed_ips``. Returns whether the rules took:
-        never on gVisor, whose iptables accepts rules without enforcing them.
+        """Keep a uid off the network, except localhost, the sandbox's own
+        addresses and ``allowed_ips``. Returns whether the rules took: never on
+        gVisor, whose iptables accepts rules without enforcing them.
+
+        ``KAROTTE_STUDENT_NETWORK=internal`` also lets through the link-local
+        and private ranges. Off by default: they hold the metadata server and
+        its credentials, other workloads, and on a developer machine the
+        machine itself and its LAN.
         """
         if not is_containerized():
             return False
 
         iptables, ip6tables, reject = self._firewall_commands()
         owner = shlex.quote(str(uid))
+        internal = _student_network_is_internal()
+        own_v4, own_v6 = _own_addresses()
 
         # IPv4 rules: allow localhost, metadata servers, and private networks
         firewall_rules = [
@@ -300,14 +315,26 @@ class Confinement:
             ],
             # Allow localhost
             f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 127.0.0.0/8 -j ACCEPT",
-            # Allow GCP/AWS metadata server (both use 169.254.169.254)
-            f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 169.254.169.254 -j ACCEPT",
-            # Allow link-local addresses (169.254.0.0/16) for metadata and other services
-            f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 169.254.0.0/16 -j ACCEPT",
-            # Allow private networks (RFC 1918)
-            f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 10.0.0.0/8 -j ACCEPT",
-            f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 172.16.0.0/12 -j ACCEPT",
-            f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 192.168.0.0/16 -j ACCEPT",
+            # Allow the sandbox's own addresses (a server the student runs,
+            # reached by its interface address)
+            *[
+                f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d {ip} -j ACCEPT"
+                for ip in own_v4
+            ],
+            *(
+                []
+                if not internal
+                else [
+                    # Allow GCP/AWS metadata server (both use 169.254.169.254)
+                    f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 169.254.169.254 -j ACCEPT",
+                    # Allow link-local addresses (169.254.0.0/16) for metadata and other services
+                    f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 169.254.0.0/16 -j ACCEPT",
+                    # Allow private networks (RFC 1918)
+                    f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 10.0.0.0/8 -j ACCEPT",
+                    f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 172.16.0.0/12 -j ACCEPT",
+                    f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d 192.168.0.0/16 -j ACCEPT",
+                ]
+            ),
             # Allow specific external hosts (e.g. the model proxy)
             *[
                 f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -d {ip} -j ACCEPT"
@@ -326,12 +353,22 @@ class Confinement:
             ],
             # Allow localhost
             f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -d ::1 -j ACCEPT",
-            # Allow AWS IPv6 metadata server (IMDSv2)
-            f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -d fd00:ec2::254 -j ACCEPT",
-            # Allow link-local (fe80::/10)
-            f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -d fe80::/10 -j ACCEPT",
-            # Allow unique local (fd00::/8) - includes AWS metadata
-            f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -d fd00::/8 -j ACCEPT",
+            *[
+                f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -d {ip} -j ACCEPT"
+                for ip in own_v6
+            ],
+            *(
+                []
+                if not internal
+                else [
+                    # Allow AWS IPv6 metadata server (IMDSv2)
+                    f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -d fd00:ec2::254 -j ACCEPT",
+                    # Allow link-local (fe80::/10)
+                    f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -d fe80::/10 -j ACCEPT",
+                    # Allow unique local (fd00::/8) - includes AWS metadata
+                    f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -d fd00::/8 -j ACCEPT",
+                ]
+            ),
             # Reject everything else
             f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -j {reject}",
         ]
@@ -464,6 +501,123 @@ def prepare_vm_guest(dev: Path | None = None) -> list[str]:
     for step in changed:
         logger.info(f"VM guest setup: {step}")
     return changed
+
+
+def _student_network_is_internal() -> bool:
+    value = os.environ.get(STUDENT_NETWORK_ENV_VAR)
+    if value == "internal":
+        return True
+    if value not in (None, "", "strict"):
+        logger.warning(
+            f"Unknown {STUDENT_NETWORK_ENV_VAR}={value!r}; using the strict student firewall"
+        )
+    return False
+
+
+def _own_addresses() -> tuple[list[str], list[str]]:
+    """The sandbox's own IPv4 and IPv6 addresses, read from its interfaces.
+    Loopback is covered separately; link-local addresses are left out."""
+    v4: set[str] = set()
+    v6: set[str] = set()
+    for addrs in psutil.net_if_addrs().values():
+        for addr in addrs:
+            if addr.family not in (socket.AF_INET, socket.AF_INET6):
+                continue
+            try:
+                ip = ipaddress.ip_address(addr.address.split("%", 1)[0])
+            except ValueError:
+                continue
+            if ip.is_loopback or ip.is_link_local:
+                continue
+            (v4 if ip.version == 4 else v6).add(str(ip))
+    return sorted(v4), sorted(v6)
+
+
+_METADATA_ADDRESS = "169.254.169.254"
+_PUBLIC_ADDRESS = "1.1.1.1"
+_SELF_TEST_TIMEOUT_SECONDS = 1.0
+
+
+def firewall_canaries(allowed_ips: Sequence[str] = ()) -> list[tuple[str, int]]:
+    """Destinations the student firewall must refuse, for :func:`reachable_as`.
+
+    A connection that succeeds proves the firewall is not doing its job; one
+    that fails proves nothing (a REJECT and a closed port look alike), so these
+    are addresses that answer when nothing is in the way: a public host, and
+    unless the private ranges are deliberately open, the metadata server and
+    the default gateway. ``allowed_ips`` are left out: the student may reach
+    them on any port, and a model proxy can sit on the gateway (on a Mac
+    running Apple `container`, the gateway is the Mac)."""
+    canaries = [(_PUBLIC_ADDRESS, 80)]
+    if not _student_network_is_internal():
+        canaries.append((_METADATA_ADDRESS, 80))
+        gateway = _default_gateway()
+        if gateway is not None:
+            canaries += [(gateway, 80), (gateway, 53)]
+    allowed = set(allowed_ips)
+    return [(host, port) for host, port in canaries if host not in allowed]
+
+
+_ROUTE_TABLE = Path("/proc/net/route")
+_RTF_GATEWAY = 0x2
+
+
+def _default_gateway(route_table: Path | None = None) -> str | None:
+    try:
+        lines = (route_table or _ROUTE_TABLE).read_text().splitlines()[1:]
+    except OSError:
+        return None
+    for line in lines:
+        fields = line.split()
+        if len(fields) < 4 or fields[1] != "00000000":
+            continue
+        try:
+            gateway, flags = int(fields[2], 16), int(fields[3], 16)
+        except ValueError:
+            continue
+        # A default route with no gateway (an on-link one) has 0.0.0.0 here,
+        # which connects to localhost: not a canary.
+        if flags & _RTF_GATEWAY and gateway:
+            try:
+                return socket.inet_ntoa(gateway.to_bytes(4, "little"))
+            except OverflowError:
+                continue
+    return None
+
+
+def reachable_as(uid: int, targets: list[tuple[str, int]]) -> list[tuple[str, int]]:
+    """The ``targets`` a process running as ``uid`` can open a TCP connection to.
+
+    Forks a helper that drops to ``uid`` and tries each; no exec, so nothing on
+    disk is trusted. Raises ``RuntimeError`` if the helper can't run."""
+    read_fd, write_fd = os.pipe()
+    child = os.fork()
+    if child == 0:
+        os.close(read_fd)
+        try:
+            os.setgroups([])
+            os.setgid(uid)
+            os.setuid(uid)
+            reached = []
+            for index, (host, port) in enumerate(targets):
+                try:
+                    with socket.create_connection(
+                        (host, port), timeout=_SELF_TEST_TIMEOUT_SECONDS
+                    ):
+                        reached.append(str(index))
+                except OSError:
+                    pass
+            _ = os.write(write_fd, (",".join(reached) + "\n").encode())
+        except BaseException:
+            os._exit(1)
+        os._exit(0)
+    os.close(write_fd)
+    with os.fdopen(read_fd, "rb") as pipe:
+        report = pipe.read().decode()
+    _, status = os.waitpid(child, 0)
+    if not os.WIFEXITED(status) or os.WEXITSTATUS(status) != 0 or not report:
+        raise RuntimeError(f"The firewall self-test as uid {uid} could not run")
+    return [targets[int(i)] for i in report.strip().split(",") if i]
 
 
 class WatchdogConfinement(Confinement):

@@ -1,6 +1,7 @@
 import errno
 import os
 import shutil
+import socket
 import stat
 import subprocess
 from collections.abc import Callable
@@ -8,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 
+import psutil
 import pytest
 from loguru import logger
 
@@ -22,6 +24,7 @@ from karotte.confinement import (
     SANDBOX_ENV_VAR,
     SANDBOX_MEMORY_ENV_VAR,
     STUDENT_FILE_COUNT_LIMIT,
+    STUDENT_NETWORK_ENV_VAR,
     STUDENT_PROCESS_LIMIT,
     CgroupConfinement,
     Confinement,
@@ -947,6 +950,9 @@ def iptables(monkeypatch: pytest.MonkeyPatch) -> FakeIptables:
     fake = FakeIptables()
     monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
     monkeypatch.setattr(subprocess, "run", fake.run)
+    monkeypatch.setattr(
+        confinement, "_own_addresses", lambda: (["10.1.2.3"], ["2001:db8::5"])
+    )
     return fake
 
 
@@ -1086,6 +1092,70 @@ class TestRestrictToInternalNetwork:
         monkeypatch.delenv("KAROTTE_CONTAINERIZED")
 
         assert self.block(iptables) == []
+
+    @pytest.mark.parametrize("value", [None, "", "strict", "nonsense"])
+    def test_by_default_only_localhost_own_addresses_and_allowed_ips_get_through(
+        self, iptables: FakeIptables, monkeypatch: pytest.MonkeyPatch, value: str | None
+    ) -> None:
+        """The link-local and private ranges hold the metadata server and its
+        credentials, other workloads, and on a developer machine the machine
+        itself. An unknown value fails closed."""
+        if value is None:
+            monkeypatch.delenv(STUDENT_NETWORK_ENV_VAR, raising=False)
+        else:
+            monkeypatch.setenv(STUDENT_NETWORK_ENV_VAR, value)
+        assert Confinement(Sandbox.VM).restrict_to_internal_network(
+            "student", [8001], ["1.2.3.4"]
+        )
+
+        accepted = sorted(
+            r.split(" -d ")[1] for r in iptables.rules if r.endswith("ACCEPT")
+        )
+        assert accepted == [
+            "1.2.3.4 -j ACCEPT",
+            "10.1.2.3 -j ACCEPT",
+            "127.0.0.0/8 -j ACCEPT",
+            "2001:db8::5 -j ACCEPT",
+            "::1 -j ACCEPT",
+        ]
+        # The harness ports stay closed on every address, own ones included.
+        assert iptables.rules[0].endswith("-p tcp --dport 8001 -j DROP")
+        assert iptables.rules[-1] == (
+            "ip6tables -A OUTPUT -m owner --uid-owner student -j REJECT"
+        )
+
+    def test_internal_opens_the_private_ranges(
+        self, iptables: FakeIptables, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(STUDENT_NETWORK_ENV_VAR, "internal")
+        rules = self.block(iptables)
+
+        assert any(r.endswith("-d 10.0.0.0/8 -j ACCEPT") for r in rules)
+        assert any(r.endswith("-d 169.254.169.254 -j ACCEPT") for r in rules)
+        # Looser than strict everywhere: an own address that isn't private
+        # stays reachable too.
+        assert any(r.endswith("-d 10.1.2.3 -j ACCEPT") for r in rules)
+        assert any(r.endswith("-d 2001:db8::5 -j ACCEPT") for r in rules)
+
+
+def test_own_addresses_skip_loopback_and_link_local(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def addr(family: int, address: str) -> SimpleNamespace:
+        return SimpleNamespace(family=family, address=address)
+
+    fake = {
+        "lo": [addr(socket.AF_INET, "127.0.0.1"), addr(socket.AF_INET6, "::1")],
+        "eth0": [
+            addr(socket.AF_INET, "192.168.64.7"),
+            addr(socket.AF_INET6, "fe80::1%eth0"),
+            addr(socket.AF_INET6, "fd48::7"),
+            addr(psutil.AF_LINK, "f6:83:a8:5b:44:52"),
+        ],
+    }
+    monkeypatch.setattr(psutil, "net_if_addrs", lambda: fake)
+
+    assert confinement._own_addresses() == (["192.168.64.7"], ["fd48::7"])  # pyright: ignore[reportPrivateUsage]
 
 
 class TestDefaultFileLimitBudget:
@@ -1326,6 +1396,83 @@ class TestFirewallTolerance:
 
         assert Confinement(Sandbox.FIRECRACKER).deny_all_network(900)
         assert len(iptables.rules) == 2
+
+
+class TestFirewallCanaries:
+    def _route_table(self, tmp_path: Path, gateway_hex: str | None) -> Path:
+        table = tmp_path / "route"
+        rows = ["Iface\tDestination\tGateway\tFlags"]
+        rows.append("eth0\t0040A8C0\t00000000\t0001")
+        if gateway_hex is not None:
+            rows.append(f"eth0\t00000000\t{gateway_hex}\t0003")
+        _ = table.write_text("\n".join(rows) + "\n")
+        return table
+
+    def test_the_default_gateway_comes_from_the_route_table(
+        self, tmp_path: Path
+    ) -> None:
+        # 192.168.64.1, little-endian as the kernel prints it
+        table = self._route_table(tmp_path, "0140A8C0")
+        assert confinement._default_gateway(table) == "192.168.64.1"  # pyright: ignore[reportPrivateUsage]
+        assert confinement._default_gateway(self._route_table(tmp_path, None)) is None  # pyright: ignore[reportPrivateUsage]
+
+    def test_a_default_route_without_a_gateway_has_none(self, tmp_path: Path) -> None:
+        """An on-link default route lists 0.0.0.0, which reaches localhost."""
+        table = tmp_path / "route"
+        _ = table.write_text(
+            "Iface\tDestination\tGateway\tFlags\neth0\t00000000\t00000000\t0001\n"
+        )
+        assert confinement._default_gateway(table) is None  # pyright: ignore[reportPrivateUsage]
+
+    def test_strict_canaries_include_metadata_and_gateway(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(STUDENT_NETWORK_ENV_VAR, raising=False)
+        monkeypatch.setattr(confinement, "_default_gateway", lambda: "192.168.64.1")
+        assert confinement.firewall_canaries() == [
+            ("1.1.1.1", 80),
+            ("169.254.169.254", 80),
+            ("192.168.64.1", 80),
+            ("192.168.64.1", 53),
+        ]
+
+    def test_allowed_ips_are_not_canaries(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A model proxy on the gateway (the Mac, under Apple `container`) is
+        reachable by design; reaching it proves nothing about the firewall."""
+        monkeypatch.delenv(STUDENT_NETWORK_ENV_VAR, raising=False)
+        monkeypatch.setattr(confinement, "_default_gateway", lambda: "192.168.64.1")
+        assert confinement.firewall_canaries(["192.168.64.1"]) == [
+            ("1.1.1.1", 80),
+            ("169.254.169.254", 80),
+        ]
+
+    def test_internal_canaries_are_public_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(STUDENT_NETWORK_ENV_VAR, "internal")
+        assert confinement.firewall_canaries() == [("1.1.1.1", 80)]
+
+
+@pytest.mark.requires_root
+def test_reachable_as_connects_as_the_given_uid() -> None:
+    """A listener only root may reach (via a uid-owner REJECT would need
+    iptables), so check the plain path: the helper runs as the uid and reports
+    a connection it made."""
+    import socket as _socket
+
+    server = _socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen()
+    port = server.getsockname()[1]
+    try:
+        reached = confinement.reachable_as(
+            65534, [("127.0.0.1", port), ("127.0.0.1", 1)]
+        )
+    finally:
+        server.close()
+    assert reached == [("127.0.0.1", port)]
 
 
 class TestPrepareVmGuest:

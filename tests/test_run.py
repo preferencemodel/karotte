@@ -15,7 +15,8 @@ from karotte.cli.run import (
     default_proxy_url,
     run,
 )
-from karotte.run_helpers import EXIT_ON_RUN_ERROR_ENV_VAR, sanitize_paths
+from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
+from karotte.run_helpers import sanitize_paths
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.http_mcp_server_config import HttpMcpServerConfig
 from karotte.schemas.transcript import ErrorEvent
