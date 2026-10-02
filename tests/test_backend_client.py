@@ -9,6 +9,7 @@ import anyio
 import httpx
 import pytest
 from loguru import logger
+from tenacity import stop_after_attempt
 
 from karotte import backend_client
 from karotte.backend_client import BackendClient
@@ -92,35 +93,49 @@ def test_backoff_is_capped():
     assert backend_client._RETRY_BACKOFF_MAX_SECONDS <= 30  # pyright: ignore[reportPrivateUsage]
 
 
+_SAFETY_NET_SECONDS = 10
+
+
+async def _hang() -> None:
+    """A backend that never answers: waits until the attempt is cancelled."""
+    await anyio.Event().wait()
+
+
 @pytest.mark.asyncio
 async def test_each_attempt_is_bounded_by_hard_deadline():
-    """A request that hangs far past the read timeout is cut off per attempt.
+    """A request that hangs is cut off per attempt and retried.
 
     Without a hard per-attempt deadline a single hung request eats the whole
-    retry budget. With the deadline, the attempt is aborted and retried, so
-    ``post`` is called more than once before the budget is exhausted.
+    retry budget. A deadline of 0 cancels each attempt at its first await, and
+    the budget is a fixed number of attempts, so no real time is involved.
     """
     call_count = 0
 
     async def hanging_post(*_args: Any, **_kwargs: Any) -> httpx.Response:
         nonlocal call_count
         call_count += 1
-        await anyio.sleep(30)
+        await _hang()
         return _ok_response()
 
     with (
         patch(f"{_MODULE}.read_token", return_value="test_token"),
-        patch.object(backend_client, "_REQUEST_TIMEOUT_SECONDS", 0.05),
-        patch.object(backend_client, "_RETRY_BUDGET_SECONDS", 0.3),
-        patch.object(backend_client, "_RETRY_BACKOFF_MAX_SECONDS", 0.01),
+        patch.object(backend_client, "_REQUEST_TIMEOUT_SECONDS", 0),
+        patch.object(backend_client, "_RETRY_BACKOFF_MAX_SECONDS", 0),
+        patch.object(
+            backend_client,
+            "stop_after_delay",
+            lambda _delay: stop_after_attempt(3),  # pyright: ignore[reportUnknownLambdaType]
+        ),
         patch.object(httpx.AsyncClient, "post", side_effect=hanging_post),
     ):
         client = BackendClient("http://test")
         with pytest.raises(TimeoutError):
-            await client.append_transcript("run_1", {})
+            # Only reached if the per-attempt deadline is gone: fail, don't hang.
+            with anyio.fail_after(_SAFETY_NET_SECONDS):
+                await client.append_transcript("run_1", {})
         await client.aclose()
 
-    assert call_count >= 2, "hung attempt was not cut off and retried"
+    assert call_count == 3, "each hung attempt is cut off and retried"
 
 
 @pytest.mark.asyncio
@@ -132,18 +147,18 @@ async def test_retries_then_succeeds_after_transient_hang():
         nonlocal call_count
         call_count += 1
         if call_count < 3:
-            await anyio.sleep(30)
+            await _hang()
         return _ok_response()
 
     with (
         patch(f"{_MODULE}.read_token", return_value="test_token"),
-        patch.object(backend_client, "_REQUEST_TIMEOUT_SECONDS", 0.05),
-        patch.object(backend_client, "_RETRY_BUDGET_SECONDS", 30),
-        patch.object(backend_client, "_RETRY_BACKOFF_MAX_SECONDS", 0.01),
+        patch.object(backend_client, "_REQUEST_TIMEOUT_SECONDS", 0),
+        patch.object(backend_client, "_RETRY_BACKOFF_MAX_SECONDS", 0),
         patch.object(httpx.AsyncClient, "post", side_effect=flaky_post),
     ):
         client = BackendClient("http://test")
-        await client.append_transcript("run_1", {})
+        with anyio.fail_after(_SAFETY_NET_SECONDS):
+            await client.append_transcript("run_1", {})
         await client.aclose()
 
     assert call_count == 3
