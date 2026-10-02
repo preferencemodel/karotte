@@ -1475,6 +1475,42 @@ def test_reachable_as_connects_as_the_given_uid() -> None:
     assert reached == [("127.0.0.1", port)]
 
 
+def test_rules_owned_by_picks_the_uid_rules_as_delete_arguments() -> None:
+    listing = (
+        "-P OUTPUT ACCEPT\n"
+        + "-A OUTPUT -d 127.0.0.0/8 -m owner --uid-owner 60000 -j ACCEPT\n"
+        + "-A OUTPUT -m owner --uid-owner 1000 -j REJECT --reject-with icmp-port-unreachable\n"
+        + "-A OUTPUT -m owner --uid-owner 600001 -j REJECT\n"
+        + '-A OUTPUT -m comment --comment "a b" -m owner --uid-owner 60000 -j REJECT\n'
+    )
+    assert confinement.rules_owned_by(listing, 60000) == [
+        [
+            "OUTPUT",
+            "-d",
+            "127.0.0.0/8",
+            "-m",
+            "owner",
+            "--uid-owner",
+            "60000",
+            "-j",
+            "ACCEPT",
+        ],
+        [
+            "OUTPUT",
+            "-m",
+            "comment",
+            "--comment",
+            "a b",
+            "-m",
+            "owner",
+            "--uid-owner",
+            "60000",
+            "-j",
+            "REJECT",
+        ],
+    ]
+
+
 class TestPrepareVmGuest:
     """In a VM, root makes the guest's read-only cgroupfs writable and creates
     missing loop device nodes, before any confinement is built."""

@@ -8,7 +8,7 @@ from loguru import logger
 
 from karotte.cli.agents import app as agents_app
 from karotte.cli.build import build
-from karotte.cli.check import check
+from karotte.cli.check import app as check_app
 from karotte.cli.create_env import create_env
 from karotte.cli.create_run_config import create_run_config
 from karotte.cli.dashboard import dashboard
@@ -62,12 +62,12 @@ def main(
 
 app.command()(create_env)
 app.command()(update)
-app.command()(check)
 app.command()(create_run_config)
 app.command()(dashboard)
 app.command()(run)
 app.command()(build)
 app.add_typer(agents_app, name="agents")
+app.add_typer(check_app, name="check")
 app.add_typer(models_app, name="models")
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(templates_app, name="templates")

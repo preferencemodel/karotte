@@ -395,6 +395,33 @@ class Confinement:
         )
         return took and self.sandbox is not Sandbox.GVISOR
 
+    def lift_network_rules(self, uid: int) -> bool:
+        """Delete every OUTPUT rule matching ``uid``, as the two methods above
+        add them. Returns whether none are left."""
+        iptables, ip6tables, _ = self._firewall_commands()
+        clean = True
+        for command in (iptables, ip6tables):
+            try:
+                binary = trusted_binary(command)
+            except FileNotFoundError:
+                continue
+            listing = subprocess.run(
+                [binary, "-S", "OUTPUT"], capture_output=True, text=True
+            )
+            if listing.returncode != 0:
+                # Nothing listable was added either.
+                continue
+            for rule in rules_owned_by(listing.stdout, uid):
+                result = subprocess.run(
+                    [binary, "-D", *rule], capture_output=True, text=True
+                )
+                if result.returncode != 0:
+                    logger.warning(
+                        f"Could not delete {command} rule {rule}: {result.stderr.strip()}"
+                    )
+                    clean = False
+        return clean
+
     def _firewall_commands(self) -> tuple[str, str, str]:
         """The iptables/ip6tables commands and refusal target for this sandbox.
 
@@ -440,6 +467,22 @@ class Confinement:
                         + f"| stdout: {result.stdout} | stderr: {result.stderr}"
                     )
         return True
+
+
+def rules_owned_by(listing: str, uid: int) -> list[list[str]]:
+    """The OUTPUT rules in an ``iptables -S`` listing that match ``uid``,
+    each as the arguments that follow ``-D``."""
+    rules: list[list[str]] = []
+    for line in listing.splitlines():
+        words = shlex.split(line)
+        if words[:2] != ["-A", "OUTPUT"]:
+            continue
+        if any(
+            word == "--uid-owner" and value == str(uid)
+            for word, value in zip(words, words[1:])
+        ):
+            rules.append(words[1:])
+    return rules
 
 
 # Fixed device numbers (the kernel's Documentation/admin-guide/devices.txt):

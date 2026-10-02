@@ -244,6 +244,45 @@ def test_v2_lifts_limits_with_the_max_token(tmp_path: Path) -> None:
     assert (student.path / "pids.max").read_text() == "max"
 
 
+def test_v2_memory_limit_turns_off_swap_while_it_holds(tmp_path: Path) -> None:
+    """On a host with swap, the group would page out past memory.max instead
+    of being OOM-killed."""
+    root = tmp_path / "cgroup"
+    _write_v2_tree(root, "memory pids")
+    student = V2Cgroup(root).create("student")
+    (student.path / "memory.swap.max").write_text("max")
+
+    assert student.set_memory_limit(256 * 1024 * 1024)
+    assert (student.path / "memory.swap.max").read_text() == "0"
+
+    assert student.set_memory_limit(None)
+    assert (student.path / "memory.swap.max").read_text() == "max"
+
+
+def test_v2_swap_limit_reads_back_and_restores(tmp_path: Path) -> None:
+    """So a probe that set a memory limit can put back the swap cap it found."""
+    root = tmp_path / "cgroup"
+    _write_v2_tree(root, "memory pids")
+    student = V2Cgroup(root).create("student")
+    (student.path / "memory.swap.max").write_text(str(512 << 20))
+
+    saved = student.swap_limit()
+    _ = student.set_memory_limit(256 << 20)
+    assert student.set_swap_limit(saved or "")
+
+    assert saved == str(512 << 20)
+    assert (student.path / "memory.swap.max").read_text() == str(512 << 20)
+
+
+def test_v2_memory_limit_without_swap_accounting(tmp_path: Path) -> None:
+    root = tmp_path / "cgroup"
+    _write_v2_tree(root, "memory pids")
+    student = V2Cgroup(root).create("student")
+
+    assert student.set_memory_limit(256 * 1024 * 1024)
+    assert not (student.path / "memory.swap.max").exists()
+
+
 def test_v2_reads_its_limits_back(tmp_path: Path) -> None:
     root = tmp_path / "cgroup"
     _write_v2_tree(root, "memory pids")
