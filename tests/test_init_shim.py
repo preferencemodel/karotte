@@ -27,7 +27,7 @@ from unittest.mock import patch
 import pytest
 
 from karotte.init_shim import (
-    _FORWARDED_SIGNALS,  # pyright: ignore[reportPrivateUsage]
+    _WAITED_SIGNALS,  # pyright: ignore[reportPrivateUsage]
     _run_init_loop,  # pyright: ignore[reportPrivateUsage]
     maybe_become_init,
 )
@@ -39,10 +39,10 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(autouse=True)
 def _restore_signal_state() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction]
-    """The shim installs forwarding handlers and manipulates the signal mask
+    """The shim installs signal handlers and manipulates the signal mask
     in the calling process; restore pytest's state afterwards so leakage can't
     poison other tests (a blocked SIGTERM is inherited by forked children)."""
-    original_handlers = {sig: signal.getsignal(sig) for sig in _FORWARDED_SIGNALS}
+    original_handlers = {sig: signal.getsignal(sig) for sig in _WAITED_SIGNALS}
     original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
     try:
         yield
@@ -213,7 +213,7 @@ SHIM_SCRIPT = textwrap.dedent(
 
     child_behavior = sys.argv[1]
     # Same sequence as maybe_become_init: block across the fork so a signal
-    # arriving before the parent's handlers are installed cannot kill it.
+    # arriving before the init loop starts cannot kill it.
     signal.pthread_sigmask(signal.SIG_BLOCK, _FORWARDED_SIGNALS)
     child = os.fork()
     if child == 0:
@@ -279,15 +279,15 @@ PENDING_SIGNAL_SCRIPT = textwrap.dedent(
         time.sleep(30)
         os._exit(250)
 
-    # Delivered only once _run_init_loop unblocks, after its handlers are
-    # installed: the shim must forward it instead of dying from it.
+    # Stays pending until the init loop waits for it: the shim must forward
+    # it instead of dying from it.
     os.kill(os.getpid(), signal.SIGTERM)
     sys.exit(_run_init_loop(child))
     """
 )
 
 
-def test_signal_arriving_before_handlers_installed_is_forwarded() -> None:
+def test_signal_arriving_before_init_loop_is_forwarded() -> None:
     result = subprocess.run(
         [sys.executable, "-c", PENDING_SIGNAL_SCRIPT],
         capture_output=True,

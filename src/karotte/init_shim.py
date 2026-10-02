@@ -1,4 +1,4 @@
-"""Minimal PID-1 init shim (the core of what tini does).
+"""Minimal PID-1 init shim (the core of what tini, https://github.com/krallin/tini, does).
 
 When karotte is a container's entrypoint it runs as PID 1, and every orphaned
 process in the container gets reparented to it. A regular process never
@@ -26,6 +26,7 @@ _FORWARDED_SIGNALS = (
     signal.SIGUSR1,
     signal.SIGUSR2,
 )
+_WAITED_SIGNALS = (*_FORWARDED_SIGNALS, signal.SIGCHLD)
 
 
 def maybe_become_init() -> None:
@@ -40,8 +41,7 @@ def maybe_become_init() -> None:
     if os.getpid() != 1:
         return
     # Block the forwarded signals across the fork so none can be lost (or kill
-    # the parent) between forking and installing the forwarding handlers; the
-    # parent unblocks them once its handlers are in place.
+    # the parent) before the init loop starts waiting for them.
     signal.pthread_sigmask(signal.SIG_BLOCK, _FORWARDED_SIGNALS)
     child_pid = os.fork()
     if child_pid == 0:
@@ -55,30 +55,43 @@ def _run_init_loop(child_pid: int) -> int:
 
     Returns the child's exit code, mapping signal deaths to 128+signum.
     """
-
-    def forward(signum: int, _frame: object) -> None:
-        try:
-            os.kill(child_pid, signum)
-        except ProcessLookupError:
-            pass
-
-    # PID 1 gets no default signal dispositions, so without explicit handlers
-    # a SIGTERM from the container runtime would be silently dropped.
-    for sig in _FORWARDED_SIGNALS:
-        signal.signal(sig, forward)
-    # Deliver anything that arrived while the signals were blocked around the
-    # fork; a no-op if the caller never blocked them.
-    signal.pthread_sigmask(signal.SIG_UNBLOCK, _FORWARDED_SIGNALS)
+    # Kept blocked and taken with sigwait, so none can land between reaping and waiting.
+    # macOS drops a blocked SIGCHLD that has no handler.
+    signal.pthread_sigmask(signal.SIG_BLOCK, _WAITED_SIGNALS)
+    for sig in _WAITED_SIGNALS:
+        signal.signal(sig, _ignore)
 
     while True:
+        exit_code = _reap(child_pid)
+        if exit_code is not None:
+            return exit_code
+        signum = signal.sigwait(_WAITED_SIGNALS)
+        if signum != signal.SIGCHLD:
+            try:
+                os.kill(child_pid, signum)
+            except ProcessLookupError:
+                pass
+
+
+def _ignore(_signum: int, _frame: object) -> None:
+    pass
+
+
+def _reap(child_pid: int) -> int | None:
+    """Reap every exited child; return ``child_pid``'s exit code if it was among them."""
+    exit_code = None
+    while True:
         try:
-            pid, status = os.waitpid(-1, 0)
+            pid, status = os.waitpid(-1, os.WNOHANG)
         except ChildProcessError:
-            sys.stderr.write(
-                "karotte init shim: lost track of the main child process\n"
-            )
-            return 1
-        if pid != child_pid:
-            continue
-        exit_code = os.waitstatus_to_exitcode(status)
-        return 128 - exit_code if exit_code < 0 else exit_code
+            if exit_code is None:
+                sys.stderr.write(
+                    "karotte init shim: lost track of the main child process\n"
+                )
+                return 1
+            return exit_code
+        if pid == 0:
+            return exit_code
+        if pid == child_pid:
+            code = os.waitstatus_to_exitcode(status)
+            exit_code = 128 - code if code < 0 else code
