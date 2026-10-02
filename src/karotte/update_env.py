@@ -212,11 +212,20 @@ def update_env(
     # rather than raise and lose the conflicts we are about to return.
     pyproject = project_dir / "pyproject.toml"
     pyproject_conflicted = Path("pyproject.toml") in conflicts
+    relock = [
+        "uv",
+        "lock",
+        *(
+            arg
+            for name in ("karotte", *map(_package_name, extra_deps))
+            for arg in ("--upgrade-package", name)
+        ),
+    ]
     if pyproject.exists() and pyproject_conflicted:
         logger.warning(
             "Skipping uv.lock regeneration: pyproject.toml has unresolved "
             + "merge conflicts, so it is not parseable TOML. Once they are "
-            + "resolved, run `uv lock --upgrade-package karotte` — plain "
+            + f"resolved, run `{' '.join(relock)}` — plain "
             + "`uv lock` keeps the karotte already in the lock, so the manifest "
             + "(just advanced above) and the lock would stay out of step, and "
             + "`uv run karotte update` would keep running the older karotte."
@@ -225,7 +234,7 @@ def update_env(
         logger.info("Regenerating uv.lock")
         try:
             subprocess.run(
-                ["uv", "lock", "--upgrade-package", "karotte"],
+                relock,
                 cwd=project_dir,
                 capture_output=True,
                 text=True,

@@ -1079,6 +1079,30 @@ class TestRelockSkippedOnPyprojectConflict:
         assert len(lock_calls) == 1
         assert returned == []
 
+    def test_relock_upgrades_the_template_packages_too(self, tmp_path: Path):
+        """Otherwise the lock keeps the old template package the manifest no longer names."""
+        project = self._project(tmp_path)
+        (project / ".manifest.json").write_text(
+            json.dumps(
+                {
+                    "karotte_version": "1.0.0",
+                    "templates": ["default"],
+                    "extra_deps": ["tmpl-pkg==0.1.0"],
+                }
+            )
+        )
+
+        _, (lock_call,) = self._run(project, [])
+
+        assert lock_call.args[0] == [
+            "uv",
+            "lock",
+            "--upgrade-package",
+            "karotte",
+            "--upgrade-package",
+            "tmpl-pkg",
+        ]
+
 
 class TestRelocksChangedVenvs:
     """A venv lock left behind after its pyproject moved indexes breaks the image build."""
