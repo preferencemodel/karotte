@@ -450,23 +450,27 @@ def reset_pid_namespace_probe() -> None:
 def _pid_namespace_available(uid_gid: int) -> bool:
     """Whether student sessions can be put in their own PID namespace.
 
-    Only on gVisor. A PID namespace is the one reap that a fork-and-die chain
-    cannot evade — SIGKILLing its init drops every process inside at once,
-    where a ``/proc`` sweep never even observes a chain whose every generation
-    is shorter-lived than a walk. But on runc ``/proc`` is masked, so
-    ``--mount-proc`` cannot replace it and the namespace is left reading an
-    outer ``/proc`` it cannot address: ``ps`` and ``pkill`` report pids that
-    mean nothing inside. Students lean on both, so runc keeps the sweep.
+    A PID namespace is the one reap that a fork-and-die chain cannot evade —
+    SIGKILLing its init drops every process inside at once, where a ``/proc``
+    sweep never even observes a chain whose every generation is shorter-lived
+    than a walk.
 
-    Probed once by actually building a namespace, because the capability
-    depends on how the pod was launched (gVisor eval pods add CAP_SYS_ADMIN;
-    a local ``docker run`` may not).
+    Only on gVisor and in a VM, whose kernel is not the host's. The session
+    needs ``--mount-proc`` (students lean on ``ps`` and ``pkill``), and on
+    runc that fresh ``/proc`` would be the host kernel's without the masks
+    runc lays over the original (``/proc/kcore``, ``/proc/keys``,
+    ``/proc/sysrq-trigger``). So runc keeps the sweep, even where the
+    namespace could be built.
+
+    Where it is allowed, it is probed once by actually building one, because
+    the capability depends on how the sandbox was launched (it needs
+    CAP_SYS_ADMIN, which a local ``docker run`` may not grant).
     """
     global _pidns_probed, _pidns_available
     if _pidns_probed:
         return _pidns_available
     _pidns_probed = True
-    if current_sandbox() is not Sandbox.GVISOR:
+    if not _kernel_is_not_the_hosts():
         return False
     try:
         result = subprocess.run(
@@ -492,6 +496,10 @@ def _pid_namespace_available(uid_gid: int) -> bool:
             f"Could not create a PID namespace for student processes (unshare exited {result.returncode}) — is CAP_SYS_ADMIN missing? Falling back to best-effort sweep reaping, which cannot see a fork-and-die chain."
         )
     return _pidns_available
+
+
+def _kernel_is_not_the_hosts() -> bool:
+    return current_sandbox() in (Sandbox.GVISOR, Sandbox.VM)
 
 
 def _confinement_preexec() -> Callable[[], None] | None:
@@ -570,13 +578,22 @@ def student_session_command(
     # The network namespace is unshared by the already-demoted student inside
     # the PID namespace, exactly as it is without one.
     inner = wrap_to_disable_networking(argv) if disable_networking else argv
-    return (
-        [
-            trusted_binary("unshare"),
-            *_PIDNS_FLAGS,
-            *_setuid_flags(uid_gid),
-            "--",
-            *inner,
-        ],
-        _make_root_preexec(uid_gid, *chown_fds),
-    )
+    pidns_argv = [
+        trusted_binary("unshare"),
+        *_PIDNS_FLAGS,
+        *_setuid_flags(uid_gid),
+        "--",
+        *inner,
+    ]
+    root_preexec = _make_root_preexec(uid_gid, *chown_fds)
+    join = _confinement_preexec()
+    if join is None:
+        return pidns_argv, root_preexec
+
+    def _pidns_preexec() -> None:
+        root_preexec()
+        # Still root here: ``unshare`` drops to the student after this, and
+        # everything it starts inherits the group.
+        join()
+
+    return pidns_argv, _pidns_preexec

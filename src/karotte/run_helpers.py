@@ -16,7 +16,7 @@ from loguru import logger
 
 from karotte import Runtime
 from karotte.check_paths import split_loader_path
-from karotte.confinement import Confinement, current_sandbox
+from karotte.confinement import Confinement, Sandbox, current_sandbox, prepare_vm_guest
 from karotte.container import is_containerized
 from karotte.hardware import container_run_args
 from karotte.load_tasks import load_task
@@ -369,6 +369,10 @@ def _set_up_runner(run_config: EvaluationRunConfig, task: Task) -> "EvaluationRu
     """
     from karotte.evaluation_runner import EvaluationRunner
 
+    # Before anything builds a confinement: it decides between cgroups and the
+    # watchdog once.
+    if current_sandbox() is Sandbox.VM:
+        _ = prepare_vm_guest()
     runner = EvaluationRunner(run_config, task)
 
     blocked_ports = [run_config.websocket_config.port]

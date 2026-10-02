@@ -15,10 +15,12 @@ from karotte import cgroups, confinement, container, memory_watch
 from karotte.cgroups import V2Cgroup, student_cgroup
 from karotte.confinement import (
     _FREE_DISK_FRACTION,  # pyright: ignore[reportPrivateUsage]
+    DISK_BUDGET_ENV_VAR,
     FIREWALL_TOLERATE_ENV_VAR,
     GIB,
     HARNESS_RESERVE_BYTES,
     SANDBOX_ENV_VAR,
+    SANDBOX_MEMORY_ENV_VAR,
     STUDENT_FILE_COUNT_LIMIT,
     STUDENT_PROCESS_LIMIT,
     CgroupConfinement,
@@ -134,6 +136,15 @@ def file_watches(monkeypatch: pytest.MonkeyPatch) -> FakeFileWatches:
 def test_sandbox_comes_from_the_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(SANDBOX_ENV_VAR, "firecracker")
     assert current_sandbox() is Sandbox.FIRECRACKER
+
+
+@pytest.mark.parametrize("value", ["vm", "firecracker"])
+def test_firecracker_is_the_older_name_for_vm(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv(SANDBOX_ENV_VAR, value)
+    assert current_sandbox() is Sandbox.VM
+    assert Sandbox.FIRECRACKER is Sandbox.VM
 
 
 def test_unknown_sandbox_falls_back_to_sniffing(
@@ -883,8 +894,8 @@ P, R, U = Contract.PREVENTED, Contract.REAPED, Contract.UNSUPPORTED
             {"processes": P, "files": P},
             None,
             True,
-            Sandbox.FIRECRACKER,
-            "Confinement: memory limit off (none), process limit on, file quota on, IPC namespace on, Firecracker VM",
+            Sandbox.VM,
+            "Confinement: memory limit off (none), process limit on, file quota on, IPC namespace on, VM",
             True,
         ),
     ],
@@ -1078,8 +1089,8 @@ class TestRestrictToInternalNetwork:
 
 
 class TestDefaultFileLimitBudget:
-    """The default disk budget: detection, capped by the plugin's budget for
-    the hardware everywhere except Firecracker (whose disk is the real bound)."""
+    """The default disk budget: detection, capped by the launcher's budget or
+    else the hardware plugin's, in every sandbox."""
 
     HUGE_FREE: int = 6 * 1024**4
     BUDGET: int = 80 * GIB
@@ -1094,6 +1105,7 @@ class TestDefaultFileLimitBudget:
     @pytest.fixture
     def workdir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        monkeypatch.delenv(DISK_BUDGET_ENV_VAR, raising=False)
         monkeypatch.setattr(memory_watch, "disk_backed", _always_disk_backed)
         return tmp_path
 
@@ -1101,11 +1113,14 @@ class TestDefaultFileLimitBudget:
         usage = shutil._ntuple_diskusage(total=free, used=0, free=free)  # pyright: ignore[reportPrivateUsage]
         monkeypatch.setattr(shutil, "disk_usage", lambda _path: usage)  # pyright: ignore[reportUnknownLambdaType]
 
+    @pytest.mark.parametrize("sandbox", ["runc", "vm", "firecracker"])
     @pytest.mark.usefixtures("workdir")
     def test_detection_is_capped_to_the_plugin_budget(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, sandbox: str
     ) -> None:
-        monkeypatch.setenv(SANDBOX_ENV_VAR, "runc")
+        """In a VM too: Apple's 504G sparse rootfs would otherwise give a quota
+        larger than the Mac's disk."""
+        monkeypatch.setenv(SANDBOX_ENV_VAR, sandbox)
         self._with_free(monkeypatch, self.HUGE_FREE)
         limit = _default_file_limit("big")
         assert limit is not None
@@ -1132,16 +1147,6 @@ class TestDefaultFileLimitBudget:
         assert limit.bytes == int(self.HUGE_FREE * _FREE_DISK_FRACTION)
 
     @pytest.mark.usefixtures("workdir")
-    def test_firecracker_keeps_pure_detection(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv(SANDBOX_ENV_VAR, "firecracker")
-        self._with_free(monkeypatch, self.HUGE_FREE)
-        limit = _default_file_limit("big")
-        assert limit is not None
-        assert limit.bytes == int(self.HUGE_FREE * _FREE_DISK_FRACTION)
-
-    @pytest.mark.usefixtures("workdir")
     def test_detection_below_the_plugin_budget_wins(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1151,6 +1156,55 @@ class TestDefaultFileLimitBudget:
         limit = _default_file_limit("big")
         assert limit is not None
         assert limit.bytes == int(small_free * _FREE_DISK_FRACTION)
+
+    @pytest.mark.usefixtures("workdir")
+    def test_a_launcher_budget_replaces_the_plugin_budget(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The launcher saw the host's real free space; the plugin's budget is
+        a guess for when nobody did."""
+        monkeypatch.setenv(SANDBOX_ENV_VAR, "vm")
+        monkeypatch.setenv(DISK_BUDGET_ENV_VAR, str(100 * GIB))
+        self._with_free(monkeypatch, self.HUGE_FREE)
+        limit = _default_file_limit("big")
+        assert limit is not None
+        assert limit.bytes == 100 * GIB
+
+    @pytest.mark.parametrize("sandbox", ["vm", "firecracker", "runc"])
+    @pytest.mark.usefixtures("workdir")
+    def test_the_launcher_budget_caps_detection(
+        self, monkeypatch: pytest.MonkeyPatch, sandbox: str
+    ) -> None:
+        monkeypatch.setenv(SANDBOX_ENV_VAR, sandbox)
+        monkeypatch.setenv(DISK_BUDGET_ENV_VAR, str(20 * GIB))
+        self._with_free(monkeypatch, self.HUGE_FREE)
+        limit = _default_file_limit(None)
+        assert limit is not None
+        assert limit.bytes == 20 * GIB
+
+    @pytest.mark.usefixtures("workdir")
+    def test_the_launcher_budget_never_raises_detection(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(SANDBOX_ENV_VAR, "vm")
+        monkeypatch.setenv(DISK_BUDGET_ENV_VAR, str(50 * GIB))
+        small_free = 10 * GIB
+        self._with_free(monkeypatch, small_free)
+        limit = _default_file_limit(None)
+        assert limit is not None
+        assert limit.bytes == int(small_free * _FREE_DISK_FRACTION)
+
+    @pytest.mark.parametrize("value", ["", "lots", "0", "-5"])
+    @pytest.mark.usefixtures("workdir")
+    def test_an_unusable_launcher_budget_is_ignored(
+        self, monkeypatch: pytest.MonkeyPatch, value: str
+    ) -> None:
+        monkeypatch.setenv(SANDBOX_ENV_VAR, "vm")
+        monkeypatch.setenv(DISK_BUDGET_ENV_VAR, value)
+        self._with_free(monkeypatch, self.HUGE_FREE)
+        limit = _default_file_limit("big")
+        assert limit is not None
+        assert limit.bytes == self.BUDGET
 
 
 class TestSandboxMemory:
@@ -1163,6 +1217,24 @@ class TestSandboxMemory:
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
         register_hardware_plugins(monkeypatch, limits={"a": _small_hardware})
         monkeypatch.setattr(confinement, "_physical_memory_bytes", lambda: 32 * GIB)
+
+    def test_a_vm_launchers_number_comes_before_the_cgroup(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A VM launcher holds headroom above the sandbox's RAM for the guest
+        kernel; the VM's own cgroup or RAM would hand that to the student."""
+        monkeypatch.setenv(SANDBOX_MEMORY_ENV_VAR, str(5 * GIB))
+        assert confinement.sandbox_memory_bytes(None) == 5 * GIB
+
+    @pytest.mark.parametrize("value", [GIB // 2, HARNESS_RESERVE_BYTES])
+    def test_a_launchers_number_within_the_reserve_is_ignored(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: int
+    ) -> None:
+        """The student's limit is this less the harness reserve; zero or less
+        would OOM-kill every student process."""
+        self._cgroup(tmp_path, monkeypatch, str(12 * GIB))
+        monkeypatch.setenv(SANDBOX_MEMORY_ENV_VAR, str(value))
+        assert confinement.sandbox_memory_bytes(None) == 12 * GIB
 
     def _cgroup(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, container_max: str
@@ -1254,3 +1326,65 @@ class TestFirewallTolerance:
 
         assert Confinement(Sandbox.FIRECRACKER).deny_all_network(900)
         assert len(iptables.rules) == 2
+
+
+class TestPrepareVmGuest:
+    """In a VM, root makes the guest's read-only cgroupfs writable and creates
+    missing loop device nodes, before any confinement is built."""
+
+    @pytest.fixture
+    def vm_root(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(SANDBOX_ENV_VAR, "vm")
+        monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
+        monkeypatch.setattr("karotte.confinement.os.geteuid", lambda: 0)
+
+    def _mounts(self, monkeypatch: pytest.MonkeyPatch, read_only: bool) -> None:
+        mount = cgroups.Mount(Path("/sys/fs/cgroup"), "cgroup2", frozenset(), read_only)
+        monkeypatch.setattr(confinement, "read_mounts", lambda: [mount])
+
+    @pytest.mark.usefixtures("vm_root")
+    def test_a_read_only_cgroupfs_is_remounted_and_loop_nodes_created(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        self._mounts(monkeypatch, read_only=True)
+        ran: list[list[str]] = []
+
+        def fake_run(argv: list[str], **_: object) -> SimpleNamespace:
+            ran.append(argv)
+            return SimpleNamespace(returncode=0, stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        made: list[tuple[str, int]] = []
+        monkeypatch.setattr(
+            "karotte.confinement.os.mknod",
+            lambda path, mode, device: made.append((Path(path).name, os.major(device))),  # pyright: ignore[reportUnknownLambdaType]
+        )
+        (tmp_path / "loop0").touch()
+
+        changed = confinement.prepare_vm_guest(tmp_path)
+
+        assert ran[0][-3:] == ["-o", "remount,rw", "/sys/fs/cgroup"]
+        assert made[0] == ("loop-control", 10)
+        assert ("loop0", 7) not in made
+        assert ("loop7", 7) in made
+        assert changed[0] == "remounted /sys/fs/cgroup read-write"
+
+    @pytest.mark.usefixtures("vm_root")
+    def test_a_writable_guest_is_left_alone(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        self._mounts(monkeypatch, read_only=False)
+        for name in ["loop-control", *(f"loop{n}" for n in range(8))]:
+            (tmp_path / name).touch()
+        monkeypatch.setattr(subprocess, "run", pytest.fail)
+        assert confinement.prepare_vm_guest(tmp_path) == []
+
+    @pytest.mark.parametrize("sandbox", ["runc", "gvisor"])
+    def test_other_sandboxes_are_left_alone(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sandbox: str
+    ) -> None:
+        monkeypatch.setenv(SANDBOX_ENV_VAR, sandbox)
+        monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
+        monkeypatch.setattr("karotte.confinement.os.geteuid", lambda: 0)
+        monkeypatch.setattr(confinement, "read_mounts", pytest.fail)
+        assert confinement.prepare_vm_guest(tmp_path) == []

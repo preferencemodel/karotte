@@ -1159,9 +1159,9 @@ def test_student_session_demotes_via_unshare_not_the_preexec(
 def test_student_session_keeps_the_sweep_fallback_on_runc(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """A PID namespace on runc leaves an incoherent ``/proc`` (it is masked, so
-    ``--mount-proc`` cannot replace it), which breaks the ``ps``/``pkill`` that
-    students rely on. runc keeps demoting in the preexec and reaping by sweep."""
+    """On runc the session's fresh ``/proc`` would be the host kernel's without
+    runc's masks, so runc doesn't even probe: it keeps demoting in the preexec
+    and reaping by sweep."""
     monkeypatch.setenv("KAROTTE_SANDBOX", "runc")
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
     probes = _probe_returns(monkeypatch, 0)
@@ -1296,6 +1296,68 @@ def test_student_session_pidns_preexec_unshares_ipc(monkeypatch: pytest.MonkeyPa
     mock_ipc.assert_called_once_with()
 
 
+def test_student_session_runs_under_a_pid_namespace_in_a_vm(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A VM has its own guest kernel, so ``/proc`` is not masked and
+    ``--mount-proc`` gives the session a coherent view."""
+    monkeypatch.setenv("KAROTTE_SANDBOX", "vm")
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
+    monkeypatch.setattr("karotte.subprocess._confinement_preexec", lambda: None)
+    probes = _probe_returns(monkeypatch, 0)
+
+    argv, _preexec = student_session_command(["bash"], disable_networking=False)
+
+    assert len(probes) == 1
+    assert argv[0] == trusted_binary("unshare")
+    assert "--pid" in argv
+
+
+def test_the_older_firecracker_name_gets_the_pid_namespace_too(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """``KAROTTE_SANDBOX=firecracker`` is the same sandbox as ``vm``."""
+    monkeypatch.setenv("KAROTTE_SANDBOX", "firecracker")
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
+    monkeypatch.setattr("karotte.subprocess._confinement_preexec", lambda: None)
+    _ = _probe_returns(monkeypatch, 0)
+
+    argv, _preexec = student_session_command(["bash"], disable_networking=False)
+
+    assert argv[0] == trusted_binary("unshare")
+
+
+def test_student_session_in_a_pid_namespace_joins_the_student_cgroup(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """``unshare`` does the demotion, so the join has to happen in the root
+    preexec. Without it the session stays in the harness's cgroup, where no
+    student limit applies."""
+    monkeypatch.setenv("KAROTTE_SANDBOX", "vm")
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "1000")
+    order: list[str] = []
+    monkeypatch.setattr(
+        "karotte.subprocess._confinement_preexec", lambda: lambda: order.append("join")
+    )
+    _ = _probe_returns(monkeypatch, 0)
+
+    argv, preexec = student_session_command(["bash"], disable_networking=False)
+
+    assert argv[0] == trusted_binary("unshare")
+    assert preexec is not None
+    with (
+        patch("karotte.subprocess.os.setsid"),
+        patch(
+            "karotte.subprocess.os.setgroups",
+            side_effect=lambda _groups: order.append("setgroups"),  # pyright: ignore[reportUnknownLambdaType]
+        ),
+        patch("karotte.subprocess.os.setuid") as mock_setuid,
+    ):
+        preexec()
+    assert order == ["setgroups", "join"]
+    mock_setuid.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # student_identity_env
 # ---------------------------------------------------------------------------
@@ -1372,6 +1434,7 @@ def test_a_broken_harness_secret_plugin_is_skipped(monkeypatch: pytest.MonkeyPat
         "HOME",
         "KAROTTE_WORKDIR",
         "KAROTTE_PROXY_URL",
+        "KAROTTE_SANDBOX",
         # Credential-shaped, and deliberately NOT withheld: environments hand
         # the student secrets on purpose, so the set is explicit, not a pattern.
         "HF_TOKEN",

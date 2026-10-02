@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from loguru import logger
 
 from karotte import file_quota
 from karotte.file_quota import (
@@ -39,7 +40,29 @@ def commands(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     return ran
 
 
+@pytest.fixture
+def log_messages():
+    messages: list[str] = []
+    handler = logger.add(lambda m: messages.append(m.record["message"]), level="INFO")
+    yield messages
+    logger.remove(handler)
+
+
 class TestMountingTheQuota:
+    @pytest.mark.usefixtures("quota_dir", "commands")
+    def test_the_log_says_the_quota_was_created(
+        self, tmp_path: Path, log_messages: list[str]
+    ) -> None:
+        workdir = tmp_path / "workdir"
+        workdir.mkdir()
+
+        _ = mount_file_quota((workdir,), 5 * GIB, None)
+
+        assert (
+            f"Created loop file quota of {5 * GIB} bytes over ['{workdir}']"
+            in log_messages
+        )
+
     @pytest.mark.usefixtures("quota_dir")
     def test_it_overlays_every_path_on_one_budget(
         self, tmp_path: Path, commands: list[list[str]]
@@ -480,6 +503,21 @@ class TestPremountedQuota:
         assert any(
             command[0] == "mount" and command[-1] == str(workdir)
             for command in commands
+        )
+
+    @pytest.mark.usefixtures("commands")
+    def test_the_log_says_the_quota_was_adopted(
+        self, tmp_path: Path, premounted: Path, log_messages: list[str]
+    ) -> None:
+        """So a run's log tells the two paths apart without comparing sizes."""
+        workdir = tmp_path / "workdir"
+        workdir.mkdir()
+
+        _ = mount_file_quota((workdir,), 5 * GIB, None)
+
+        assert (
+            f"Adopted pre-mounted file quota of {7 * GIB} bytes at {premounted} over ['{workdir}']"
+            in log_messages
         )
 
     @pytest.mark.usefixtures("premounted")

@@ -17,7 +17,12 @@ from pathlib import Path
 from loguru import logger
 
 import karotte.memory_watch as memory_watch
-from karotte.cgroups import StudentCgroup, detect_cgroups, register_student_cgroup
+from karotte.cgroups import (
+    StudentCgroup,
+    detect_cgroups,
+    read_mounts,
+    register_student_cgroup,
+)
 from karotte.container import (
     demoted_uid_gid,
     is_containerized,
@@ -26,8 +31,18 @@ from karotte.container import (
 )
 from karotte.file_quota import FileQuota, mount_file_quota
 from karotte.hardware import hardware_limits
+from karotte.trusted_bin import trusted_binary
 
 SANDBOX_ENV_VAR = "KAROTTE_SANDBOX"
+SANDBOX_MEMORY_ENV_VAR = "KAROTTE_SANDBOX_MEMORY_BYTES"
+"""The sandbox's RAM in bytes, from the launcher of a VM that holds headroom
+above it for the guest kernel. Read when no hardware plugin knows the
+hardware, before the cgroup limit and the machine's RAM."""
+DISK_BUDGET_ENV_VAR = "KAROTTE_DISK_BUDGET_BYTES"
+"""The student's disk budget in bytes, chosen by the host that launched the
+sandbox. Set by karotte's VM launchers, which see the host's real free space;
+inside the guest, ``df`` reports the VM's own disk, which may be sparse and
+larger than the host can back."""
 STUDENT_CGROUP_NAME = "karotte_student"
 
 GIB = 1024**3
@@ -46,7 +61,19 @@ the watchdog can walk would be invisible to the byte cap."""
 class Sandbox(StrEnum):
     RUNC = "runc"
     GVISOR = "gvisor"
-    FIRECRACKER = "firecracker"
+    VM = "vm"
+    """A virtual machine with its own guest kernel (Firecracker, Apple
+    `container`, Kata): cgroups and iptables in the guest are real. What
+    differs between VM hosts (the disk behind the guest, the network around
+    it) is passed in by whoever launched it, not inferred from this value."""
+    FIRECRACKER = "vm"
+    """The older name for ``VM``; ``KAROTTE_SANDBOX=firecracker`` still selects it."""
+
+    @classmethod
+    def _missing_(cls, value: object) -> Sandbox | None:
+        if value == "firecracker":
+            return cls.VM
+        return None
 
 
 @dataclass(frozen=True)
@@ -378,6 +405,67 @@ class Confinement:
         return True
 
 
+# Fixed device numbers (the kernel's Documentation/admin-guide/devices.txt):
+# /dev/loop-control is character device 10:237, and /dev/loopN is block device
+# 7:N. Eight nodes, as a stock system creates, cover the run's file quota and a
+# confinement check's probe quota at once.
+_LOOP_CONTROL = (10, 237)
+_LOOP_MAJOR = 7
+_LOOP_DEVICES = 8
+
+
+def prepare_vm_guest(dev: Path | None = None) -> list[str]:
+    """Make the guest kernel's cgroups and loop devices usable, in a VM.
+
+    Some VM guests hand the container a read-only cgroupfs and no loop device
+    nodes (a Kata guest has both), which leaves karotte on the watchdog and
+    without a kernel file quota. Root inside the VM may fix both: the kernel is
+    the VM's own. Runs before any confinement is built; each step is logged,
+    and a step that fails leaves the weaker fallback in place. Returns what it
+    changed.
+    """
+    if (
+        current_sandbox() is not Sandbox.VM
+        or os.geteuid() != 0
+        or not is_containerized()
+    ):
+        return []
+    changed: list[str] = []
+    for mount in read_mounts():
+        if not (mount.is_cgroup2 and mount.read_only):
+            continue
+        result = subprocess.run(
+            [trusted_binary("mount"), "-o", "remount,rw", str(mount.path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            changed.append(f"remounted {mount.path} read-write")
+        else:
+            logger.warning(
+                f"Could not remount {mount.path} read-write ({result.stderr.strip()}); student limits fall back to the watchdog"
+            )
+    dev = Path("/dev") if dev is None else dev
+    nodes = [(dev / "loop-control", stat.S_IFCHR, os.makedev(*_LOOP_CONTROL))]
+    nodes += [
+        (dev / f"loop{n}", stat.S_IFBLK, os.makedev(_LOOP_MAJOR, n))
+        for n in range(_LOOP_DEVICES)
+    ]
+    for path, kind, device in nodes:
+        if path.exists():
+            continue
+        try:
+            os.mknod(path, kind | 0o660, device)
+        except OSError as exc:
+            logger.warning(f"Could not create {path} ({exc}); no kernel file quota")
+            break
+        changed.append(f"created {path}")
+    for step in changed:
+        logger.info(f"VM guest setup: {step}")
+    return changed
+
+
 class WatchdogConfinement(Confinement):
     """Polls what the student holds and reaps past a limit; nothing is prevented."""
 
@@ -528,11 +616,24 @@ def _cgroup_confinement(sandbox: Sandbox, uid: int | None) -> CgroupConfinement 
 
 
 def sandbox_memory_bytes(required_hardware: str | None) -> int | None:
-    """The sandbox's RAM: the hardware plugin's number, else the tightest cgroup
-    limit above the student, else the machine's RAM; ``None`` without a working cgroup."""
+    """The sandbox's RAM: the hardware plugin's number, else the launcher's
+    (``KAROTTE_SANDBOX_MEMORY_BYTES``, when above the harness reserve), else the
+    tightest cgroup limit above the student, else the machine's RAM. ``None``
+    outside a container, or in one without a working cgroup, when neither the
+    plugin nor the launcher says."""
     limits = hardware_limits(required_hardware)
     if limits is not None and limits.memory_bytes is not None:
         return limits.memory_bytes
+    launcher = _positive_int_env(SANDBOX_MEMORY_ENV_VAR)
+    if launcher is not None and launcher <= HARNESS_RESERVE_BYTES:
+        # The student gets the sandbox's RAM less the reserve: zero or less
+        # would OOM-kill every student process.
+        logger.warning(
+            f"Ignoring {SANDBOX_MEMORY_ENV_VAR}={launcher}: not above the harness reserve of {HARNESS_RESERVE_BYTES} bytes"
+        )
+        launcher = None
+    if launcher is not None:
+        return launcher
     if not is_containerized():
         return None
     confinement = get_confinement()
@@ -605,6 +706,25 @@ _FREE_DISK_FRACTION = 0.8
 """Of the disk space free at task start, what the student may fill."""
 
 
+def _launcher_disk_budget() -> int | None:
+    return _positive_int_env(DISK_BUDGET_ENV_VAR)
+
+
+def _positive_int_env(name: str) -> int | None:
+    value = os.environ.get(name)
+    if not value:
+        return None
+    try:
+        number = int(value)
+    except ValueError:
+        logger.warning(f"Ignoring {name}={value!r}: not an integer")
+        return None
+    if number <= 0:
+        logger.warning(f"Ignoring {name}={value!r}: not positive")
+        return None
+    return number
+
+
 def apply_default_limits(required_hardware: str | None) -> dict[str, Contract]:
     """Apply the default student limits: the sandbox's RAM less the harness
     reserve, a process cap, and most of the free disk for files.
@@ -651,8 +771,8 @@ def describe_confinement(
         parts.append(f"network firewall {'on' if network_firewall else 'off'}")
     parts.append(f"IPC namespace {'on' if ipc_namespace else 'off'}")
     parts.append(
-        "Firecracker VM"
-        if sandbox is Sandbox.FIRECRACKER
+        "VM"
+        if sandbox is Sandbox.VM
         else f"gVisor {'on' if sandbox is Sandbox.GVISOR else 'off'}"
     )
     degraded = (
@@ -687,8 +807,11 @@ def _default_file_limit(required_hardware: str | None = None) -> FileLimit | Non
     """Everywhere the student can write on real disk, capped at a share of the
     free space; tmpfs locations are the memory limit's to weigh.
 
-    Outside Firecracker the free-space reading may be the host's, not the
-    sandbox's, so it is additionally capped at the hardware plugin's disk budget."""
+    Capped at a budget chosen outside the sandbox: the launcher's
+    (``KAROTTE_DISK_BUDGET_BYTES``), which saw the host's real free space, or
+    else the hardware plugin's disk budget. The reading alone is never trusted:
+    in a pod it is the node's disk, and a VM's disk can be a sparse file far
+    larger than the host behind it."""
     candidates = [Path(w) for w in (os.environ.get("KAROTTE_WORKDIR"),) if w]
     candidates += list(memory_watch.TEMP_DIRS)
     paths = tuple(
@@ -697,10 +820,13 @@ def _default_file_limit(required_hardware: str | None = None) -> FileLimit | Non
     if not paths:
         return None
     budget = int(shutil.disk_usage(paths[0]).free * _FREE_DISK_FRACTION)
-    if current_sandbox() is not Sandbox.FIRECRACKER:
+    cap = _launcher_disk_budget()
+    if cap is None:
         limits = hardware_limits(required_hardware)
-        if limits is not None and limits.disk_bytes is not None:
-            budget = min(budget, limits.disk_bytes)
+        if limits is not None:
+            cap = limits.disk_bytes
+    if cap is not None:
+        budget = min(budget, cap)
     return FileLimit(
         path=paths,
         bytes=budget,
