@@ -3,10 +3,15 @@ from types import SimpleNamespace
 import pytest
 
 from karotte.hardware import (
+    DEFAULT_SANDBOX_MEMORY_BYTES,
+    DEFAULT_VM_CPUS,
+    VM_MEMORY_HEADROOM_BYTES,
     HardwareLimits,
+    VmSize,
     container_run_args,
     default_hardware,
     hardware_limits,
+    vm_size,
 )
 from tests.conftest import register_hardware_plugins
 
@@ -96,3 +101,54 @@ def test_a_plugin_refuses_the_launch_by_raising(monkeypatch: pytest.MonkeyPatch)
     register_hardware_plugins(monkeypatch, container_run_args={"a": refuse})
     with pytest.raises(RuntimeError, match="tpuproxy"):
         _ = container_run_args(SimpleNamespace(required_hardware="tpu"), "docker")  # pyright: ignore[reportArgumentType]
+
+
+class TestVmSize:
+    """How big a VM runtime makes its VM: the plugin's numbers, else defaults,
+    with headroom above the sandbox's RAM for the guest kernel."""
+
+    def test_defaults_without_a_plugin(self, monkeypatch: pytest.MonkeyPatch):
+        register_hardware_plugins(monkeypatch)
+
+        size = vm_size(None)
+
+        assert size == VmSize(
+            cpus=DEFAULT_VM_CPUS,
+            sandbox_memory_bytes=DEFAULT_SANDBOX_MEMORY_BYTES,
+            vm_memory_bytes=DEFAULT_SANDBOX_MEMORY_BYTES + VM_MEMORY_HEADROOM_BYTES,
+            disk_bytes=None,
+        )
+
+    def test_the_plugins_numbers(self, monkeypatch: pytest.MonkeyPatch):
+        gib = 1 << 30
+        register_hardware_plugins(
+            monkeypatch,
+            limits={
+                "a": lambda _hw: HardwareLimits(  # pyright: ignore[reportUnknownLambdaType]
+                    memory_bytes=14 * gib, disk_bytes=80 * gib, cpus=4
+                )
+            },
+        )
+
+        size = vm_size("cpu-4")
+
+        assert (
+            size.cpus,
+            size.sandbox_memory_bytes,
+            size.vm_memory_bytes,
+            size.disk_bytes,
+        ) == (
+            4,
+            14 * gib,
+            15 * gib,
+            80 * gib,
+        )
+
+    def test_passthrough_hardware_is_refused(self, monkeypatch: pytest.MonkeyPatch):
+        register_hardware_plugins(
+            monkeypatch,
+            limits={"a": lambda _hw: HardwareLimits(passthrough=True)},  # pyright: ignore[reportUnknownLambdaType]
+        )
+
+        with pytest.raises(ValueError, match="gpu-1 needs devices"):
+            _ = vm_size("gpu-1")

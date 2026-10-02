@@ -178,7 +178,23 @@ def run_containerized(
     # is a genuine failure and must propagate.
     check = not prepare_only
 
-    if log_file:
+    if runtime == "apple-container":
+        from karotte.apple_container import run_with_watchdog
+
+        port = None if prepare_only else run_config.websocket_config.port
+        if log_file:
+            with open(log_file, "w") as f:
+                run_with_watchdog(
+                    run_command,
+                    run_config,
+                    check,
+                    port,
+                    stdout=f,
+                    stderr=subprocess.STDOUT,
+                )
+        else:
+            run_with_watchdog(run_command, run_config, check, port)
+    elif log_file:
         with open(log_file, "w") as f:
             subprocess.run(run_command, check=check, stdout=f, stderr=subprocess.STDOUT)
     else:
@@ -214,6 +230,20 @@ def get_container_run_command(
     """
     task = load_task(run_config)
     engine = get_engine(runtime)
+
+    if runtime == "apple-container":
+        from karotte import apple_container
+
+        return apple_container.get_run_command(
+            run_config,
+            task,
+            dev,
+            keep_container,
+            build_context,
+            mounts,
+            proxy_url,
+            prepare_only,
+        )
 
     command: list[str] = []
 
@@ -570,6 +600,15 @@ def common_run_id_prefix(run_ids: list[str]) -> str:
     return prefix
 
 
+def copy_hint(runtime: Runtime, run_id: str) -> str:
+    """How to copy a kept container's workdir to the host."""
+    if runtime == "apple-container":
+        from karotte.apple_container import export_hint
+
+        return export_hint(run_id)
+    return f"{get_engine(runtime)} cp karotte_run_{run_id}:/workdir/ ./out/"
+
+
 def stop_containers(runtime: Runtime, run_ids: list[str]) -> None:
     """Stop the containers for these exact run IDs, ignoring any already gone.
 
@@ -577,6 +616,12 @@ def stop_containers(runtime: Runtime, run_ids: list[str]) -> None:
     ``--prepare-only`` envs — when the launching process is interrupted, so the
     blocking ``podman run`` returns instead of hanging.
     """
+    if runtime == "apple-container":
+        from karotte import apple_container
+
+        apple_container.stop_containers(run_ids)
+        return
+
     engine = get_engine(runtime)
     names = [f"karotte_run_{run_id}" for run_id in run_ids]
     result = subprocess.run([engine, "stop", *names], capture_output=True, text=True)
@@ -600,8 +645,14 @@ def clean_up_old_containers(runtime: Runtime, run_ids: list[str]) -> None:
     """
     from loguru import logger
 
-    engine = get_engine(runtime)
     prefix = common_run_id_prefix(run_ids)
+    if runtime == "apple-container":
+        from karotte import apple_container
+
+        apple_container.clean_up_old_containers(prefix)
+        return
+
+    engine = get_engine(runtime)
     name_filter = f"karotte_run_{prefix}"
 
     result = subprocess.run(

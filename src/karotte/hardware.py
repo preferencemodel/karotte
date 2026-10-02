@@ -35,6 +35,11 @@ class HardwareLimits:
 
     memory_bytes: int | None = None
     disk_bytes: int | None = None
+    cpus: int | None = None
+    """CPUs for a VM runtime to give the sandbox."""
+    passthrough: bool = False
+    """Needs host devices (a GPU, a TPU) that a VM runtime can't pass through,
+    so it runs in a container."""
 
 
 def _plugins(group: str) -> Iterator[Any]:
@@ -65,3 +70,40 @@ def container_run_args(task: _Task, runtime: Runtime) -> list[str]:
         for hook in _plugins(CONTAINER_RUN_ARGS_ENTRY_POINT_GROUP)
         for arg in hook(task, runtime)
     ]
+
+
+_GIB = 1024**3
+DEFAULT_VM_CPUS = 2
+DEFAULT_SANDBOX_MEMORY_BYTES = 4 * _GIB
+"""The sandbox's RAM in a VM when no plugin knows the hardware: the student
+gets it less the harness reserve."""
+VM_MEMORY_HEADROOM_BYTES = 1 * _GIB
+"""RAM a VM gets above the sandbox's, for the guest kernel and page cache: with
+none, a student spread over many processes pushes the guest into a global OOM
+that can pick the harness."""
+
+
+@dataclass(frozen=True)
+class VmSize:
+    cpus: int
+    sandbox_memory_bytes: int
+    vm_memory_bytes: int
+    disk_bytes: int | None
+    """The plugin's disk budget, if it has one."""
+
+
+def vm_size(hardware: str | None) -> VmSize:
+    """How big a VM runtime makes the VM for ``hardware``. Raises ``ValueError``
+    for hardware a VM can't run."""
+    limits = hardware_limits(hardware) or HardwareLimits()
+    if limits.passthrough:
+        raise ValueError(
+            f"{hardware} needs devices a VM can't pass through; use --runtime docker"
+        )
+    memory = limits.memory_bytes or DEFAULT_SANDBOX_MEMORY_BYTES
+    return VmSize(
+        cpus=limits.cpus or DEFAULT_VM_CPUS,
+        sandbox_memory_bytes=memory,
+        vm_memory_bytes=memory + VM_MEMORY_HEADROOM_BYTES,
+        disk_bytes=limits.disk_bytes,
+    )

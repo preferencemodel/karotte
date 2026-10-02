@@ -8,6 +8,7 @@ from shutil import which
 from typing import Never
 
 import typer
+from loguru import logger
 
 from karotte.runtime import Runtime, get_engine
 
@@ -90,6 +91,25 @@ def get_container_build_command(
             "Building with podman is currently not supported when using the podman"
             + " VM, e.g., on macOS. Please use `--runtime docker` instead."
         )
+
+    if engine == "container":
+        from karotte.apple_container import check_build_context
+
+        check_build_context(build_context)
+        if cache_from or cache_to:
+            logger.warning(
+                "Apple `container` build has no build cache options; ignoring them"
+            )
+        return [
+            "container",
+            "build",
+            *secret_flags,
+            "--file",
+            "Containerfile",
+            "--tag",
+            tag,
+            build_context,
+        ]
 
     command: list[str] = []
 

@@ -11,7 +11,7 @@ import anyio
 import typer
 from loguru import logger
 
-from karotte import Runtime
+from karotte import Runtime, staged_mounts
 from karotte.build import build_container, require_buildx, require_runtime
 from karotte.container import is_containerized
 from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
@@ -23,6 +23,7 @@ from karotte.run_helpers import (
     build_configs,
     chown_outputs,
     clean_up_old_containers,
+    copy_hint,
     harden_filesystem,
     parse_config,
     run_containerized,
@@ -30,7 +31,6 @@ from karotte.run_helpers import (
     stop_containers,
     validate_gvisor_runtime,
 )
-from karotte.runtime import get_engine
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 
 PROXY_ENTRY_POINT_GROUP = "karotte.default_proxy_url"
@@ -242,6 +242,11 @@ def run(
         except Exception as e:  # noqa: BLE001 - a plugin refuses the launch by raising
             _print_and_abort(str(e))
 
+    if runtime == "apple-container" and containerized and not is_containerized():
+        from karotte.apple_container import validate_container_runtime
+
+        validate_container_runtime(load_task(run_config).required_hardware)
+
     if run_config.rubric_judge_api_key is not None:
         RubricJudge.default_api_key = run_config.rubric_judge_api_key
 
@@ -252,6 +257,7 @@ def run(
 
         sanitize_paths_and_reexec()
         harden_filesystem()
+        staged_mounts.copy_in()
 
         chdir_to_workdir()
 
@@ -262,7 +268,7 @@ def run(
         task = load_task(run_config)
 
         error = None
-        with run_mcp_server(run_config.mcp_server_config):
+        with run_mcp_server(run_config.mcp_server_config), staged_mounts.copied_back():
             from karotte.run_helpers import hold_prepared_env, run_non_containerized
 
             if prepare_only:
@@ -278,6 +284,10 @@ def run(
         return
 
     run_configs = build_configs(run_config, n_parallel)
+    if runtime == "apple-container":
+        from karotte.apple_container import assign_host_ports
+
+        run_configs = assign_host_ports(run_configs)
 
     if n_parallel > 1 and mount:
         writable_mounts = [m for m in mount if not m.endswith(":ro")]
@@ -406,7 +416,7 @@ def _run_without_ui(
     # Log completion message with copy example if containers are preserved
     if keep_containers:
         typer.secho(
-            f"\nContainers preserved. To copy data:\n  {get_engine(runtime)} cp karotte_run_{run_configs[0].run_id}:/workdir/ ./out/",
+            f"\nContainers preserved. To copy data:\n  {copy_hint(runtime, run_configs[0].run_id)}",
             fg=typer.colors.BLUE,
         )
 
