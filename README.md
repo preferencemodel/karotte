@@ -14,10 +14,12 @@ The model under test is called the *student*.
 
 ## Install
 
-karotte needs Python 3.12+, [uv](https://docs.astral.sh/uv/), and docker with
-[buildx](https://github.com/docker/buildx#installing) (or
-podman with `--runtime podman`) for containerized runs. Ubuntu's `docker.io`
-lacks buildx; install `docker-buildx` too. The justfiles need
+karotte needs Python 3.12+ and [uv](https://docs.astral.sh/uv/). Runs go into a
+VM by default: Apple `container` on macOS, Firecracker on Linux (see
+[Runtimes](#runtimes)). docker with
+[buildx](https://github.com/docker/buildx#installing) (or podman with
+`--runtime podman`) works too, and is what tasks needing devices passed through
+use. Ubuntu's `docker.io` lacks buildx; install `docker-buildx` too. The justfiles need
 [just](https://github.com/casey/just) 1.40 or newer; `uv sync --extra dev`
 installs one into the venv.
 
@@ -103,6 +105,64 @@ calls go straight to the provider. `--no-proxy` ignores the plugin's URL.
 `KAROTTE_INFERENCE_SERVICE_TIER=priority` asks Fireworks and Vertex AI Gemini
 for their priority tier, `auto` only once the provider runs out of capacity.
 Unset, the default, uses the provider's default tier.
+
+## Runtimes
+
+`karotte run` and `karotte build` pick the runtime with `--runtime`. Without it
+they use the platform's VM, so the agent gets a kernel of its own:
+
+| Platform | Default |
+| --- | --- |
+| macOS 26+ on Apple silicon | `apple-container` (Apple `container` 1.4.1+) |
+| Linux x86_64 or aarch64 with `/dev/kvm` | `firecracker` |
+| Hardware a plugin marks `passthrough`, an Intel Mac or one before macOS 26, Linux without `/dev/kvm`, other platforms | `docker` |
+
+A VM runtime the machine can run but that isn't set up stops before the run
+with what's missing and how to fix it. It never falls back to a container on its own; pass
+`--runtime docker` (or `podman`) for that.
+
+Setup:
+
+- `apple-container`: install Apple's
+  [`container`](https://github.com/apple/container/releases) and run
+  `container system start`. Build contexts must not be under `/tmp`.
+- `firecracker`: be in the `kvm` group, have docker with buildx (it builds the
+  image) and `pasta` (package `passt`). The first run downloads a pinned
+  Firecracker and guest kernel into `~/.cache/karotte`. pasta gives the guest
+  its network without root. On Ubuntu 24.04, AppArmor keeps pasta from making
+  the user namespace it needs until you lift the restriction:
+  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` (until
+  reboot). A model proxy on the same host isn't reachable from the guest; one
+  elsewhere is. `KAROTTE_FIRECRACKER_JAILER=1`, with `karotte run` under sudo,
+  starts the VM through Firecracker's jailer, which needs no such change.
+- `docker`, `podman`, `docker:gvisor`, `nerdctl`: containers on the host kernel
+  (gVisor's for `docker:gvisor`).
+
+A VM gets the CPUs, memory and disk that `karotte.hardware_limits` gives the
+task's hardware, or 2 CPUs and 4 GiB for the agent when no plugin answers. The
+VM holds 1 GiB more than the agent's limit for the harness.
+
+What each gives the agent by default:
+
+| | `apple-container`, `firecracker` | `docker`/`podman` (runc) | `docker:gvisor` |
+| --- | --- | --- | --- |
+| Memory and process limits | enforced by a cgroup | watched and reaped | watched and reaped |
+| Disk bytes and files | loop-mounted quota | watched and reaped | watched and reaped |
+| Network | firewall, checked at start; `firecracker` also filters on the host | firewall, checked at start | network namespace per session |
+| Fork-and-die process chains | PID namespace per session | swept | PID namespace per session |
+
+`karotte check confinement`, run as root inside the sandbox, prints what yours
+actually does and exits 1 when it gives the agent less than it should.
+
+Environment variables a launcher or task may set:
+
+| Variable | Effect |
+| --- | --- |
+| `KAROTTE_SANDBOX` | `runc`, `gvisor` or `vm`: what the sandbox is, when karotte can't tell. |
+| `KAROTTE_STUDENT_NETWORK` | Unset or `strict`: the agent reaches localhost, the sandbox's own addresses and the model proxy. `internal`: also link-local and private ranges. |
+| `KAROTTE_DISK_BUDGET_BYTES` | Cap on the agent's disk quota, chosen where the host's free space is known. VM launchers set it. |
+| `KAROTTE_SANDBOX_MEMORY_BYTES` | Memory the sandbox holds for the agent, when no plugin says. VM launchers set it. |
+| `KAROTTE_FIRECRACKER_NETWORK` | `pasta` (the default) or `none`, for a VM without a network. |
 
 ## Writing tasks
 
@@ -213,7 +273,7 @@ Besides templates, a package can extend karotte through these entry points:
 | `karotte.age_delay_exemptions` | a list of package names | More packages exempt from uv's `exclude-newer` delay (karotte always is). |
 | `karotte.update_migrations` | an object with `prepare`, `tool` and `migrate` | Moves envs made by an older release to the current names during `karotte update`. |
 | `karotte.default_hardware` | a string | `required_hardware` of tasks that set none. karotte itself knows no hardware names. |
-| `karotte.hardware_limits` | `f(hardware) -> HardwareLimits \| None` | Memory and disk a sandbox on that hardware holds. Without it, the agent's memory limit is the sandbox's cgroup limit or RAM, less 1 GiB for the harness, and none where cgroups don't work. |
+| `karotte.hardware_limits` | `f(hardware) -> HardwareLimits \| None` | Memory, disk and CPUs a sandbox on that hardware holds; `passthrough=True` marks hardware a VM can't hold, which runs under docker. Without it, the agent's memory limit is `KAROTTE_SANDBOX_MEMORY_BYTES`, else the sandbox's cgroup limit or RAM, less 1 GiB for the harness, and none where cgroups don't work. |
 | `karotte.container_run_args` | `f(task, runtime) -> list[str]` | Extra arguments for the container engine's `run` (docker, podman or nerdctl), e.g. to pass devices through, in entry point name order. Raising refuses the launch with the exception's message. |
 
 A plugin that fails to load is skipped with a warning, except a run config
