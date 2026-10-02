@@ -7,11 +7,12 @@ import sys
 import sysconfig
 import tomllib
 from collections.abc import Collection, Mapping, Sequence
-from importlib.metadata import entry_points
+from importlib.metadata import PackageNotFoundError, distribution, entry_points
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Protocol
 from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 from loguru import logger
 
@@ -68,6 +69,54 @@ def _migrations() -> list[UpdateMigration]:
         except Exception as e:  # noqa: BLE001 - a broken plugin must not break karotte
             logger.warning("Ignoring update migration {!r}: {}", ep.name, e)
     return migrations
+
+
+RELAUNCHED_ENV_VAR = "KAROTTE_UPDATE_RELAUNCHED"
+
+
+def missing_template_packages(
+    project_dir: Path, extra_with: Collection[str]
+) -> list[str]:
+    """Template packages the manifest or `extra_with` names that are not installed here.
+
+    Their update migrations only run if they are installed next to this karotte.
+    """
+    try:
+        manifest = json.loads((project_dir / ".manifest.json").read_text())
+    except (OSError, ValueError):
+        return []
+    recorded = manifest.get("extra_deps") or []
+    missing: list[str] = []
+    for requirement in dict.fromkeys([*map(_unpinned, recorded), *extra_with]):
+        try:
+            distribution(_package_name(requirement))
+        except PackageNotFoundError:
+            missing.append(requirement)
+    return missing
+
+
+def relaunch_with(
+    project_dir: Path, packages: Sequence[str], args: Sequence[str]
+) -> int:
+    """Rerun `karotte <args>` with `packages` installed next to it; returns its exit code."""
+    logger.info(f"Restarting with {', '.join(packages)} installed")
+    return run_uv(
+        ("tool", "run"),
+        *_env_uv_flags(project_dir),
+        *_with_flags(packages),
+        *_this_karotte(),
+        *args,
+        env=_uv_env(env_with_age_delay()) | {RELAUNCHED_ENV_VAR: "1"},
+    ).returncode
+
+
+def _this_karotte() -> list[str]:
+    """`uv tool run` args for this karotte: its source tree if installed from one, else its release."""
+    dist = distribution("karotte")
+    direct_url = json.loads(dist.read_text("direct_url.json") or "{}").get("url", "")
+    if direct_url.startswith("file://"):
+        return ["--from", url2pathname(urlsplit(direct_url).path), "karotte"]
+    return [f"karotte@{dist.version}"]
 
 
 def update_env(
