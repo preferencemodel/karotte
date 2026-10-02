@@ -32,7 +32,7 @@ def _capture_request_body(model: str, effort: str) -> dict[str, Any]:
         def do_POST(self):
             n = int(self.headers.get("content-length", 0))
             bodies.append(json.loads(self.rfile.read(n)))
-            self.send_response(500)
+            self.send_response(400)
             self.send_header("content-type", "application/json")
             self.end_headers()
             self.wfile.write(b'{"error":{"message":"capture"}}')
@@ -41,7 +41,9 @@ def _capture_request_body(model: str, effort: str) -> dict[str, Any]:
             pass
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+    ).start()
     try:
         spec = spec_for(model)
         params: dict[str, Any] = {

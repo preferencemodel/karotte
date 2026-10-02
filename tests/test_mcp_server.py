@@ -181,7 +181,9 @@ def test_run_server_yields_as_soon_as_the_server_answers_http():
             pass
 
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Reject)
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    threading.Thread(
+        target=httpd.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+    ).start()
     config = HttpMcpServerConfig(host="127.0.0.1", port=httpd.server_address[1])
     process = MagicMock(poll=MagicMock(return_value=None))
 

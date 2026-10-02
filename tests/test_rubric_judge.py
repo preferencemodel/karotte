@@ -168,7 +168,9 @@ def test_anthropic_base_url_and_key_come_from_the_environment(
     """Without an explicit key, the judge reaches whatever Anthropic endpoint the
     environment names, with the environment's key."""
     server = HTTPServer(("127.0.0.1", 0), _FakeAnthropic)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+    ).start()
     _FakeAnthropic.requests = []
     monkeypatch.setenv("ANTHROPIC_BASE_URL", f"http://127.0.0.1:{server.server_port}")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "env-key")
