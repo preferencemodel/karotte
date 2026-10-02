@@ -83,13 +83,14 @@ def vm_resources(size: VmSize) -> tuple[int, int]:
 def disk_budget(size: VmSize, directory: Path, runs: int = 1) -> int:
     """min(the hardware plugin's disk budget, 80% of the host's free space
     split between the ``runs`` launched together). The scratch drive is
-    sparse, so without the split each VM could be handed all of it."""
+    sparse, so without the split each VM could be handed all of it. Whole
+    MiB: Firecracker ignores a drive's bytes past its last full sector."""
     budget = int(shutil.disk_usage(directory).free * _FREE_DISK_FRACTION) // max(
         1, runs
     )
     if size.disk_bytes is not None:
         budget = min(budget, size.disk_bytes)
-    return budget
+    return budget >> 20 << 20
 
 
 def device_name(index: int) -> str:

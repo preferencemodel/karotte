@@ -124,6 +124,17 @@ class TestSizing:
         assert budget == int(150 * GIB * 0.8) // 4
         assert 4 * budget <= 150 * GIB * 0.8
 
+    def test_disk_budget_is_whole_mib(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        usage = shutil.disk_usage(tmp_path)
+        monkeypatch.setattr(
+            "karotte.firecracker.vm.shutil.disk_usage",
+            lambda _: usage._replace(free=10 * GIB + 12345),  # pyright: ignore[reportUnknownLambdaType]
+        )
+
+        assert disk_budget(self.SIZE, tmp_path, runs=3) % (1 << 20) == 0
+
 
 class TestConfig:
     def test_boot_args(self):

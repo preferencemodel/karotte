@@ -68,9 +68,10 @@ _SESSION_TIMEOUT_SECONDS = 30
 
 _PROBE_UIDS = range(60000, 61000)
 
-_GUEST_KERNEL_RESERVED_BYTES = 256 << 20
-"""Allowance for what a guest kernel keeps out of the RAM it reports: a 5
-GiB Apple `container` VM shows 5053 MiB."""
+_IOMEM = Path("/proc/iomem")
+_RAM_SLACK_BYTES = 64 << 20
+"""Allowance for the firmware's holes in a VM's RAM map: 5119.6 MiB of
+System RAM in a 5 GiB Firecracker guest."""
 
 # Only shell builtins: the student may not be able to read the harness's
 # Python, and nothing on disk needs to be trusted to echo these back.
@@ -326,7 +327,7 @@ def _ram_finding(
     )
     if ram < needed:
         return Finding("RAM vs student memory.max", value, False)
-    if ram >= with_headroom - _GUEST_KERNEL_RESERVED_BYTES:
+    if ram >= with_headroom - _RAM_SLACK_BYTES:
         return Finding("RAM vs student memory.max", value, True)
     if obs.vm_launcher is not None:
         return Finding("RAM vs student memory.max", value, False)
@@ -423,7 +424,7 @@ def gather(hardware: str | None) -> Observations:
         cgroup_version=version,
         cgroup_writable=writable,
         firewall_tolerated=bool(os.environ.get(FIREWALL_TOLERATE_ENV_VAR)),
-        ram_bytes=psutil.virtual_memory().total,
+        ram_bytes=installed_ram_bytes(),
         vm_launcher=os.environ.get(VM_LAUNCHER_ENV_VAR) or None,
     )
     ram = sandbox_memory_bytes(hardware)
@@ -453,6 +454,33 @@ def gather(hardware: str | None) -> Observations:
             + " siblings, as every run does at start"
         )
     return obs
+
+
+def installed_ram_bytes(iomem: Path = _IOMEM) -> int:
+    """The RAM the machine (or VM) was given: the System RAM ranges root
+    reads in /proc/iomem. ``MemTotal`` leaves out what the kernel reserves at
+    boot, which grows with the RAM (182 MiB of a 5 GiB Firecracker guest), so
+    it can't tell a VM with headroom from one without. Falls back to
+    ``MemTotal`` where iomem shows no addresses (not root, or no iomem)."""
+    total = 0
+    try:
+        lines = iomem.read_text().splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        span, _, name = line.partition(" : ")
+        # Top-level ranges only: the kernel's own code and data nest inside.
+        if name.strip() != "System RAM" or line.startswith(" "):
+            continue
+        start, _, end = span.partition("-")
+        try:
+            first, last = int(start, 16), int(end, 16)
+        except ValueError:
+            continue
+        # Without root every range reads 00000000-00000000.
+        if last > first:
+            total += last - first + 1
+    return total or psutil.virtual_memory().total
 
 
 def _cgroup_layout(mounts: list[Mount]) -> tuple[int | None, bool]:
