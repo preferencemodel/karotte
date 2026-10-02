@@ -68,6 +68,9 @@ build-backend = "uv_build"
 dev = [
     "tomlkit>=0.15.1",
 ]
+docs = [
+    "zensical>=0.0.65",
+]
 
 [tool.uv.build-backend]
 module-name = "karotte"

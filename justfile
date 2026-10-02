@@ -17,6 +17,14 @@ fix:
   uv run --frozen --extra dev ruff format
   uv run --frozen --extra dev ruff check --fix
 
+# Preview the docs at http://localhost:8000
+docs *args:
+  uv run --frozen --group docs zensical serve {{ args }}
+
+# Build the docs into site/, failing on broken links
+docs-build:
+  uv run --frozen --group docs zensical build --clean --strict
+
 # Run tests for karotte
 test *args:
   uv run --frozen --extra test pytest {{ args }}
