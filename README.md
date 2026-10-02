@@ -139,8 +139,10 @@ Setup:
   (gVisor's for `docker:gvisor`).
 
 A VM gets the CPUs, memory and disk that `karotte.hardware_limits` gives the
-task's hardware, or 2 CPUs and 4 GiB for the agent when no plugin answers. The
-VM holds 1 GiB more than the agent's limit for the harness.
+task's hardware, or 2 CPUs and 4 GiB of sandbox memory when no plugin answers.
+The agent's memory limit is the sandbox's less 1 GiB for the harness. The VM
+holds 1 GiB more than the sandbox for the guest kernel. By default, that is
+3 GiB for the agent and 5 GiB for the VM.
 
 What each gives the agent by default:
 
@@ -204,11 +206,12 @@ class FindPythonStep(Step):
         return RegexJudge([re.compile(r"path: .*/python3?")])
 ```
 
-Judges in `karotte.judges`: `RegexJudge` matches the final message,
+Judges in `karotte.judges`: `RegexJudge` searches every message,
 `ExecutableJudge` runs a scoring script, `RubricJudge` asks an LLM to grade
-against a rubric, and `Judge` is the base class for your own. The example task
-in the `default` template shows submissions, hints, and hooks that run before
-scoring.
+against a rubric, and `Judge` is the base class for your own. `RegexJudge` also
+searches the system prompt, the instructions and tool results, so a pattern
+that appears in them always matches. The example task in the `default`
+template shows submissions, hints, and hooks that run before scoring.
 
 ## Templates
 
