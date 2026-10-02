@@ -240,19 +240,45 @@ class TestSaveArtifacts:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """KAROTTE_ARTIFACT_DIR wins over both /out and out/."""
+        """KAROTTE_ARTIFACT_DIR wins over the transcript's directory, /out and out/."""
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
         base = tmp_path / "logs" / "artifacts" / "karotte"
         monkeypatch.setenv(save_artifacts_module.ARTIFACT_DIR_ENV_VAR, str(base))
+        config = sample_config.model_copy(
+            update={"transcript_file": str(tmp_path / "transcripts" / "t.json")}
+        )
         source_file = tmp_path / "test_file.txt"
         source_file.write_text("content")
 
-        save_artifact(sample_config, source_file)
+        save_artifact(config, source_file)
 
         artifact_dir = base / f"{sample_config.run_id}_artifacts"
         assert (artifact_dir / "test_file.txt").read_text() == "content"
         assert not (tmp_path / "out").exists()
+        assert not (tmp_path / "transcripts").exists()
+
+    def test_saves_next_to_the_transcript(
+        self,
+        sample_config: EvaluationRunConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """The transcript's directory is the one the launcher shares with the host."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
+        monkeypatch.delenv(save_artifacts_module.ARTIFACT_DIR_ENV_VAR, raising=False)
+        shared = tmp_path / "root" / "out"
+        config = sample_config.model_copy(
+            update={"transcript_file": str(shared / "transcript.json")}
+        )
+        source_file = tmp_path / "test_file.txt"
+        source_file.write_text("content")
+
+        save_artifact(config, source_file)
+
+        artifact_dir = shared / f"{sample_config.run_id}_artifacts"
+        assert (artifact_dir / "test_file.txt").read_text() == "content"
 
     def test_uses_relative_path_when_not_containerized(
         self,

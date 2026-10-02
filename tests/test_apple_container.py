@@ -30,6 +30,10 @@ from karotte.build import get_container_build_command
 from karotte.confinement import GIB, SANDBOX_MEMORY_ENV_VAR
 from karotte.hardware import HardwareLimits
 from karotte.run_helpers import copy_hint, get_container_run_command
+from karotte.save_artifact import (
+    ARTIFACT_DIR_ENV_VAR,
+    _artifact_base_dir,  # pyright: ignore[reportPrivateUsage]
+)
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.staged_mounts import STAGED_MOUNTS_ENV_VAR
 from tests.conftest import register_hardware_plugins
@@ -267,6 +271,24 @@ class TestRunCommand:
         )
         assert updated.transcript_file == "/root/out/transcript.json"
         assert json.loads(command[-1])["transcript_file"] == "/root/out/transcript.json"
+
+    def test_artifacts_land_in_the_transcript_mount(
+        self, config: EvaluationRunConfig, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Nothing mounts ``/out`` here, so artifacts saved there would stay in
+        the VM."""
+        monkeypatch.setenv("KAROTTE_CONTAINERIZED", "1")
+        monkeypatch.delenv(ARTIFACT_DIR_ENV_VAR, raising=False)
+        command, updated = get_container_run_command(
+            config, "apple-container", dev=False, keep_container=False
+        )
+
+        artifact_dir = _artifact_base_dir(updated)
+
+        assert any(
+            mount.endswith(f"target={artifact_dir}")
+            for mount in flag_values(command, "--mount")
+        )
 
     def test_dev_source_stays_under_root(
         self, config: EvaluationRunConfig, tmp_path: Path
