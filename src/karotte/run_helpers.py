@@ -153,6 +153,21 @@ def run_containerized(
         prepare_only: If True, the container prepares the env and holds it open
             instead of running the task.
     """
+    if runtime == "firecracker":
+        from karotte.firecracker.vm import run_firecracker
+
+        run_firecracker(
+            run_config,
+            dev=dev,
+            log_file=log_file,
+            keep_vm=keep_container,
+            build_context=build_context,
+            mounts=mounts,
+            proxy_url=proxy_url,
+            prepare_only=prepare_only,
+        )
+        return
+
     run_command, _ = get_container_run_command(
         run_config,
         runtime,
@@ -622,6 +637,12 @@ def stop_containers(runtime: Runtime, run_ids: list[str]) -> None:
         apple_container.stop_containers(run_ids)
         return
 
+    if runtime == "firecracker":
+        from karotte.firecracker.vm import stop_vms
+
+        stop_vms(run_ids)
+        return
+
     engine = get_engine(runtime)
     names = [f"karotte_run_{run_id}" for run_id in run_ids]
     result = subprocess.run([engine, "stop", *names], capture_output=True, text=True)
@@ -650,6 +671,12 @@ def clean_up_old_containers(runtime: Runtime, run_ids: list[str]) -> None:
         from karotte import apple_container
 
         apple_container.clean_up_old_containers(prefix)
+        return
+
+    if runtime == "firecracker":
+        from karotte.firecracker.vm import clean_up_vms
+
+        clean_up_vms(prefix)
         return
 
     engine = get_engine(runtime)

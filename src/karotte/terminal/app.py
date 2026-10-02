@@ -24,6 +24,7 @@ from karotte.run_helpers import (
     clean_up_old_containers,
     copy_hint,
     get_container_run_command,
+    run_containerized,
     run_non_containerized,
 )
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -432,7 +433,8 @@ class KarotteApp(App[None]):
 
         if output_callback:
             output_callback("\n=== All runs completed ===\n")
-            if keep_containers:
+            # A kept Firecracker run is its run directory, not a container.
+            if keep_containers and runtime != "firecracker":
                 output_callback("Containers preserved. To copy data:\n")
                 output_callback(f"  {copy_hint(runtime, run_configs[0].run_id)}\n")
 
@@ -919,12 +921,25 @@ def _run_containerized_worker(
     proxy_url: str | None = None,
 ):
     """Run a single containerized evaluation run. Must be a module-level function for pickling."""
+    # Write output to log file that can be tailed
+    log_file = Path(f"/tmp/karotte_run_{run_config.run_id}.log")
+    if runtime == "firecracker":
+        run_containerized(
+            run_config,
+            runtime,
+            dev,
+            log_file=log_file,
+            keep_container=keep_container,
+            build_context=build_context,
+            mounts=mounts,
+            proxy_url=proxy_url,
+        )
+        return
+
     run_command, _ = get_container_run_command(
         run_config, runtime, dev, keep_container, build_context, mounts, proxy_url
     )
 
-    # Write output to log file that can be tailed
-    log_file = Path(f"/tmp/karotte_run_{run_config.run_id}.log")
     with open(log_file, "w") as f:
         if runtime == "apple-container":
             from karotte.apple_container import run_with_watchdog

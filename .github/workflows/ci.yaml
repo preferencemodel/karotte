@@ -84,9 +84,66 @@ jobs:
       - name: Test the default template
         run: just test-template default --runtime docker
 
+  # The default template end to end in a Firecracker microVM, once as a user
+  # and once through the jailer (under sudo). It needs /dev/kvm, which
+  # GitHub's hosted Ubuntu runners provide.
+  firecracker-template:
+    name: Firecracker Template Test (${{ matrix.mode }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [user, jailed]
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Give the runner user /dev/kvm
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install pasta
+        run: sudo apt-get update && sudo apt-get install -y passt
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - name: Cache Firecracker and the guest kernel
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/karotte/firecracker
+          key: firecracker-${{ runner.arch }}-${{ hashFiles('src/karotte/firecracker/artifacts.py') }}
+      # Ubuntu 24.04 confines unprivileged user namespaces with AppArmor, and
+      # its passt package has no profile that lets pasta create one. The
+      # jailed run needs no user namespace.
+      - name: Let pasta create user namespaces
+        if: matrix.mode == 'user'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Test the default template under Firecracker
+        if: matrix.mode == 'user'
+        run: just test-template default --runtime firecracker
+      - name: Set up the default template
+        if: matrix.mode == 'jailed'
+        run: |
+          D="$HOME/.cache/karotte/test-templates/test_default"
+          rm -rf "$D" && mkdir -p "$(dirname "$D")"
+          uv run --frozen karotte create-env "$D" --template default --vendor-karotte
+          cd "$D" && uv run setup_data.py && uv run karotte create-run-config --model claude-haiku-4-5-20251001
+      - name: Test the default template under Firecracker's jailer
+        if: matrix.mode == 'jailed'
+        run: |
+          cd "$HOME/.cache/karotte/test-templates/test_default"
+          sudo env "PATH=$PATH" "HOME=$HOME" ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+            KAROTTE_FIRECRACKER_JAILER=1 \
+            .venv/bin/karotte run --config run_config.json --no-ui --no-proxy --runtime firecracker
+          uv run python "$GITHUB_WORKSPACE/tests/check_transcript.py" out/transcript.json
+
   build:
     name: Build
-    needs: [lint, core-tests, root-tests, default-template]
+    needs: [lint, core-tests, root-tests, default-template, firecracker-template]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     outputs:
