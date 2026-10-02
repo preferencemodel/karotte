@@ -153,26 +153,36 @@ def test_child_signal_death_maps_to_128_plus_signum(signum: signal.Signals) -> N
 
 REAP_OTHERS_SCRIPT = textwrap.dedent(
     """
-    import os, sys
+    import os, sys, time
     from karotte.init_shim import _run_init_loop
 
-    # The main child holds the pipe's read end; each early-exiting child (a
-    # stand-in for a reparented orphan) holds an inherited copy of the write
-    # end that closes when it exits. The main child therefore sees EOF -- and
-    # exits -- only after every other child is already gone, so the loop must
-    # have reaped them all by the time it returns.
-    read_end, write_end = os.pipe()
+    # Children that exit at once (stand-ins for reparented orphans), and a main
+    # child that exits only once the loop has reaped every one of them: a
+    # reaped pid is gone, while a zombie still answers kill(pid, 0). Waiting on
+    # a pipe instead would race: a child closes its end before it becomes a
+    # zombie the loop can reap.
+    others = []
     for _ in range(5):
-        if os.fork() == 0:
+        pid = os.fork()
+        if pid == 0:
             os._exit(0)
+        others.append(pid)
 
     main = os.fork()
     if main == 0:
-        os.close(write_end)
-        os.read(read_end, 1)
-        os._exit(5)
-    os.close(read_end)
-    os.close(write_end)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            alive = 0
+            for pid in others:
+                try:
+                    os.kill(pid, 0)
+                    alive += 1
+                except ProcessLookupError:
+                    pass
+            if not alive:
+                os._exit(5)
+            time.sleep(0.01)
+        os._exit(6)
 
     code = _run_init_loop(main)
     try:
@@ -227,7 +237,11 @@ SHIM_SCRIPT = textwrap.dedent(
             signal.signal(signal.SIGUSR1, lambda *a: os._exit(44))
         # "default-dispositions": leave handlers untouched.
         print("child-ready", flush=True)
-        time.sleep(30)
+        # Short sleeps, not one long one: a signal that lands just before a
+        # sleep starts has its Python handler deferred to the next bytecode
+        # check, which a single time.sleep(30) would put off for 30 seconds.
+        for _ in range(300):
+            time.sleep(0.1)
         os._exit(250)
     sys.exit(_run_init_loop(child))
     """
@@ -276,7 +290,8 @@ PENDING_SIGNAL_SCRIPT = textwrap.dedent(
     if child == 0:
         signal.signal(signal.SIGTERM, lambda *a: os._exit(43))
         signal.pthread_sigmask(signal.SIG_UNBLOCK, _FORWARDED_SIGNALS)
-        time.sleep(30)
+        for _ in range(300):  # short sleeps, as in SHIM_SCRIPT
+            time.sleep(0.1)
         os._exit(250)
 
     # Stays pending until the init loop waits for it: the shim must forward
