@@ -55,6 +55,28 @@ class TestCreateRunConfig:
         assert config["model_api_key"] == "$ANTHROPIC_API_KEY"
         assert "sk-ant-secret-key" not in config_path.read_text()
 
+    def test_default_rubric_judge_api_key_is_env_var_reference(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret-key")
+        config_path = tmp_path / "config.json"
+
+        create_run_config(config_path=str(config_path), model="openai/gpt-5.5")
+
+        config = json.loads(config_path.read_text())
+        assert config["rubric_judge_api_key"] == "$ANTHROPIC_API_KEY"
+        assert "sk-ant-secret-key" not in config_path.read_text()
+
+    def test_explicit_rubric_judge_api_key_is_written_as_is(self, tmp_path: Path):
+        config_path = tmp_path / "config.json"
+
+        create_run_config(
+            config_path=str(config_path), rubric_judge_api_key="$MY_RUBRIC_KEY"
+        )
+
+        config = json.loads(config_path.read_text())
+        assert config["rubric_judge_api_key"] == "$MY_RUBRIC_KEY"
+
     def test_explicit_model_api_key_is_written_as_is(self, tmp_path: Path):
         config_path = tmp_path / "config.json"
 

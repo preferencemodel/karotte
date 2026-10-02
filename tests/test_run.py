@@ -455,6 +455,26 @@ class TestProxyPlaceholderForReferencedKey:
 
         assert mock_anyio.run.call_args.args[1].model_api_key == "model_api_key"
 
+    def test_fills_in_the_rubric_judge_key_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        from karotte.judges.rubric_judge import RubricJudge
+
+        monkeypatch.setattr(RubricJudge, "default_api_key", None)
+        monkeypatch.setenv("MY_RUBRIC_KEY", "")
+        monkeypatch.delenv("MY_RUBRIC_KEY")
+        config = EvaluationRunConfig(
+            run_id="test",
+            task_id="example-task",
+            model="openai/gpt-5.5",
+            model_api_key="sk-real",
+            rubric_judge_api_key="$MY_RUBRIC_KEY",
+        ).model_dump_json()
+
+        mock_anyio = self._run(config, "https://proxy.example")
+
+        assert mock_anyio.run.call_args.args[1].rubric_judge_api_key == "model_api_key"
+
     def test_without_a_proxy_an_unset_variable_still_aborts(
         self, monkeypatch: pytest.MonkeyPatch
     ):

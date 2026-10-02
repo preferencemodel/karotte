@@ -88,6 +88,7 @@ def _resolve_model_api_key(
     run_config: EvaluationRunConfig, prepare_only: bool = False
 ) -> EvaluationRunConfig:
     """Resolve $ENV_VAR references in the config."""
+    run_config = _resolve_rubric_judge_api_key(run_config)
     if run_config.model_api_key and run_config.model_api_key.startswith("$"):
         env_var = run_config.model_api_key[1:]
         try:
@@ -100,6 +101,21 @@ def _resolve_model_api_key(
             )
         return run_config.model_copy(update={"model_api_key": value})
     return run_config
+
+
+def _resolve_rubric_judge_api_key(
+    run_config: EvaluationRunConfig,
+) -> EvaluationRunConfig:
+    """Resolve a `$VAR` rubric judge key; an unset one only warns, since most tasks never use a rubric judge."""
+    key = run_config.rubric_judge_api_key
+    if not key or not key.startswith("$"):
+        return run_config
+    value = os.environ.get(key[1:])
+    if value is None:
+        logger.warning(
+            f"The run config references {key[1:]!r} as the rubric judge API key, but it's not set; RubricJudge calls will fail."
+        )
+    return run_config.model_copy(update={"rubric_judge_api_key": value})
 
 
 def build_configs(run_config: EvaluationRunConfig, n: int) -> list[EvaluationRunConfig]:

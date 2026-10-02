@@ -23,6 +23,12 @@ def create_run_config(
             help="Model API key. Defaults to a reference to the model provider's key variable, e.g. `$OPENAI_API_KEY`, which karotte reads from the environment at run time.",
         ),
     ] = None,
+    rubric_judge_api_key: Annotated[
+        str,
+        typer.Option(
+            help="API key for RubricJudge. Defaults to a reference to `$ANTHROPIC_API_KEY`, which karotte reads from the environment at run time.",
+        ),
+    ] = "$ANTHROPIC_API_KEY",
     task: Annotated[
         str | None,
         typer.Option(help="Task ID. Defaults to the first task in the environment."),
@@ -55,6 +61,7 @@ def create_run_config(
         task_id=task_id,
         model=model,
         model_api_key=model_api_key,
+        rubric_judge_api_key=rubric_judge_api_key,
         mcp_server_config=HttpMcpServerConfig(),
         transcript_file="out/transcript.json",
         use_hints=True,

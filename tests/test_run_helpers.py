@@ -101,6 +101,40 @@ class TestParseConfig:
 
         assert config.model_api_key is None
 
+    def _rubric_config(self, rubric_key: str) -> str:
+        return json.dumps(
+            {
+                "run_id": "test-run",
+                "task_id": "test-task",
+                "model": "test-model",
+                "model_api_key": "test-key",
+                "rubric_judge_api_key": rubric_key,
+            }
+        )
+
+    def test_resolves_a_rubric_judge_key_reference(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("MY_RUBRIC_KEY", "sk-rubric")
+
+        config = parse_config(self._rubric_config("$MY_RUBRIC_KEY"))
+
+        assert config.rubric_judge_api_key == "sk-rubric"
+
+    def test_keeps_a_literal_rubric_judge_key(self):
+        config = parse_config(self._rubric_config("sk-literal"))
+
+        assert config.rubric_judge_api_key == "sk-literal"
+
+    def test_an_unset_rubric_judge_key_variable_does_not_abort(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("MY_RUBRIC_KEY", raising=False)
+
+        config = parse_config(self._rubric_config("$MY_RUBRIC_KEY"))
+
+        assert config.rubric_judge_api_key is None
+
     def test_raises_error_for_nonexistent_file(self):
         with pytest.raises(typer.Abort):
             parse_config("/nonexistent/path/config.json")

@@ -48,17 +48,19 @@ def default_proxy_url() -> str | None:
     return None
 
 
-def _referenced_key_env(config: str) -> str | None:
-    """The env var a JSON config or config file names as its `$VAR` model API key."""
+def _referenced_key_envs(config: str) -> list[str]:
+    """The env vars a JSON config or config file names as its `$VAR` API keys."""
     try:
         data = json.loads(config)
     except ValueError:
         try:
             data = json.loads(Path(config).read_text())
         except (OSError, ValueError):
-            return None
-    key = data.get("model_api_key") if isinstance(data, dict) else None
-    return key[1:] if isinstance(key, str) and key.startswith("$") else None
+            return []
+    if not isinstance(data, dict):
+        return []
+    keys = (data.get("model_api_key"), data.get("rubric_judge_api_key"))
+    return [k[1:] for k in keys if isinstance(k, str) and k.startswith("$")]
 
 
 def _export_proxy(proxy_url: str) -> None:
@@ -222,8 +224,8 @@ def run(
 
     if proxy_url:
         # The rubric judge reads ANTHROPIC_API_KEY itself, so it gets one too.
-        for env_var in ("ANTHROPIC_API_KEY", _referenced_key_env(config)):
-            if env_var and not os.environ.get(env_var):
+        for env_var in ("ANTHROPIC_API_KEY", *_referenced_key_envs(config)):
+            if not os.environ.get(env_var):
                 os.environ[env_var] = "model_api_key"
 
     require_environment()
