@@ -6,7 +6,6 @@ import typer
 
 from karotte.build import (
     _buildx_available,  # pyright: ignore[reportPrivateUsage]
-    _podman_is_using_vm,  # pyright: ignore[reportPrivateUsage]
     build_container,
     get_container_build_command,
 )
@@ -185,58 +184,20 @@ class TestBuildContainerWithTag:
         assert call_args[tag_index + 1] == "custom-tag"
 
 
-class TestPodmanIsUsingVm:
-    def test_returns_true_when_service_is_remote(self):
-        result = CompletedProcess(args=[], returncode=0, stdout="true\n", stderr="")
-        with patch("karotte.build.subprocess.run", return_value=result):
-            assert _podman_is_using_vm() is True
-
-    def test_returns_false_when_service_is_local(self):
-        result = CompletedProcess(args=[], returncode=0, stdout="false\n", stderr="")
-        with patch("karotte.build.subprocess.run", return_value=result):
-            assert _podman_is_using_vm() is False
-
-    def test_returns_false_when_podman_not_found(self):
-        with patch("karotte.build.subprocess.run", side_effect=FileNotFoundError):
-            assert _podman_is_using_vm() is False
-
-    def test_returns_false_when_command_fails(self):
-        result = CompletedProcess(args=[], returncode=1, stdout="", stderr="error")
-        with patch("karotte.build.subprocess.run", return_value=result):
-            assert _podman_is_using_vm() is False
-
-
-class TestPodmanVmAbortsBuild:
-    def test_podman_with_vm_aborts(self, monkeypatch: pytest.MonkeyPatch):
+class TestPodmanThroughARemoteService:
+    def test_builds_with_secrets_without_asking_podman(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.delenv("CI", raising=False)
+        remote = CompletedProcess(args=[], returncode=0, stdout="true\n", stderr="")
 
-        with patch("karotte.build._podman_is_using_vm", return_value=True):
-            with pytest.raises(typer.Abort) as exc_info:
-                get_container_build_command("podman", ".", "karotte")
-            e = exc_info.value
-            assert len(getattr(e, "__notes__", [])) == 1
-            assert "podman is currently not supported" in e.__notes__[0]
+        with patch("karotte.build.subprocess.run", return_value=remote) as mock_run:
+            command = get_container_build_command(
+                "podman", ".", "karotte", build_secrets=["uv_env=/tmp/uv_env"]
+            )
 
-    def test_podman_without_vm_succeeds(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("CI", raising=False)
-
-        with patch("karotte.build._podman_is_using_vm", return_value=False):
-            command = get_container_build_command("podman", ".", "karotte")
-            assert command[0] == "podman"
-
-    def test_docker_skips_vm_check(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("CI", raising=False)
-
-        with patch("karotte.build._podman_is_using_vm") as mock_check:
-            get_container_build_command("docker", ".", "karotte")
-            mock_check.assert_not_called()
-
-    def test_docker_gvisor_skips_vm_check(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("CI", raising=False)
-
-        with patch("karotte.build._podman_is_using_vm") as mock_check:
-            get_container_build_command("docker:gvisor", ".", "karotte")
-            mock_check.assert_not_called()
+        mock_run.assert_not_called()
+        assert command[:3] == ["podman", "build", "--secret=id=uv_env,src=/tmp/uv_env"]
 
 
 class TestGetEngine:

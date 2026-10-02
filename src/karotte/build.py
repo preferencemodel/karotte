@@ -86,12 +86,6 @@ def get_container_build_command(
 
     engine = get_engine(runtime)
 
-    if engine == "podman" and _podman_is_using_vm():
-        _print_and_abort(
-            "Building with podman is currently not supported when using the podman"
-            + " VM, e.g., on macOS. Please use `--runtime docker` instead."
-        )
-
     if engine == "container":
         from karotte.apple_container import check_build_context
 
@@ -147,20 +141,6 @@ def _buildx_available() -> bool:
     if os.environ.get("CI"):
         command.insert(0, "sudo")
     return subprocess.run(command, capture_output=True, check=False).returncode == 0
-
-
-def _podman_is_using_vm() -> bool:
-    """Check if podman is routing through a VM (e.g., podman machine on macOS)."""
-    try:
-        result = subprocess.run(
-            ["podman", "info", "--format", "{{.Host.ServiceIsRemote}}"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.returncode == 0 and result.stdout.strip().lower() == "true"
-    except FileNotFoundError:
-        return False
 
 
 def _exit_with_error(message: str) -> Never:
