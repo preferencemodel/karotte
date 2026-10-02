@@ -33,6 +33,7 @@ def save_artifact(config: EvaluationRunConfig, path: Path) -> None:
     If `config.backend_uri` is set, uploads the artifact directly to object storage via presigned URLs.
     Otherwise, saves locally to:
     - `$KAROTTE_ARTIFACT_DIR/<run_id>_artifacts/` if `KAROTTE_ARTIFACT_DIR` is set
+    - `<run_id>_artifacts/` next to `config.transcript_file` if it is set
     - `/out/<run_id>_artifacts/` if containerized
     - `out/<run_id>_artifacts/` if not containerized
 
@@ -78,9 +79,11 @@ def local_artifact_dir() -> Path | None:
     return _created_target_dir
 
 
-def _artifact_base_dir() -> Path:
+def _artifact_base_dir(config: EvaluationRunConfig) -> Path:
     if override := os.environ.get(ARTIFACT_DIR_ENV_VAR):
         return Path(override)
+    if config.transcript_file:
+        return Path(config.transcript_file).parent
     return Path("/out") if is_containerized() else Path("out")
 
 
@@ -88,7 +91,7 @@ def _maybe_create_target_dir(config: EvaluationRunConfig) -> Path:
     global _created_target_dir
 
     if not _created_target_dir:
-        target_dir = _artifact_base_dir()
+        target_dir = _artifact_base_dir(config)
         target_dir = target_dir / f"{config.run_id}_artifacts"
         base_name = target_dir.name
 
