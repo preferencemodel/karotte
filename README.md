@@ -36,7 +36,7 @@ karotte create-env my_env
 cd my_env
 uv sync --extra dev
 uv run setup_data.py
-uv run karotte create-run-config --model claude-fable-5
+uv run karotte create-run-config --model anthropic/claude-fable-5
 export ANTHROPIC_API_KEY=...
 uv run karotte run --config run_config.json
 ```

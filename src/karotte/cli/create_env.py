@@ -74,7 +74,7 @@ def create_env(
     if (output_dir / "setup_data.py").is_file():
         steps.append("uv run setup_data.py")
     steps += [
-        "uv run karotte create-run-config --model claude-fable-5",
+        "uv run karotte create-run-config --model anthropic/claude-fable-5",
         "export ANTHROPIC_API_KEY=...",
         "uv run karotte run --config run_config.json",
     ]
