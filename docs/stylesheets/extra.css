@@ -1,0 +1,40 @@
+.md-grid {
+  max-width: 76rem;
+}
+
+.md-header__source {
+  order: 1;
+  width: auto;
+  max-width: none;
+  padding-right: 0.6rem;
+}
+
+[dir] .md-header__source {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.md-header__source .md-source__repository {
+  display: none;
+}
+
+.md-header .md-source__icon {
+  width: auto;
+}
+
+[dir] .md-header .md-source__icon svg {
+  width: 1rem;
+  height: 1rem;
+  margin: 0.7rem 0.4rem 0;
+}
+
+.md-header__inner > label[for="__search"],
+.md-header__inner > .md-search {
+  order: 2;
+}
+
+@media screen and (min-width: 45em) {
+  .md-typeset .grid.cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

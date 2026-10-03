@@ -88,7 +88,7 @@ class GetPythonVersionStep(Step):
                 "-m",
                 "environment.tasks.example_task.scoring_script",
                 str(self.saved_submissions[0]),
-                "/tmp/score_output.txt",
+                "score_output.txt",
             ]
         )
 
