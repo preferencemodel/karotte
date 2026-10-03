@@ -33,26 +33,16 @@ class TestCreateRunConfig:
         assert all(ids)
         assert ids[0] != ids[1]
 
-    def test_default_model_api_key_is_env_var_reference(self, tmp_path: Path):
-        """With no key provided, the file should contain $ANTHROPIC_API_KEY, not a real key."""
-        config_path = tmp_path / "config.json"
-
-        create_run_config(config_path=str(config_path))
-
-        config = json.loads(config_path.read_text())
-        assert config["model_api_key"] == "$ANTHROPIC_API_KEY"
-
-    def test_default_model_api_key_is_not_read_from_env(
+    def test_writes_no_key_by_default(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        """Even if ANTHROPIC_API_KEY is set in the environment, the file should store the reference."""
+        """The run reads it from the provider's key variable."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret-key")
         config_path = tmp_path / "config.json"
 
-        create_run_config(config_path=str(config_path))
+        create_run_config(config_path=str(config_path), model="openai/gpt-5.5")
 
-        config = json.loads(config_path.read_text())
-        assert config["model_api_key"] == "$ANTHROPIC_API_KEY"
+        assert json.loads(config_path.read_text())["model_api_key"] is None
         assert "sk-ant-secret-key" not in config_path.read_text()
 
     def test_explicit_model_api_key_is_written_as_is(self, tmp_path: Path):
@@ -71,64 +61,6 @@ class TestCreateRunConfig:
 
         config = json.loads(config_path.read_text())
         assert config["model_api_key"] == "$MY_CUSTOM_KEY"
-
-    @pytest.mark.parametrize(
-        ("model", "expected_key"),
-        [
-            ("claude-fable-5", "$ANTHROPIC_API_KEY"),
-            ("anthropic/claude-opus-4-5", "$ANTHROPIC_API_KEY"),
-            ("openai/gpt-5.5", "$OPENAI_API_KEY"),
-            ("gemini/gemini-3-pro-preview", "$GEMINI_API_KEY"),
-            ("mistral/mistral-medium-3.5", "$MISTRAL_API_KEY"),
-        ],
-    )
-    def test_default_model_api_key_follows_the_provider(
-        self, tmp_path: Path, model: str, expected_key: str
-    ):
-        config_path = tmp_path / "config.json"
-
-        create_run_config(config_path=str(config_path), model=model)
-
-        assert json.loads(config_path.read_text())["model_api_key"] == expected_key
-
-    def test_unknown_provider_falls_back_to_its_conventional_variable(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ):
-        config_path = tmp_path / "config.json"
-
-        create_run_config(config_path=str(config_path), model="xai/grok-4.3")
-
-        assert json.loads(config_path.read_text())["model_api_key"] == "$XAI_API_KEY"
-        assert "$XAI_API_KEY" in capsys.readouterr().out
-
-    def test_model_without_provider_falls_back_to_anthropic(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ):
-        config_path = tmp_path / "config.json"
-
-        create_run_config(config_path=str(config_path), model="some-model")
-
-        config = json.loads(config_path.read_text())
-        assert config["model_api_key"] == "$ANTHROPIC_API_KEY"
-        assert "$ANTHROPIC_API_KEY" in capsys.readouterr().out
-
-    def test_keyless_model_gets_no_default_key(self, tmp_path: Path):
-        config_path = tmp_path / "config.json"
-
-        create_run_config(
-            config_path=str(config_path), model="vertex_ai/gemini-3-pro-preview"
-        )
-
-        assert json.loads(config_path.read_text())["model_api_key"] is None
-
-    def test_explicit_key_overrides_the_provider_default(self, tmp_path: Path):
-        config_path = tmp_path / "config.json"
-
-        create_run_config(
-            config_path=str(config_path), model="openai/gpt-5.5", model_api_key="$X"
-        )
-
-        assert json.loads(config_path.read_text())["model_api_key"] == "$X"
 
     def test_default_model_is_set(self, tmp_path: Path):
         config_path = tmp_path / "config.json"

@@ -1,6 +1,6 @@
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ValidationInfo, model_validator
+from pydantic import BaseModel, model_validator
 
 from karotte.model_spec import (
     SPECIAL_TRAINING_MODEL_NAME,
@@ -29,8 +29,13 @@ class EvaluationRunConfig(BaseModel):
     models (``pt/`` prefix) and ``builtin`` otherwise; see ``resolved_agent``."""
     model: str
     model_api_key: str | None = None
-    """API key for the model. Not required for Vertex AI models."""
+    """API key for the model, or a ``$VAR`` reference to one. Read from the
+    provider's key variable when unset."""
+    rubric_judge_model: str | None = None
+    """Model a ``RubricJudge`` uses when its task doesn't name one. Defaults to
+    ``model``; see ``resolved_rubric_judge_model``."""
     rubric_judge_api_key: str | None = None
+    """Like ``model_api_key``, for ``rubric_judge_model``."""
     use_hints: bool = True
 
     reasoning_effort: ReasoningEffort | None = None
@@ -200,6 +205,16 @@ class EvaluationRunConfig(BaseModel):
         return "builtin"
 
     @property
+    def resolved_rubric_judge_model(self) -> str | None:
+        """``rubric_judge_model``, else the run's own model unless that is fake
+        or a training checkpoint, which can't judge."""
+        if self.rubric_judge_model is not None:
+            return self.rubric_judge_model
+        if self.use_fake_model or self.is_special_training_model:
+            return None
+        return self.model
+
+    @property
     def applied_reasoning_effort(self) -> str | None:
         """The effort this run actually sends, under the provider's own name.
 
@@ -226,19 +241,5 @@ class EvaluationRunConfig(BaseModel):
         if level not in levels:
             accepted = ", ".join(levels)
             msg = f"reasoning_effort={level!r} is not accepted by {self.model}; accepted: {accepted}"
-            raise ValueError(msg)
-        return self
-
-    @model_validator(mode="after")
-    def validate_api_key_required(self, info: ValidationInfo) -> Self:
-        """Validate that model_api_key is provided when needed.
-
-        A ``prepare_only`` validation context and ``use_fake_model`` skip the check:
-        neither calls the model, so no key is needed.
-        """
-        if self.use_fake_model or (info.context or {}).get("prepare_only"):
-            return self
-        if self.model_api_key is None and spec_for(self.model).requires_api_key:
-            msg = f"model_api_key is required for model {self.model}"
             raise ValueError(msg)
         return self

@@ -234,6 +234,10 @@ def provider_for(spec: ModelSpec) -> Provider:
     return _PROVIDERS.get(spec.provider, _FALLBACK_PROVIDER)
 
 
+PROXY_PLACEHOLDER_KEY = "model_api_key"
+"""Key sent through a proxy that needs none, since litellm refuses to send no key."""
+
+
 def proxy_api_base(provider: Provider) -> str | None:
     """The proxy's OpenAI-compatible endpoint when KAROTTE_PROXY_URL routes ``provider``."""
     proxy = os.environ.get("KAROTTE_PROXY_URL")

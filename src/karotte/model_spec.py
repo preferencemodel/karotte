@@ -28,6 +28,23 @@ PROVIDER_API_KEY_ENV: dict[str, str] = {
 }
 """Provider prefix to the env var that provider's CLI reads its API key from."""
 
+LITELLM_API_KEY_ENV: dict[str, str] = {
+    **PROVIDER_API_KEY_ENV,
+    "together_ai": "TOGETHERAI_API_KEY",
+}
+"""Provider prefix to the env var litellm reads its API key from."""
+
+
+def api_key_env_var(model: str) -> str | None:
+    """The env var holding ``model``'s API key, or ``None`` if it needs none.
+    Providers not in :data:`LITELLM_API_KEY_ENV` get ``<PROVIDER>_API_KEY``."""
+    spec = spec_for(model)
+    if not spec.requires_api_key:
+        return None
+    if env_var := LITELLM_API_KEY_ENV.get(spec.provider):
+        return env_var
+    return f"{spec.provider.upper()}_API_KEY" if spec.provider else "ANTHROPIC_API_KEY"
+
 
 class ModelSpec(BaseModel, frozen=True):
     """What karotte knows about one model."""

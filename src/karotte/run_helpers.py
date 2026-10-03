@@ -29,6 +29,7 @@ from karotte.container import demoted_uid_gid, is_containerized
 from karotte.forwarded_env import sandbox_env
 from karotte.hardware import container_run_args
 from karotte.load_tasks import load_task
+from karotte.model_spec import LITELLM_API_KEY_ENV, api_key_env_var, spec_for
 from karotte.runtime import get_engine
 from karotte.save_artifact import local_artifact_dir
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -48,15 +49,13 @@ if TYPE_CHECKING:
 def parse_config(config: str, prepare_only: bool = False) -> EvaluationRunConfig:
     """Parse an EvaluationRunConfig from a JSON string or file path.
 
-    When ``prepare_only`` is set, the model API key requirement is skipped: a
+    When ``prepare_only`` is set, a missing model API key is allowed: a
     prepared env is held for inspection and never calls the model.
     """
-    context = {"prepare_only": prepare_only}
     json_validation_error: pydantic.ValidationError | None = None
     try:
-        return _resolve_model_api_key(
-            EvaluationRunConfig.model_validate_json(config, context=context),
-            prepare_only,
+        return _resolve_api_keys(
+            EvaluationRunConfig.model_validate_json(config), prepare_only
         )
     except pydantic.ValidationError as e:
         json_validation_error = e
@@ -71,10 +70,8 @@ def parse_config(config: str, prepare_only: bool = False) -> EvaluationRunConfig
         _print_and_abort(error_msg)
 
     try:
-        return _resolve_model_api_key(
-            EvaluationRunConfig.model_validate_json(
-                Path(config).read_text(), context=context
-            ),
+        return _resolve_api_keys(
+            EvaluationRunConfig.model_validate_json(Path(config).read_text()),
             prepare_only,
         )
     except pydantic.ValidationError:
@@ -84,22 +81,75 @@ def parse_config(config: str, prepare_only: bool = False) -> EvaluationRunConfig
         )
 
 
-def _resolve_model_api_key(
-    run_config: EvaluationRunConfig, prepare_only: bool = False
+def key_env_var(key: str | None, model: str | None) -> str | None:
+    """The env var an API key is read from: its ``$VAR`` reference, or
+    ``model``'s key variable when the key is unset."""
+    if key is None:
+        return api_key_env_var(model) if model else None
+    return key[1:] if key.startswith("$") else None
+
+
+def _resolve_api_keys(
+    run_config: EvaluationRunConfig, prepare_only: bool
 ) -> EvaluationRunConfig:
-    """Resolve $ENV_VAR references in the config."""
-    if run_config.model_api_key and run_config.model_api_key.startswith("$"):
-        env_var = run_config.model_api_key[1:]
-        try:
-            value = os.environ[env_var]
-        except KeyError:
-            if run_config.use_fake_model or prepare_only:
-                return run_config
+    run_config = _resolve_model_api_key(run_config, prepare_only)
+    return _resolve_rubric_judge_api_key(run_config)
+
+
+def _resolve_model_api_key(
+    run_config: EvaluationRunConfig, prepare_only: bool
+) -> EvaluationRunConfig:
+    key = run_config.model_api_key
+    if key is None and run_config.use_fake_model:
+        return run_config
+    env_var = key_env_var(key, run_config.model)
+    if env_var is None:
+        return run_config
+    if key is None:
+        _warn_if_guessed(run_config.model, env_var, "model_api_key")
+    value = os.environ.get(env_var)
+    if value is None:
+        if run_config.use_fake_model or prepare_only:
+            return run_config
+        if key is None:
             _print_and_abort(
-                f"The run config references {env_var!r} as the model API key, but it's not set as an environment variable."
+                f"{env_var} is not set. karotte reads the API key for {run_config.model} from it; set it, or set model_api_key in the run config."
             )
-        return run_config.model_copy(update={"model_api_key": value})
-    return run_config
+        _print_and_abort(
+            f"The run config references {env_var!r} as the model API key, but it's not set as an environment variable."
+        )
+    return run_config.model_copy(update={"model_api_key": value})
+
+
+def _resolve_rubric_judge_api_key(
+    run_config: EvaluationRunConfig,
+) -> EvaluationRunConfig:
+    """The run's key when the judge falls back to the run's model, else like the
+    model key, but a missing key never aborts: most tasks have no rubric judge."""
+    key = run_config.rubric_judge_api_key
+    model = run_config.resolved_rubric_judge_model
+    if key is None and run_config.rubric_judge_model is None and model is not None:
+        return run_config.model_copy(
+            update={"rubric_judge_api_key": run_config.model_api_key}
+        )
+    env_var = key_env_var(key, model)
+    if env_var is None:
+        return run_config
+    if key is None and model is not None:
+        _warn_if_guessed(model, env_var, "rubric_judge_api_key")
+    value = os.environ.get(env_var)
+    if value is None and key is not None:
+        logger.warning(
+            f"The run config references {env_var!r} as the rubric judge API key, but it's not set."
+        )
+    return run_config.model_copy(update={"rubric_judge_api_key": value})
+
+
+def _warn_if_guessed(model: str, env_var: str, field: str) -> None:
+    if spec_for(model).provider not in LITELLM_API_KEY_ENV:
+        logger.warning(
+            f"No known API key variable for {model!r}; using {env_var}. Set {field} in the run config to change it."
+        )
 
 
 def build_configs(run_config: EvaluationRunConfig, n: int) -> list[EvaluationRunConfig]:

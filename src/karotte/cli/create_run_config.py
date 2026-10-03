@@ -6,7 +6,6 @@ import rich
 import typer
 
 from karotte.load_tasks import load_all_task_classes, require_environment
-from karotte.model_spec import PROVIDER_API_KEY_ENV, spec_for
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.http_mcp_server_config import HttpMcpServerConfig
 
@@ -20,7 +19,7 @@ def create_run_config(
     model_api_key: Annotated[
         str | None,
         typer.Option(
-            help="Model API key. Defaults to a reference to the model provider's key variable, e.g. `$OPENAI_API_KEY`, which karotte reads from the environment at run time.",
+            help="Model API key, or a `$VAR` reference to one. Without it, karotte reads the key from the model provider's key variable, e.g. `OPENAI_API_KEY`, when the run starts.",
         ),
     ] = None,
     task: Annotated[
@@ -29,9 +28,6 @@ def create_run_config(
     ] = None,
 ) -> None:
     """Create a default evaluation run configuration."""
-
-    if model_api_key is None:
-        model_api_key = _default_model_api_key(model)
 
     require_environment()
     task_classes = load_all_task_classes()
@@ -64,19 +60,3 @@ def create_run_config(
     config_path_.write_text(config.model_dump_json(indent=2))
 
     rich.print(f"[bold blue]Run config written to {config_path_}[/bold blue]")
-
-
-def _default_model_api_key(model: str) -> str | None:
-    """A `$VAR` reference to the key variable of ``model``'s provider."""
-    spec = spec_for(model)
-    if not spec.requires_api_key:
-        return None
-    if env_var := PROVIDER_API_KEY_ENV.get(spec.provider):
-        return f"${env_var}"
-    env_var = (
-        f"{spec.provider.upper()}_API_KEY" if spec.provider else "ANTHROPIC_API_KEY"
-    )
-    rich.print(
-        f"[yellow]No known API key variable for {model!r}; using ${env_var}. Pass --model-api-key to change it.[/yellow]"
-    )
-    return f"${env_var}"

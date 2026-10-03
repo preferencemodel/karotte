@@ -26,13 +26,12 @@ from litellm.types.utils import (
 from litellm.types.utils import Delta as LiteLlmDelta
 from litellm.types.utils import Function as LiteLlmFunction
 from litellm.utils import get_optional_params
-from pydantic import ValidationError
 
 from karotte.agents.builtin_source import BuiltinSource
 from karotte.agents.models import resolve_model
 from karotte.judges.rubric_judge import RubricJudge
 from karotte.model_catalog import CATALOG_MODEL_IDS
-from karotte.model_spec import ReasoningEffort
+from karotte.model_spec import ReasoningEffort, spec_for
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import MessageAddedEvent
@@ -423,11 +422,7 @@ def test_golden_rubric_judge_request_by_model(
 
 
 def _api_key_required(model: str) -> bool:
-    try:
-        EvaluationRunConfig(run_id="golden-run", task_id="golden-task", model=model)
-    except ValidationError:
-        return True
-    return False
+    return spec_for(model).requires_api_key
 
 
 def test_golden_run_config_model_policy(assert_matches_golden: Golden):

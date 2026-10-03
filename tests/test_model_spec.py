@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from karotte.model_catalog import CATALOG_MODEL_IDS
-from karotte.model_spec import ReasoningEffort, spec_for
+from karotte.model_spec import ReasoningEffort, api_key_env_var, spec_for
 from karotte.providers import (
     AnthropicProvider,
     OpenAIProvider,
@@ -364,6 +364,23 @@ class TestApiKeyPolicy:
     )
     def test_requires_api_key(self, model: str, expected: bool):
         assert spec_for(model).requires_api_key == expected
+
+    @pytest.mark.parametrize(
+        ("model", "expected"),
+        [
+            ("claude-fable-5", "ANTHROPIC_API_KEY"),
+            ("anthropic/claude-opus-4-5", "ANTHROPIC_API_KEY"),
+            ("openai/gpt-5.5", "OPENAI_API_KEY"),
+            ("gemini/gemini-3-pro-preview", "GEMINI_API_KEY"),
+            ("mistral/mistral-medium-3.5", "MISTRAL_API_KEY"),
+            ("xai/grok-4.3", "XAI_API_KEY"),
+            ("together_ai/moonshotai/Kimi-K3", "TOGETHERAI_API_KEY"),
+            ("some-model", "ANTHROPIC_API_KEY"),
+            ("vertex_ai/gemini-3-pro-preview", None),
+        ],
+    )
+    def test_api_key_env_var(self, model: str, expected: str | None):
+        assert api_key_env_var(model) == expected
 
 
 def test_unknown_model_gets_safe_defaults():
