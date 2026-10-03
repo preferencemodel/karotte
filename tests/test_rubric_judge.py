@@ -7,6 +7,7 @@ from typing import Any, override
 from unittest.mock import MagicMock, patch
 
 import litellm
+import litellm.exceptions
 import pytest
 
 from karotte.judges.rubric_context import (
@@ -14,7 +15,7 @@ from karotte.judges.rubric_context import (
     FileContext,
     TranscriptContext,
 )
-from karotte.judges.rubric_judge import RubricJudge
+from karotte.judges.rubric_judge import RubricJudge, RubricJudgeError
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
@@ -49,13 +50,15 @@ def mock_completion() -> Iterator[MagicMock]:
         yield completion
 
 
-def test_default_model_is_fable() -> None:
-    judge = RubricJudge(
-        rubric=[{"criterion": "test", "weight": 1.0}],
-        api_key="test-key",
-    )
+def test_without_a_model_evaluate_fails(
+    transcript: Transcript, mock_completion: MagicMock
+) -> None:
+    judge = RubricJudge(rubric=[{"criterion": "c", "weight": 1.0}])
+    transcript.events.append(AnswersSubmittedEvent(answers={"response": "Hello"}))
 
-    assert judge.model == "claude-fable-5"
+    with pytest.raises(ValueError, match="rubric_judge_model"):
+        judge.evaluate(transcript)
+    mock_completion.assert_not_called()
 
 
 def test_default_model_can_be_set_on_the_class() -> None:
@@ -66,16 +69,41 @@ def test_default_model_can_be_set_on_the_class() -> None:
 
 
 def test_api_key_precedence() -> None:
+    RubricJudge.default_model = "claude-fable-5"
     RubricJudge.default_api_key = "default-key"
 
     assert RubricJudge(rubric=[], api_key="explicit").api_key == "explicit"
     assert RubricJudge(rubric=[]).api_key == "default-key"
 
 
+def test_the_default_key_only_goes_to_the_default_models_provider() -> None:
+    RubricJudge.default_model = "claude-fable-5"
+    RubricJudge.default_api_key = "sk-ant"
+
+    assert RubricJudge(rubric=[], model="claude-sonnet-5").api_key == "sk-ant"
+    assert RubricJudge(rubric=[], model="openai/gpt-5.5").api_key is None
+
+
+def test_the_default_key_follows_the_default_model() -> None:
+    RubricJudge.default_model = "openai/gpt-5.5"
+    RubricJudge.default_api_key = "sk-openai"
+
+    assert RubricJudge(rubric=[]).api_key == "sk-openai"
+    assert RubricJudge(rubric=[], model="claude-sonnet-5").api_key is None
+
+
+def test_without_a_default_model_the_default_key_is_unused() -> None:
+    RubricJudge.default_api_key = "sk-ant"
+
+    assert RubricJudge(rubric=[], model="claude-sonnet-5").api_key is None
+
+
 def test_no_api_key_leaves_it_to_litellm(
     transcript: Transcript, mock_completion: MagicMock
 ) -> None:
-    judge = RubricJudge(rubric=[{"criterion": "c", "weight": 1.0}])
+    judge = RubricJudge(
+        rubric=[{"criterion": "c", "weight": 1.0}], model="claude-sonnet-5"
+    )
 
     transcript.events.append(AnswersSubmittedEvent(answers={"response": "Hello"}))
     judge.evaluate(transcript)
@@ -393,19 +421,117 @@ def test_evaluate_criterion_with_reasoning(
     assert scoring.continue_task is True
 
 
-def test_empty_reply_counts_as_not_met(
+def _judge(model: str = "claude-sonnet-5", **kwargs: Any) -> RubricJudge:
+    return RubricJudge(
+        rubric=[{"criterion": "c", "weight": 1.0}], model=model, **kwargs
+    )
+
+
+def _answered(transcript: Transcript) -> Transcript:
+    transcript.events.append(AnswersSubmittedEvent(answers={"response": "Hello"}))
+    return transcript
+
+
+def test_an_empty_reply_fails_the_evaluation(
     transcript: Transcript, mock_completion: MagicMock
 ) -> None:
     mock_completion.return_value = _response(None)
-    judge = RubricJudge(rubric=[{"criterion": "c", "weight": 1.0}])
 
-    transcript.events.append(AnswersSubmittedEvent(answers={"response": "Hello"}))
-    scoring = judge.evaluate(transcript)
+    with pytest.raises(RubricJudgeError, match="no text"):
+        _judge().evaluate(_answered(transcript))
 
-    assert scoring.score == 0.0
-    assert "no text" in next(
-        v for k, v in scoring.metadata.items() if k.startswith("criterion_0")
+
+def test_a_failed_call_fails_the_evaluation(
+    transcript: Transcript, mock_completion: MagicMock
+) -> None:
+    mock_completion.side_effect = litellm.exceptions.BadRequestError(
+        "bad", model="claude-sonnet-5", llm_provider="anthropic"
     )
+
+    with pytest.raises(litellm.exceptions.BadRequestError):
+        _judge().evaluate(_answered(transcript))
+    assert mock_completion.call_count == 1
+
+
+def test_a_temporary_error_is_retried(
+    transcript: Transcript, mock_completion: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr("karotte.judges.rubric_judge.time.sleep", sleeps.append)
+    mock_completion.side_effect = [
+        litellm.exceptions.RateLimitError(
+            "slow down", llm_provider="anthropic", model="claude-sonnet-5"
+        ),
+        _response("YES\nfine"),
+    ]
+
+    scoring = _judge().evaluate(_answered(transcript))
+
+    assert scoring.score == 1.0
+    assert len(sleeps) == 1
+
+
+def test_the_judge_has_room_to_reason(
+    transcript: Transcript, mock_completion: MagicMock
+) -> None:
+    _judge().evaluate(_answered(transcript))
+
+    assert mock_completion.call_args.kwargs["max_tokens"] == 32_000
+
+
+class TestProxyKey:
+    @pytest.fixture(autouse=True)
+    def _proxy(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "https://proxy.example/")
+        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "TOGETHERAI_API_KEY"):
+            monkeypatch.delenv(var, raising=False)
+
+    @pytest.mark.parametrize(
+        "model", ["claude-sonnet-5", "openai/gpt-5.5", "together_ai/zai-org/GLM-5.2"]
+    )
+    def test_a_missing_key_gets_a_placeholder(
+        self, transcript: Transcript, mock_completion: MagicMock, model: str
+    ) -> None:
+        _judge(model).evaluate(_answered(transcript))
+
+        assert mock_completion.call_args.kwargs["api_key"] == "model_api_key"
+
+    def test_a_key_in_the_environment_is_left_to_litellm(
+        self,
+        transcript: Transcript,
+        mock_completion: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TOGETHERAI_API_KEY", "sk-together")
+
+        _judge("together_ai/zai-org/GLM-5.2").evaluate(_answered(transcript))
+
+        assert mock_completion.call_args.kwargs["api_key"] is None
+
+    def test_an_explicit_key_wins(
+        self, transcript: Transcript, mock_completion: MagicMock
+    ) -> None:
+        _judge(api_key="sk-mine").evaluate(_answered(transcript))
+
+        assert mock_completion.call_args.kwargs["api_key"] == "sk-mine"
+
+    def test_a_keyless_model_gets_none(
+        self, transcript: Transcript, mock_completion: MagicMock
+    ) -> None:
+        _judge("vertex_ai/gemini-3-pro-preview").evaluate(_answered(transcript))
+
+        assert mock_completion.call_args.kwargs["api_key"] is None
+
+
+def test_without_a_proxy_a_missing_key_is_left_to_litellm(
+    transcript: Transcript, mock_completion: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    _judge().evaluate(_answered(transcript))
+
+    assert mock_completion.call_args.kwargs["api_key"] is None
 
 
 def test_evaluate_multiple_criteria(
@@ -698,7 +824,9 @@ def test_render_context_joins_providers(transcript: Transcript) -> None:
 def test_criterion_prompt_is_what_the_model_receives(
     transcript: Transcript, mock_completion: MagicMock
 ) -> None:
-    judge = RubricJudge(rubric=[{"criterion": "Is it polite?", "weight": 1.0}])
+    judge = RubricJudge(
+        rubric=[{"criterion": "Is it polite?", "weight": 1.0}], model="claude-sonnet-5"
+    )
     transcript.events.append(AnswersSubmittedEvent(answers={"response": "Hello"}))
 
     judge.evaluate(transcript)

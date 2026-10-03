@@ -10,6 +10,7 @@ from typing import Annotated, Never, get_args
 import anyio
 import typer
 from loguru import logger
+from pydantic import ValidationError
 
 from karotte import Runtime, staged_mounts
 from karotte.build import build_container, require_buildx, require_runtime
@@ -18,6 +19,7 @@ from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
 from karotte.hardware import container_run_args, default_runtime
 from karotte.judges import RubricJudge
 from karotte.load_tasks import load_task, require_environment
+from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.run_config_preprocessors import apply_run_config_preprocessors
 from karotte.run_helpers import (
     build_configs,
@@ -25,6 +27,7 @@ from karotte.run_helpers import (
     clean_up_old_containers,
     copy_hint,
     harden_filesystem,
+    key_env_var,
     parse_config,
     run_containerized,
     sanitize_paths_and_reexec,
@@ -48,17 +51,27 @@ def default_proxy_url() -> str | None:
     return None
 
 
-def _referenced_key_env(config: str) -> str | None:
-    """The env var a JSON config or config file names as its `$VAR` model API key."""
+def _key_env_vars(config: str) -> list[str]:
+    """The env vars a JSON config or config file reads its model and rubric
+    judge API keys from."""
     try:
         data = json.loads(config)
     except ValueError:
         try:
             data = json.loads(Path(config).read_text())
         except (OSError, ValueError):
-            return None
-    key = data.get("model_api_key") if isinstance(data, dict) else None
-    return key[1:] if isinstance(key, str) and key.startswith("$") else None
+            return []
+    try:
+        run_config = EvaluationRunConfig.model_validate(data)
+    except ValidationError:
+        return []
+    env_vars = [
+        key_env_var(run_config.model_api_key, run_config.model),
+        key_env_var(
+            run_config.rubric_judge_api_key, run_config.resolved_rubric_judge_model
+        ),
+    ]
+    return [env_var for env_var in env_vars if env_var]
 
 
 def _export_proxy(proxy_url: str) -> None:
@@ -221,10 +234,9 @@ def run(
         )
 
     if proxy_url:
-        # The rubric judge reads ANTHROPIC_API_KEY itself, so it gets one too.
-        for env_var in ("ANTHROPIC_API_KEY", _referenced_key_env(config)):
-            if env_var and not os.environ.get(env_var):
-                os.environ[env_var] = "model_api_key"
+        for env_var in _key_env_vars(config):
+            if not os.environ.get(env_var):
+                os.environ[env_var] = PROXY_PLACEHOLDER_KEY
 
     require_environment()
     # An explicit runtime is checked before anything else; the default needs
@@ -266,6 +278,8 @@ def run(
 
         validate_firecracker_runtime(load_task(run_config).required_hardware, mount)
 
+    if run_config.resolved_rubric_judge_model is not None:
+        RubricJudge.default_model = run_config.resolved_rubric_judge_model
     if run_config.rubric_judge_api_key is not None:
         RubricJudge.default_api_key = run_config.rubric_judge_api_key
 

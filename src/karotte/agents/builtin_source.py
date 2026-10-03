@@ -169,6 +169,14 @@ def _retry_wait(attempt: int, retry_after: float | None = None) -> float:
     )
 
 
+def llm_retry_wait(attempt: int, exc: Exception) -> float | None:
+    """Seconds to wait before retrying a call that failed with ``exc`` on try
+    ``attempt`` (1-based), or ``None`` to give up."""
+    if attempt >= _retry_limit(exc):
+        return None
+    return _retry_wait(attempt, _retry_after(exc))
+
+
 def _tap_traffic_types(stream: CustomStreamWrapper) -> list[str]:
     """Collect Gemini's ``usageMetadata.trafficType``, which litellm drops from the
     chunks it yields but sets on the provider chunks it builds them from."""

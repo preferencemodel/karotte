@@ -36,15 +36,14 @@ def test_vertex_ai_model_does_not_require_api_key():
     assert config.model == "vertex_ai/gemini-3-pro-preview"
 
 
-def test_non_vertex_ai_model_requires_api_key():
-    """Non-Vertex AI models should raise error without model_api_key."""
-    with pytest.raises(ValidationError) as exc_info:
-        EvaluationRunConfig(
-            run_id="test_run",
-            task_id="test_task",
-            model="claude-sonnet-4-5-20250929",
-        )
-    assert "model_api_key is required" in str(exc_info.value)
+def test_a_missing_api_key_is_left_to_the_run():
+    """The run fills it in from the provider's key variable."""
+    config = EvaluationRunConfig(
+        run_id="test_run",
+        task_id="test_task",
+        model="claude-sonnet-4-5-20250929",
+    )
+    assert config.model_api_key is None
 
 
 def test_non_vertex_ai_model_with_api_key_succeeds():
@@ -364,3 +363,21 @@ def test_unknown_fields_are_ignored():
         }
     )
     assert "some_unknown_field" not in config.model_dump()
+
+
+@pytest.mark.parametrize(
+    ("fields", "expected"),
+    [
+        (
+            {"model": "openai/gpt-5.5", "rubric_judge_model": "claude-opus-5"},
+            "claude-opus-5",
+        ),
+        ({"model": "openai/gpt-5.5"}, "openai/gpt-5.5"),
+        ({"model": "openai/gpt-5.5", "use_fake_model": True}, None),
+        ({"model": "pt/checkpoint"}, None),
+    ],
+)
+def test_resolved_rubric_judge_model(fields: dict[str, Any], expected: str | None):
+    config = EvaluationRunConfig(run_id="r", task_id="t", **fields)
+
+    assert config.resolved_rubric_judge_model == expected

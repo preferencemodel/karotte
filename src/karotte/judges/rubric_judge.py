@@ -1,12 +1,23 @@
+import os
+import time
 from textwrap import dedent
 from typing import Any, Final, TypedDict, cast, override
 
+from loguru import logger
+
 from karotte.judges.judge import Judge
 from karotte.judges.rubric_context import AnswersContext, RubricContext
-from karotte.model_spec import spec_for
-from karotte.providers import provider_for, proxy_api_base
+from karotte.model_spec import ModelSpec, spec_for
+from karotte.providers import PROXY_PLACEHOLDER_KEY, provider_for, proxy_api_base
 from karotte.schemas.scoring import Metadata, Scoring
 from karotte.schemas.transcript import Transcript
+
+_MAX_TOKENS = 32_000
+"""Room for reasoning models to think before they answer."""
+
+
+class RubricJudgeError(Exception):
+    """The judge model gave no verdict."""
 
 
 class RubricCriterion(TypedDict):
@@ -28,9 +39,11 @@ class RubricJudge(Judge):
     Args:
         rubric: List of criteria, each with a "criterion" (str) and "weight" (float/str)
         model: Model id, e.g. "claude-sonnet-5" or any litellm model name.
-            Defaults to `RubricJudge.default_model`, then Fable 5.
-        api_key: API key for the model. Defaults to `RubricJudge.default_api_key`,
-            then to litellm reading the provider's env var (e.g. ANTHROPIC_API_KEY).
+            Defaults to `RubricJudge.default_model`; `evaluate` raises without one.
+        api_key: API key for the model. Defaults to `RubricJudge.default_api_key`
+            when the model has the default model's provider, else to litellm
+            reading the provider's env var (e.g. OPENAI_API_KEY), else to a
+            placeholder when a proxy is in use.
         context: List of context providers that determine what the LLM sees.
                  Defaults to [AnswersContext()].
         continue_threshold: Score threshold for continuing the task. Defaults to 0.0.
@@ -50,8 +63,15 @@ class RubricJudge(Judge):
         temperature: float = 0.3,
     ) -> None:
         self.rubric: Final = rubric
-        self.model: Final = model or RubricJudge.default_model or "claude-fable-5"
-        self.api_key: Final = api_key or RubricJudge.default_api_key
+        default_model = RubricJudge.default_model
+        self.model: Final = model or default_model
+        same_provider = default_model is not None and (
+            spec_for(model or default_model).provider
+            == spec_for(default_model).provider
+        )
+        self.api_key: Final = api_key or (
+            RubricJudge.default_api_key if same_provider else None
+        )
         self.context: Final[list[RubricContext]] = context or [AnswersContext()]
         self.continue_threshold: Final = continue_threshold
         self.temperature: Final = temperature
@@ -66,6 +86,7 @@ class RubricJudge(Judge):
 
     @override
     def evaluate(self, transcript: Transcript) -> Scoring:
+        _ = self._require_model()
         context_text = self.render_context(transcript)
 
         if not context_text:
@@ -104,6 +125,13 @@ class RubricJudge(Judge):
             continue_task=total_score > self.continue_threshold,
         )
 
+    def _require_model(self) -> str:
+        if self.model is None:
+            raise ValueError(
+                "RubricJudge has no model: pass model=, or set rubric_judge_model in the run config."
+            )
+        return self.model
+
     def _evaluate_criterion(self, context: str, criterion: str) -> tuple[bool, str]:
         """Evaluate a single criterion using the LLM.
 
@@ -113,12 +141,12 @@ class RubricJudge(Judge):
         """
         prompt = self.criterion_prompt(context, criterion)
 
-        spec = spec_for(self.model)
+        spec = spec_for(self._require_model())
         params: dict[str, Any] = {
             "model": spec.litellm_model,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 200,
-            "api_key": self.api_key,
+            "max_tokens": _MAX_TOKENS,
+            "api_key": self._api_key(spec),
         }
         if api_base := proxy_api_base(provider_for(spec)):
             params["api_base"] = api_base
@@ -127,17 +155,27 @@ class RubricJudge(Judge):
 
         import litellm
 
-        try:
-            response = cast(litellm.ModelResponse, litellm.completion(**params))
-            content = response.choices[0].message.content
-            if not content:
-                return False, "LLM returned no text"
+        response = cast(litellm.ModelResponse, _completion_with_retries(params))
+        choice = response.choices[0]
+        content = choice.message.content
+        if not content:
+            raise RubricJudgeError(
+                f"{self.model} returned no text (finish_reason={choice.finish_reason!r})"
+            )
+        return self.parse_reply(content)
 
-            return self.parse_reply(content)
+    def _api_key(self, spec: ModelSpec) -> str | None:
+        """``api_key``, else a placeholder when a proxy is in use and litellm
+        would find no key in the environment."""
+        if self.api_key or not spec.requires_api_key:
+            return self.api_key
+        if not os.environ.get("KAROTTE_PROXY_URL"):
+            return None
+        import litellm
 
-        except Exception as e:
-            error_msg = f"Error evaluating criterion: {str(e)}"
-            return False, error_msg
+        if litellm.validate_environment(spec.litellm_model)["keys_in_environment"]:
+            return None
+        return PROXY_PLACEHOLDER_KEY
 
     @staticmethod
     def criterion_prompt(context: str, criterion: str) -> str:
@@ -171,3 +209,25 @@ class RubricJudge(Judge):
         decision = lines[0].strip().upper()
         reasoning = lines[1].strip() if len(lines) > 1 else "No explanation provided"
         return decision.startswith("YES"), reasoning
+
+
+def _completion_with_retries(params: dict[str, Any]) -> Any:
+    import litellm
+
+    from karotte.agents.builtin_source import llm_retry_wait
+
+    attempt = 1
+    while True:
+        try:
+            return litellm.completion(**params)
+        except Exception as e:
+            wait = llm_retry_wait(attempt, e)
+            if wait is None:
+                raise
+            logger.warning(
+                "Rubric judge call failed: {cause}; retrying after {wait:.1f}s...",
+                cause=type(e).__name__,
+                wait=wait,
+            )
+            time.sleep(wait)
+            attempt += 1

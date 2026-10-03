@@ -4,6 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -349,7 +350,13 @@ class TestDefaultProxyUrl:
 
 @pytest.mark.usefixtures("in_karotte_image")
 class TestProxyApiKeyFallback:
-    """When a proxy is in use and ANTHROPIC_API_KEY is missing, a dummy key should be injected."""
+    """With a proxy, an unset variable the config reads its key from gets a placeholder."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_keys(self, monkeypatch: pytest.MonkeyPatch):
+        for var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+            monkeypatch.setenv(var, "")
+            monkeypatch.delenv(var)
 
     def _run_with_proxy(
         self, *, proxy: str | None = "https://proxy.example", no_proxy: bool = False
@@ -358,8 +365,7 @@ class TestProxyApiKeyFallback:
         run_config = EvaluationRunConfig(
             run_id="test",
             task_id="example-task",
-            model="vertex_ai/gemini",
-            model_api_key=None,
+            model="openai/gpt-5.5",
             mcp_server_config=HttpMcpServerConfig(),
         )
         mock_task = MagicMock()
@@ -372,47 +378,50 @@ class TestProxyApiKeyFallback:
             ),
             patch("karotte.cli.run.anyio", run=MagicMock(return_value=None)),
         ):
-            run(config="{}", containerized=False, proxy=proxy, no_proxy=no_proxy)
+            run(
+                config=run_config.model_dump_json(),
+                containerized=False,
+                proxy=proxy,
+                no_proxy=no_proxy,
+            )
 
-    def test_proxy_sets_dummy_env_var_when_not_set(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    def test_proxy_sets_a_placeholder_when_unset(self):
+        self._run_with_proxy()
+
+        assert os.environ["OPENAI_API_KEY"] == "model_api_key"
+
+    def test_proxy_preserves_a_set_variable(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-real")
 
         self._run_with_proxy()
 
-        assert os.environ["ANTHROPIC_API_KEY"] == "model_api_key"
+        assert os.environ["OPENAI_API_KEY"] == "sk-real"
 
-    def test_proxy_preserves_existing_env_var(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-real-key")
-
+    def test_proxy_leaves_other_providers_variables_alone(self):
         self._run_with_proxy()
 
-        assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-real-key"
+        assert "ANTHROPIC_API_KEY" not in os.environ
 
-    def test_no_proxy_does_not_set_env_var(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    def test_no_proxy_does_not_set_the_variable(self, monkeypatch: pytest.MonkeyPatch):
         _register_proxies(monkeypatch, internal="https://proxy.example")
 
         self._run_with_proxy(no_proxy=True)
 
-        assert "ANTHROPIC_API_KEY" not in os.environ
+        assert "OPENAI_API_KEY" not in os.environ
 
     def test_no_proxy_by_default(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         _register_proxies(monkeypatch)
 
         self._run_with_proxy(proxy=None)
 
-        assert "ANTHROPIC_API_KEY" not in os.environ
+        assert "OPENAI_API_KEY" not in os.environ
 
     def test_a_plugin_proxy_is_the_default(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         _register_proxies(monkeypatch, internal="https://proxy.example")
 
         self._run_with_proxy(proxy=None)
 
-        assert os.environ["ANTHROPIC_API_KEY"] == "model_api_key"
+        assert os.environ["OPENAI_API_KEY"] == "model_api_key"
 
 
 @pytest.mark.usefixtures("in_karotte_image")
@@ -431,17 +440,19 @@ class TestProxyPlaceholderForReferencedKey:
             run(config=config, containerized=False, proxy=proxy, no_proxy=not proxy)
         return mock_anyio
 
-    def _config(self, key: str) -> str:
+    def _config(self, key: str | None, **fields: Any) -> str:
         return EvaluationRunConfig(
             run_id="test",
             task_id="example-task",
             model="openai/gpt-5.5",
             model_api_key=key,
+            **fields,
         ).model_dump_json()
 
     @pytest.fixture(autouse=True)
-    def _restore_openai_key(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("OPENAI_API_KEY", "")
+    def _restore_keys(self, monkeypatch: pytest.MonkeyPatch):
+        for var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "MY_RUBRIC_KEY"):
+            monkeypatch.setenv(var, "")
 
     def test_fills_in_the_referenced_variable(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -468,6 +479,33 @@ class TestProxyPlaceholderForReferencedKey:
         mock_anyio = self._run(str(config_file), "https://proxy.example")
 
         assert mock_anyio.run.call_args.args[1].model_api_key == "model_api_key"
+
+    def test_fills_in_the_models_variable_when_the_config_has_no_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+        mock_anyio = self._run(self._config(None), "https://proxy.example")
+
+        assert mock_anyio.run.call_args.args[1].model_api_key == "model_api_key"
+
+    def test_fills_in_the_rubric_judge_reference(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("MY_RUBRIC_KEY", raising=False)
+        config = self._config("sk-real", rubric_judge_api_key="$MY_RUBRIC_KEY")
+
+        mock_anyio = self._run(config, "https://proxy.example")
+
+        assert mock_anyio.run.call_args.args[1].rubric_judge_api_key == "model_api_key"
+
+    def test_fills_in_the_rubric_judge_models_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        config = self._config("sk-real", rubric_judge_model="openai/gpt-5.5")
+
+        mock_anyio = self._run(config, "https://proxy.example")
+
+        assert mock_anyio.run.call_args.args[1].rubric_judge_api_key == "model_api_key"
 
     def test_without_a_proxy_an_unset_variable_still_aborts(
         self, monkeypatch: pytest.MonkeyPatch
@@ -607,6 +645,40 @@ def test_run_uses_the_preprocessed_config(monkeypatch: pytest.MonkeyPatch):
 
     preprocess.assert_called_once_with(parsed)
     assert RubricJudge.default_api_key == "from-preprocessor"
+
+
+@pytest.mark.usefixtures("in_karotte_image")
+@pytest.mark.parametrize(
+    ("rubric_judge_model", "expected"),
+    [("openai/gpt-5.5", "openai/gpt-5.5"), (None, "claude-sonnet-5")],
+)
+def test_the_judges_default_model_comes_from_the_config(
+    monkeypatch: pytest.MonkeyPatch, rubric_judge_model: str | None, expected: str
+):
+    from karotte.judges.rubric_judge import RubricJudge
+
+    monkeypatch.setattr(RubricJudge, "default_model", None)
+    parsed = EvaluationRunConfig(
+        run_id="r",
+        task_id="t",
+        model="claude-sonnet-5",
+        model_api_key="k",
+        rubric_judge_model=rubric_judge_model,
+    )
+    with (
+        patch("karotte.cli.run.parse_config", return_value=parsed),
+        patch("karotte.cli.run.load_task", return_value=MagicMock()),
+        patch(
+            "karotte.mcp_servers.http_mcp_server.run_server",
+            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
+        ),
+        patch("karotte.cli.run.anyio", run=MagicMock(return_value=None)),
+        patch("karotte.cli.run.build_configs", return_value=[parsed]),
+        patch("karotte.cli.run._run_without_ui"),
+    ):
+        run(config="{}", containerized=False, no_ui=True)
+
+    assert RubricJudge.default_model == expected
 
 
 class TestSanitizePathsTiming:

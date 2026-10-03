@@ -52,9 +52,15 @@ tool and fails if one doesn't load; the image build runs it too.
 `out/<run_id>_artifacts/`. `karotte dashboard out/` shows the transcripts in `out/`.
 `karotte models list` shows which models karotte knows; model ids are passed to
 [litellm](https://docs.litellm.ai/). The API key is `model_api_key` in the run
-config. `create-run-config` sets it to the key variable of the model's
-provider, such as `$ANTHROPIC_API_KEY` or `$OPENAI_API_KEY`, which karotte reads
-from your environment when the run starts. `--model-api-key` sets another.
+config. Without one, karotte reads it from the key variable of the model's
+provider, such as `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, when the run starts.
+`--model-api-key` sets a key, or a `$VAR` that names another variable. A
+`RubricJudge` whose task names no model uses `rubric_judge_model`, by default
+the run's own model and key. A set `rubric_judge_model` reads its key,
+`rubric_judge_api_key`, the same way the run's model does, but a missing one
+doesn't stop the run from starting. A judge that gets no verdict from its model
+fails the run instead of scoring 0. With the fake model or a `pt/` model, set
+`rubric_judge_model` or name a model in the task.
 
 Useful while you work on a task:
 
@@ -94,9 +100,8 @@ in its own process instead, unless one of them is already set.
 `--no-containerized` only runs inside a karotte container image, where
 `KAROTTE_CONTAINERIZED` is set.
 
-A key is needed only if the endpoint asks for one. karotte still sends
-`model_api_key`; if that names a variable such as `$OPENAI_API_KEY` that is
-unset, `--proxy` fills in a placeholder.
+A key is needed only if the endpoint asks for one. karotte still sends one; if
+the variable it reads the key from is unset, `--proxy` fills in a placeholder.
 
 Without `--proxy`, karotte uses the URL a plugin registers under
 `karotte.default_proxy_url` (see [Plugins](#plugins)). Without such a plugin,

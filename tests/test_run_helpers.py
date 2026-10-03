@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
+from loguru import logger
 
 from karotte import run_helpers
 from karotte.cli.run import (
@@ -35,6 +36,217 @@ from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import ErrorEvent, TaskCompletedEvent
 from karotte.task import Task
 from tests.conftest import register_hardware_plugins
+
+
+def _config_json(**fields: Any) -> str:
+    return json.dumps({"run_id": "test-run", "task_id": "test-task", **fields})
+
+
+def _warnings() -> tuple[list[str], int]:
+    messages: list[str] = []
+    return messages, logger.add(
+        lambda m: messages.append(m.record["message"]), level="WARNING"
+    )
+
+
+class TestApiKeyResolution:
+    @pytest.fixture(autouse=True)
+    def _no_keys(self, monkeypatch: pytest.MonkeyPatch):
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "XAI_API_KEY",
+            "TOGETHERAI_API_KEY",
+            "MY_KEY",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+    def test_a_missing_key_is_read_from_the_providers_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+
+        config = parse_config(_config_json(model="openai/gpt-5.5"))
+
+        assert config.model_api_key == "sk-openai"
+
+    def test_a_missing_key_with_its_variable_unset_aborts(
+        self, capsys: pytest.CaptureFixture[str]
+    ):
+        with pytest.raises(typer.Abort):
+            parse_config(_config_json(model="openai/gpt-5.5"))
+
+        assert "OPENAI_API_KEY" in capsys.readouterr().err
+
+    def test_a_guessed_variable_is_named_in_a_warning(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("XAI_API_KEY", "sk-xai")
+        messages, handler = _warnings()
+        try:
+            config = parse_config(_config_json(model="xai/grok-4.3"))
+        finally:
+            logger.remove(handler)
+
+        assert config.model_api_key == "sk-xai"
+        assert any("XAI_API_KEY" in m for m in messages)
+
+    def test_a_known_litellm_variable_is_not_called_a_guess(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("TOGETHERAI_API_KEY", "sk-together")
+        messages, handler = _warnings()
+        try:
+            config = parse_config(_config_json(model="together_ai/zai-org/GLM-5.2"))
+        finally:
+            logger.remove(handler)
+
+        assert config.model_api_key == "sk-together"
+        assert not messages
+
+    def test_a_keyless_model_gets_no_key(self):
+        config = parse_config(_config_json(model="vertex_ai/gemini-3-pro-preview"))
+
+        assert config.model_api_key is None
+
+    def test_a_fake_model_needs_no_key(self):
+        config = parse_config(_config_json(model="openai/gpt-5.5", use_fake_model=True))
+
+        assert config.model_api_key is None
+
+    def test_an_explicit_reference_wins(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+        monkeypatch.setenv("MY_KEY", "sk-mine")
+
+        config = parse_config(
+            _config_json(model="openai/gpt-5.5", model_api_key="$MY_KEY")
+        )
+
+        assert config.model_api_key == "sk-mine"
+
+    def test_a_literal_key_is_kept(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+
+        config = parse_config(
+            _config_json(model="openai/gpt-5.5", model_api_key="sk-literal")
+        )
+
+        assert config.model_api_key == "sk-literal"
+
+    def test_the_rubric_judge_key_is_read_from_its_models_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+
+        config = parse_config(
+            _config_json(
+                model="claude-fable-5",
+                model_api_key="k",
+                rubric_judge_model="openai/gpt-5.5",
+            )
+        )
+
+        assert config.rubric_judge_api_key == "sk-openai"
+
+    @pytest.mark.parametrize(
+        ("model_api_key", "expected"),
+        [("sk-literal", "sk-literal"), ("$MY_KEY", "sk-mine"), (None, "sk-openai")],
+    )
+    def test_judging_with_the_run_model_uses_the_run_key(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        model_api_key: str | None,
+        expected: str,
+    ):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+        monkeypatch.setenv("MY_KEY", "sk-mine")
+
+        config = parse_config(
+            _config_json(model="openai/gpt-5.5", model_api_key=model_api_key)
+        )
+
+        assert config.rubric_judge_api_key == expected
+
+    def test_naming_the_run_model_as_judge_reads_its_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+
+        config = parse_config(
+            _config_json(
+                model="openai/gpt-5.5",
+                model_api_key="k",
+                rubric_judge_model="openai/gpt-5.5",
+            )
+        )
+
+        assert config.rubric_judge_api_key == "sk-openai"
+
+    def test_a_fake_model_run_gets_no_rubric_judge_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+
+        config = parse_config(_config_json(model="openai/gpt-5.5", use_fake_model=True))
+
+        assert config.rubric_judge_api_key is None
+
+    def test_an_unset_rubric_judge_variable_leaves_the_key_empty(self):
+        messages, handler = _warnings()
+        try:
+            config = parse_config(
+                _config_json(
+                    model="claude-fable-5",
+                    model_api_key="k",
+                    rubric_judge_model="openai/gpt-5.5",
+                )
+            )
+        finally:
+            logger.remove(handler)
+
+        assert config.rubric_judge_api_key is None
+        assert not messages
+
+    def test_a_rubric_judge_reference_is_resolved(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("MY_KEY", "sk-mine")
+
+        config = parse_config(
+            _config_json(
+                model="claude-fable-5",
+                model_api_key="k",
+                rubric_judge_api_key="$MY_KEY",
+            )
+        )
+
+        assert config.rubric_judge_api_key == "sk-mine"
+
+    def test_an_unset_rubric_judge_reference_warns(self):
+        messages, handler = _warnings()
+        try:
+            config = parse_config(
+                _config_json(
+                    model="claude-fable-5",
+                    model_api_key="k",
+                    rubric_judge_api_key="$MY_KEY",
+                )
+            )
+        finally:
+            logger.remove(handler)
+
+        assert config.rubric_judge_api_key is None
+        assert any("MY_KEY" in m for m in messages)
+
+    def test_a_literal_rubric_judge_key_is_kept(self):
+        config = parse_config(
+            _config_json(
+                model="claude-fable-5", model_api_key="k", rubric_judge_api_key="sk-lit"
+            )
+        )
+
+        assert config.rubric_judge_api_key == "sk-lit"
 
 
 class TestParseConfig:
@@ -72,22 +284,8 @@ class TestParseConfig:
         assert config.run_id == "file-run"
         assert config.task_id == "file-task"
 
-    def test_raises_error_for_missing_api_key(self, capsys: pytest.CaptureFixture[str]):
-        config_json = json.dumps(
-            {
-                "run_id": "test-run",
-                "task_id": "test-task",
-                "model": "test-model",
-                # no model_api_key, non-vertex, non-training
-            }
-        )
-
-        with pytest.raises(typer.Abort):
-            parse_config(config_json)
-
-        assert "model_api_key is required" in capsys.readouterr().err
-
-    def test_prepare_only_allows_missing_api_key(self):
+    def test_prepare_only_allows_missing_api_key(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         config_json = json.dumps(
             {
                 "run_id": "test-run",
@@ -2088,7 +2286,7 @@ class TestRunNonContainerizedBackendStreaming:
         token.write_text("tok")
         monkeypatch.setenv("KAROTTE_BACKEND_TOKEN_PATH", str(token))
         config = EvaluationRunConfig(
-            run_id="r", task_id="t", model="m", model_api_key="k"
+            run_id="r", task_id="t", model="claude-fable-5", model_api_key="k"
         )
         assert await self._backend_events(config) is None
 
