@@ -83,7 +83,7 @@ class SuiteStep(Step):
                 "-m",
                 "environment.tasks._template_suite.scoring_script",
                 str(self.saved_submissions[0]),
-                "/tmp/score_output.txt",
+                "score_output.txt",
             ]
         )
 

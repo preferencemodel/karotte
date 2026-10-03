@@ -5,13 +5,47 @@ site_url = "https://karotte.dev/"
 repo_url = "https://github.com/preferencemodel/karotte"
 repo_name = "preferencemodel/karotte"
 edit_uri = "edit/main/docs/"
-copyright = "MIT licensed"
+copyright = 'MIT licensed. Carrot icon from <a href="https://github.com/googlefonts/noto-emoji">Noto Emoji</a>, <a href="https://github.com/googlefonts/noto-emoji/blob/main/LICENSE">Apache 2.0</a>.'
+extra_css = ["stylesheets/extra.css"]
 nav = [
   { "Home" = "index.md" },
+  { "Getting started" = [
+    "getting-started/installation.md",
+    "getting-started/quick-start.md",
+    "getting-started/concepts.md",
+  ] },
+  { "Writing tasks" = [
+    "tasks/tasks-and-steps.md",
+    "tasks/scoring.md",
+    "tasks/tools.md",
+    "tasks/data-and-dependencies.md",
+    "tasks/artifacts-and-transcripts.md",
+    "tasks/creating-tasks-in-code.md",
+  ] },
+  { "Running" = [
+    "running/run-config.md",
+    "running/runtimes.md",
+    "running/run-lifecycle.md",
+    "running/student-resources.md",
+    "running/development-loop.md",
+  ] },
+  { "Environments" = [
+    "environments/templates.md",
+    "environments/language-toolchains.md",
+    "environments/updating.md",
+  ] },
+  { "Extending karotte" = [
+    "extending/template-packages.md",
+    "extending/plugins.md",
+    "extending/backend.md",
+    "extending/developing-karotte.md",
+  ] },
 ]
 
 [project.theme]
 language = "en"
+logo = "assets/carrot.svg"
+favicon = "assets/carrot.svg"
 features = [
   "content.action.edit",
   "content.code.copy",
@@ -50,6 +84,8 @@ footnotes = {}
 md_in_html = {}
 toc.permalink = true
 pymdownx.details = {}
+pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
+pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
 pymdownx.highlight.anchor_linenums = true
 pymdownx.highlight.pygments_lang_class = true
 pymdownx.inlinehilite = {}
@@ -58,3 +94,6 @@ pymdownx.superfences.custom_fences = [
 ]
 pymdownx.tabbed.alternate_style = true
 pymdownx.tasklist.custom_checkbox = true
+
+[project.theme.icon]
+repo = "fontawesome/brands/github"
