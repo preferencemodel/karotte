@@ -434,7 +434,7 @@
   "anthropic/claude-opus-5": {
     "model": "anthropic/claude-opus-5",
     "max_tokens": 32000,
-    "temperature": 0.3,
+    "temperature": "<omitted>",
     "parsed": [
       true,
       "the criterion is met"

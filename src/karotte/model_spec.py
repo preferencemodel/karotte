@@ -213,10 +213,9 @@ _REASONING_EFFORT_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 # Opus 4.7 onward and GPT-6 answer 400 to temperature and the other sampling
-# parameters. Matched against the whole id, hence both GPT-6 spellings.
+# parameters.
 _NO_SAMPLING_PARAMS_PREFIXES = (
     "gpt-6",
-    "openai/gpt-6",
     "claude-fable",
     "claude-opus-4-7",
     "claude-opus-4-8",
@@ -240,7 +239,7 @@ def spec_for(model: str) -> ModelSpec:
         max_reasoning_effort=levels[-1] if levels else None,
         reasoning_effort_levels=levels,
         reasoning_request=_reasoning_request(name),
-        supports_sampling_params=not model.startswith(_NO_SAMPLING_PARAMS_PREFIXES),
+        supports_sampling_params=not name.startswith(_NO_SAMPLING_PARAMS_PREFIXES),
         tool_call_repairs=_tool_call_repairs(model),
         requires_api_key=not (
             model.startswith("vertex_ai/") or is_special_training_model(model)

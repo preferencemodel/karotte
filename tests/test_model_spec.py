@@ -154,6 +154,8 @@ class TestSamplingParams:
             ("claude-opus-4-8", False),
             ("claude-opus-5", False),
             ("claude-sonnet-5", False),
+            ("anthropic/claude-fable-5", False),
+            ("anthropic/claude-opus-4-6", True),
             ("claude-opus-4-6", True),
             ("claude-haiku-4-5-20251001", True),
             ("openai/gpt-5.6", True),
