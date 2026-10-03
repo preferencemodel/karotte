@@ -38,7 +38,7 @@ class RubricJudge(Judge):
 
     Args:
         rubric: List of criteria, each with a "criterion" (str) and "weight" (float/str)
-        model: Model id, e.g. "claude-sonnet-5" or any litellm model name.
+        model: Model id, e.g. "anthropic/claude-sonnet-5" or any litellm model name.
             Defaults to `RubricJudge.default_model`; `evaluate` raises without one.
         api_key: API key for the model. Defaults to `RubricJudge.default_api_key`
             when the model has the default model's provider, else to litellm
