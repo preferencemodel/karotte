@@ -1,3 +1,4 @@
+import itertools
 import json
 import os
 import re
@@ -5,11 +6,11 @@ import shutil
 import socket
 import sys
 import time
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast, final, override
+from typing import Any, final, override
 
 import pytest
 import pytest_asyncio
@@ -98,13 +99,36 @@ class TestTask(Task):
         ]
 
 
+# Each xdist worker hands out ports from its own block, below Linux's ephemeral
+# range (32768+). A port from bind(0) is ephemeral: between closing the probe
+# socket and the server binding it, another worker's probe or any outgoing
+# connection can take it, and the server then fails with "address in use".
+_FIRST_TEST_PORT = 20000
+_PORTS_PER_WORKER = 300
+_MAX_WORKERS = 40
+
+
+def _worker_ports() -> Iterator[int]:
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    index = int(worker.removeprefix("gw")) % _MAX_WORKERS
+    start = _FIRST_TEST_PORT + index * _PORTS_PER_WORKER
+    return itertools.cycle(range(start, start + _PORTS_PER_WORKER))
+
+
+_ports = _worker_ports()
+
+
 def find_free_port() -> int:
-    """Find a free port on localhost."""
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-        s.bind(("", 0))
-        s.listen(1)
-        port = cast(int, s.getsockname()[1])
-    return port
+    """Find a free port on localhost that no other xdist worker hands out."""
+    for _ in range(_PORTS_PER_WORKER):
+        port = next(_ports)
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+            try:
+                s.bind(("", port))
+            except OSError:
+                continue
+        return port
+    raise RuntimeError("No free port in this worker's block")
 
 
 _CHARACTERIZATION_ENV_DIR = Path(__file__).parent / "resources" / "characterization_env"

@@ -1,25 +1,14 @@
 """Tests for the websocket_handler module."""
 
 import asyncio
-import socket
 from collections import deque
-from contextlib import closing
-from typing import cast
 
 import anyio
 import pytest
 from websockets.asyncio.server import ServerConnection, serve
 
 from karotte.terminal.websocket_handler import listen_to_websocket
-
-
-def find_free_port() -> int:
-    """Find a free port on localhost."""
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-        s.bind(("", 0))
-        s.listen(1)
-        port = cast(int, s.getsockname()[1])
-    return port
+from tests.conftest import find_free_port
 
 
 @pytest.mark.asyncio
