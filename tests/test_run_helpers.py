@@ -38,6 +38,12 @@ from karotte.task import Task
 from tests.conftest import register_hardware_plugins
 
 
+@pytest.fixture(autouse=True)
+def _no_ci_sudo(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+    """CI runners set CI, which prefixes engine commands with sudo."""
+    monkeypatch.delenv("CI", raising=False)
+
+
 def _config_json(**fields: Any) -> str:
     return json.dumps({"run_id": "test-run", "task_id": "test-task", **fields})
 
@@ -1022,6 +1028,19 @@ class TestCleanUpOldContainers:
         assert [c[0][0][:2] for c in mock_run.call_args_list] == [
             ["nerdctl", "ps"],
             ["nerdctl", "rm"],
+        ]
+
+    def test_ci_lists_and_removes_with_sudo(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("CI", "true")
+        with patch("karotte.run_helpers.subprocess.run") as mock_run:
+            mock_run.return_value.stdout = "abc123"
+            mock_run.return_value.returncode = 0
+
+            clean_up_old_containers("nerdctl", ["run-a"])
+
+        assert [c[0][0][:3] for c in mock_run.call_args_list] == [
+            ["sudo", "nerdctl", "ps"],
+            ["sudo", "nerdctl", "rm"],
         ]
 
     def test_stops_and_removes_found_containers(self):

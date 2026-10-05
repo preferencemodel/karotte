@@ -319,18 +319,7 @@ def get_container_run_command(
             parallel_runs,
         )
 
-    command: list[str] = []
-
-    # CI runners need sudo for the container runtime.
-    if os.environ.get("CI"):
-        command.append("sudo")
-
-    command.extend(
-        [
-            engine,
-            "run",
-        ]
-    )
+    command = [*_engine_command(runtime), "run"]
 
     if runtime == "docker:gvisor":
         command.extend(["--runtime=runsc", "--env", "KAROTTE_SANDBOX=gvisor"])
@@ -683,6 +672,12 @@ def copy_hint(runtime: Runtime, run_id: str) -> str:
     return f"{get_engine(runtime)} cp karotte_run_{run_id}:/workdir/ ./out/"
 
 
+def _engine_command(runtime: Runtime) -> list[str]:
+    # CI runners need sudo for the container runtime.
+    engine = get_engine(runtime)
+    return ["sudo", engine] if os.environ.get("CI") else [engine]
+
+
 def stop_containers(runtime: Runtime, run_ids: list[str]) -> None:
     """Stop the containers for these exact run IDs, ignoring any already gone.
 
@@ -702,9 +697,10 @@ def stop_containers(runtime: Runtime, run_ids: list[str]) -> None:
         stop_vms(run_ids)
         return
 
-    engine = get_engine(runtime)
     names = [f"karotte_run_{run_id}" for run_id in run_ids]
-    result = subprocess.run([engine, "stop", *names], capture_output=True, text=True)
+    result = subprocess.run(
+        [*_engine_command(runtime), "stop", *names], capture_output=True, text=True
+    )
     if result.returncode != 0:
         logger.warning(
             f"Failed to stop containers: {result.stderr.strip() or 'unknown error'}"
@@ -738,11 +734,11 @@ def clean_up_old_containers(runtime: Runtime, run_ids: list[str]) -> None:
         clean_up_vms(prefix)
         return
 
-    engine = get_engine(runtime)
+    engine = _engine_command(runtime)
     name_filter = f"karotte_run_{prefix}"
 
     result = subprocess.run(
-        [engine, "ps", "-a", "--filter", f"name={name_filter}", "-q"],
+        [*engine, "ps", "-a", "--filter", f"name={name_filter}", "-q"],
         capture_output=True,
         text=True,
     )
@@ -757,7 +753,7 @@ def clean_up_old_containers(runtime: Runtime, run_ids: list[str]) -> None:
 
     if container_ids:
         rm_result = subprocess.run(
-            [engine, "rm", "--force", *container_ids], capture_output=True, text=True
+            [*engine, "rm", "--force", *container_ids], capture_output=True, text=True
         )
         if rm_result.returncode != 0:
             logger.warning(
