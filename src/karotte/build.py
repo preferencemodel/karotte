@@ -23,12 +23,22 @@ def require_runtime(runtime: Runtime) -> None:
         )
 
 
-def require_buildx(runtime: Runtime) -> None:
-    """Exit with a one-line error if docker lacks buildx, which `RUN --mount` needs."""
-    if get_engine(runtime) == "docker" and not _buildx_available():
+def require_builder(runtime: Runtime) -> None:
+    """Exit with a one-line error if the engine can't build the image.
+
+    docker needs buildx for `RUN --mount`; nerdctl builds through BuildKit's
+    `buildctl`.
+    """
+    engine = get_engine(runtime)
+    if engine == "docker" and not _buildx_available():
         _exit_with_error(
             "docker buildx not found, and building the image needs it. "
             + "Install the docker-buildx package or Docker's docker-buildx-plugin."
+        )
+    if engine == "nerdctl" and not _buildctl_available():
+        _exit_with_error(
+            "buildctl not found, and nerdctl needs BuildKit to build the image. "
+            + "Install BuildKit and start buildkitd."
         )
 
 
@@ -137,10 +147,23 @@ def _secret_flag(spec: str) -> str:
 
 def _buildx_available() -> bool:
     # Without the plugin, `docker build` falls back to the legacy builder.
-    command = ["docker", "buildx", "version"]
+    return _succeeds(["docker", "buildx", "version"])
+
+
+def _buildctl_available() -> bool:
+    # `nerdctl build` runs `buildctl`, so it has to be on the PATH the build sees.
+    return _succeeds(["buildctl", "--version"])
+
+
+def _succeeds(command: list[str]) -> bool:
+    # CI builds run under sudo, which has its own PATH.
     if os.environ.get("CI"):
-        command.insert(0, "sudo")
-    return subprocess.run(command, capture_output=True, check=False).returncode == 0
+        command = ["sudo", *command]
+    try:
+        result = subprocess.run(command, capture_output=True, check=False)
+    except FileNotFoundError:
+        return False
+    return result.returncode == 0
 
 
 def _exit_with_error(message: str) -> Never:

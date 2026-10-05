@@ -79,6 +79,8 @@ The VM can't share a writable directory with the host, so `firecracker` only acc
 Install the engine.
 docker also needs [buildx](https://github.com/docker/buildx#installing).
 Ubuntu's `docker.io` package doesn't include it, so install `docker-buildx` as well.
+nerdctl builds through [BuildKit](https://github.com/moby/buildkit): install `buildctl` and `buildkitd`, and start `buildkitd` before you build.
+karotte checks that `buildctl` is installed, not that `buildkitd` is running.
 
 ### docker:gvisor
 
@@ -114,7 +116,7 @@ See [Student resources](student-resources.md) for how these limits are enforced.
 
 ## What each runtime gives the student
 
-|                                                      | `apple-container`, `firecracker`                                            | `docker`/`podman` (runc)                                                            | `docker:gvisor`                                                                     |
+|                                                      | `apple-container`, `firecracker`                                            | `docker`/`podman`/`nerdctl` (runc)                                                  | `docker:gvisor`                                                                     |
 | ---------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Memory limit                                         | Enforced by the kernel (cgroup)                                             | None by default. Watchdog if a plugin or `KAROTTE_SANDBOX_MEMORY_BYTES` sets a size | None by default. Watchdog if a plugin or `KAROTTE_SANDBOX_MEMORY_BYTES` sets a size |
 | Process limit                                        | Enforced by the kernel (cgroup)                                             | Watchdog                                                                            | Watchdog                                                                            |

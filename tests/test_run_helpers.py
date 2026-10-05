@@ -795,6 +795,14 @@ class TestGetContainerRunCommand:
         assert "karotte" in command
         assert "localhost/karotte" not in command
 
+    def test_nerdctl_uses_plain_image_name(self, sample_config: EvaluationRunConfig):
+        command, _ = get_container_run_command(
+            sample_config, "nerdctl", dev=False, keep_container=False
+        )
+
+        assert "karotte" in command
+        assert "localhost/karotte" not in command
+
     def test_includes_karotte_run_command(self, sample_config: EvaluationRunConfig):
         command, _ = get_container_run_command(
             sample_config, "podman", dev=False, keep_container=False
@@ -1003,6 +1011,18 @@ class TestCleanUpOldContainers:
         assert "--filter" in cmd
         assert "name=karotte_run_my-run-" in cmd
         assert "-q" in cmd
+
+    def test_nerdctl_lists_and_removes_with_nerdctl(self):
+        with patch("karotte.run_helpers.subprocess.run") as mock_run:
+            mock_run.return_value.stdout = "abc123"
+            mock_run.return_value.returncode = 0
+
+            clean_up_old_containers("nerdctl", ["run-a"])
+
+        assert [c[0][0][:2] for c in mock_run.call_args_list] == [
+            ["nerdctl", "ps"],
+            ["nerdctl", "rm"],
+        ]
 
     def test_stops_and_removes_found_containers(self):
         """Should remove all found containers in a single rm call."""
@@ -1615,6 +1635,17 @@ class TestDockerGvisorRunCommand:
             sample_config, "docker", dev=False, keep_container=False
         )
 
+        env_indices = [i for i, arg in enumerate(command) if arg == "--env"]
+        env_values = [command[i + 1] for i in env_indices]
+        assert "KAROTTE_SANDBOX=runc" in env_values
+
+    def test_nerdctl_declares_runc(self, sample_config: EvaluationRunConfig):
+        command, _ = get_container_run_command(
+            sample_config, "nerdctl", dev=False, keep_container=False
+        )
+
+        assert command[0] == "nerdctl"
+        assert "--runtime=runsc" not in command
         env_indices = [i for i, arg in enumerate(command) if arg == "--env"]
         env_values = [command[i + 1] for i in env_indices]
         assert "KAROTTE_SANDBOX=runc" in env_values
