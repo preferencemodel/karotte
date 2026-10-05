@@ -8,7 +8,7 @@ Pick one with `--runtime` on `karotte run` and `karotte build`:
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `apple-container`             | A VM per run through Apple's [`container`](https://github.com/apple/container).                          |
 | `firecracker`                 | A [Firecracker](https://firecracker-microvm.github.io/) microVM per run. The image is built with docker. |
-| `docker`, `podman`, `nerdctl` | A container on the host kernel (runc).                                                                   |
+| `docker`, `podman`            | A container on the host kernel (runc).                                                                   |
 | `docker:gvisor`               | A docker container under [gVisor](https://gvisor.dev/), which runs its own kernel in user space.         |
 
 ## The default
@@ -74,7 +74,7 @@ Use `--runtime docker` if your proxy runs locally.
 
 The VM can't share a writable directory with the host, so `firecracker` only accepts read-only mounts (`--mount source:target:ro`).
 
-### docker, podman, nerdctl
+### docker, podman
 
 Install the engine.
 docker also needs [buildx](https://github.com/docker/buildx#installing).

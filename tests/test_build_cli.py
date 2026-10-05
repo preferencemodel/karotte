@@ -22,7 +22,6 @@ def _engine_on_path() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction
     [
         ("docker", "docker not found. Install it or pass --runtime podman."),
         ("podman", "podman not found. Install it or pass --runtime docker."),
-        ("nerdctl", "nerdctl not found. Install it or pass --runtime docker."),
     ],
 )
 def test_missing_runtime_exits_with_one_line(
@@ -62,13 +61,12 @@ def test_missing_buildx_exits_with_one_line(
     mock_build.assert_not_called()
 
 
-@pytest.mark.parametrize("runtime", ["podman", "nerdctl"])
-def test_buildx_is_only_checked_for_docker(runtime: str):
+def test_buildx_is_only_checked_for_docker():
     with (
         patch("karotte.build._buildx_available") as buildx,
         patch("karotte.cli.build.build_container"),
     ):
-        build(runtime=runtime)  # pyright: ignore[reportArgumentType]
+        build(runtime="podman")
 
     buildx.assert_not_called()
 
@@ -147,13 +145,13 @@ class TestBuildCommand:
         monkeypatch.setattr(
             sys.modules["karotte.cli.build"],
             "default_runtime",
-            lambda _hardware=None: "nerdctl",  # pyright: ignore[reportUnknownLambdaType]
+            lambda _hardware=None: "podman",  # pyright: ignore[reportUnknownLambdaType]
         )
         with patch("karotte.cli.build.build_container") as mock_build:
             build()
 
         mock_build.assert_called_once_with(
-            "nerdctl",
+            "podman",
             ".",
             "karotte",
             cache_from=None,

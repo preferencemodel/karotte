@@ -4,7 +4,7 @@
 
 # Build a hello-world with every enabled language toolchain, inside the built
 # image. One container per language: installing a toolchain is not reversible.
-# Pass a language to check just that one, and a runtime like "sudo nerdctl"
+# Pass a language to check just that one, and a runtime like "podman"
 # where docker is not the engine. `jobs` languages run at once; each one's
 # output is held back and printed whole when it finishes.
 check-toolchains image="karotte" language="" runtime="docker" jobs="4":

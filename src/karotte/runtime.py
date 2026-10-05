@@ -1,9 +1,7 @@
 from typing import Literal
 
-Runtime = Literal[
-    "podman", "docker", "docker:gvisor", "nerdctl", "apple-container", "firecracker"
-]
-Engine = Literal["podman", "docker", "nerdctl", "container"]
+Runtime = Literal["podman", "docker", "docker:gvisor", "apple-container", "firecracker"]
+Engine = Literal["podman", "docker", "container"]
 
 
 def get_engine(runtime: Runtime) -> Engine:
@@ -19,5 +17,5 @@ def get_engine(runtime: Runtime) -> Engine:
         # A Firecracker VM boots from an image docker builds.
         return "docker"
     engine = runtime.split(":")[0]
-    assert engine in ("podman", "docker", "nerdctl", "container")
+    assert engine in ("podman", "docker", "container")
     return engine  # type: ignore[return-value]

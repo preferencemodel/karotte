@@ -113,8 +113,8 @@ def get_container_build_command(
 
     command.extend([engine, "build", *secret_flags])
 
-    if engine in ("docker", "nerdctl"):
-        # docker and nerdctl default to `Dockerfile`
+    if engine == "docker":
+        # docker defaults to `Dockerfile`
         command.extend(["--file", "Containerfile"])
 
     for source in cache_from or []:

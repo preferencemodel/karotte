@@ -172,10 +172,10 @@ See [Runtimes](../running/runtimes.md) and [Student resources](../running/studen
 
 ### `karotte.container_run_args`
 
-The attribute is a function that takes the task and the runtime name (`docker`, `podman`, `nerdctl`, ...).
+The attribute is a function that takes the task and the runtime name (`docker`, `podman`, `docker:gvisor`, ...).
 It returns extra arguments for the engine's `run` command.
 You can use it to pass devices through, for example.
-karotte adds these arguments for `docker`, `podman`, `docker:gvisor` and `nerdctl`.
+karotte adds these arguments for `docker`, `podman` and `docker:gvisor`.
 
 `karotte run` calls every hook before it launches, whatever the runtime.
 If a hook raises an exception, karotte refuses to launch and shows the exception's message.
