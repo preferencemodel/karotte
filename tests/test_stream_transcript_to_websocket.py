@@ -1,9 +1,6 @@
 """Tests for the websocket transcript streaming functionality."""
 
 import asyncio
-import socket
-from contextlib import closing
-from typing import cast
 
 import anyio
 import pytest
@@ -20,17 +17,9 @@ from karotte.schemas.websocket_config import WebSocketConfig
 from karotte.transcript_streaming.stream_transcript_to_websocket import (
     stream_transcript_to_websocket,
 )
+from tests.conftest import find_free_port
 
 EventAdapter = TypeAdapter(Event)
-
-
-def find_free_port() -> int:
-    """Find a free port on localhost."""
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-        s.bind(("", 0))
-        s.listen(1)
-        port = cast(int, s.getsockname()[1])
-    return port
 
 
 @pytest.mark.asyncio
