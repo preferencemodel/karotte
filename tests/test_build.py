@@ -5,6 +5,7 @@ import pytest
 import typer
 
 from karotte.build import (
+    _buildctl_available,  # pyright: ignore[reportPrivateUsage]
     _buildx_available,  # pyright: ignore[reportPrivateUsage]
     build_container,
     get_container_build_command,
@@ -34,6 +35,21 @@ class TestGetContainerBuildCommand:
         # Docker needs explicit Containerfile specification
         assert command == [
             "docker",
+            "build",
+            "--file",
+            "Containerfile",
+            "--tag",
+            "karotte",
+            "/build/context",
+        ]
+
+    def test_basic_nerdctl_command(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("CI", raising=False)
+
+        command = get_container_build_command("nerdctl", "/build/context", "karotte")
+
+        assert command == [
+            "nerdctl",
             "build",
             "--file",
             "Containerfile",
@@ -261,3 +277,24 @@ class TestBuildxAvailable:
         with patch("karotte.build.subprocess.run", return_value=result) as run:
             _buildx_available()
         assert run.call_args[0][0] == ["sudo", "docker", "buildx", "version"]
+
+
+class TestBuildctlAvailable:
+    def test_true_when_buildctl_answers(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("CI", raising=False)
+        result = CompletedProcess(args=[], returncode=0)
+        with patch("karotte.build.subprocess.run", return_value=result) as run:
+            assert _buildctl_available() is True
+        assert run.call_args[0][0] == ["buildctl", "--version"]
+
+    def test_false_when_buildctl_is_missing(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("CI", raising=False)
+        with patch("karotte.build.subprocess.run", side_effect=FileNotFoundError):
+            assert _buildctl_available() is False
+
+    def test_asks_the_path_the_build_uses(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("CI", "true")
+        result = CompletedProcess(args=[], returncode=0)
+        with patch("karotte.build.subprocess.run", return_value=result) as run:
+            _buildctl_available()
+        assert run.call_args[0][0] == ["sudo", "buildctl", "--version"]

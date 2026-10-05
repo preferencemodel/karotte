@@ -13,7 +13,7 @@ from loguru import logger
 from pydantic import ValidationError
 
 from karotte import Runtime, staged_mounts
-from karotte.build import build_container, require_buildx, require_runtime
+from karotte.build import build_container, require_builder, require_runtime
 from karotte.container import is_containerized
 from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
 from karotte.hardware import container_run_args, default_runtime
@@ -245,7 +245,7 @@ def run(
     if on_host and runtime is not None:
         require_runtime(runtime)
         if not dev:
-            require_buildx(runtime)
+            require_builder(runtime)
 
     run_config = parse_config(config, prepare_only=prepare_only)
     run_config = apply_run_config_preprocessors(run_config)
@@ -258,7 +258,7 @@ def run(
             logger.info(f"Runtime: {runtime} (default; pass --runtime to change)")
             require_runtime(runtime)
             if not dev:
-                require_buildx(runtime)
+                require_builder(runtime)
 
     if runtime == "docker:gvisor":
         validate_gvisor_runtime()

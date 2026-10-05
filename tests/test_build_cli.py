@@ -13,6 +13,7 @@ def _engine_on_path() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction
     with (
         patch("karotte.build.which", return_value="/usr/bin/engine"),
         patch("karotte.build._buildx_available", return_value=True),
+        patch("karotte.build._buildctl_available", return_value=True),
     ):
         yield
 
@@ -71,6 +72,33 @@ def test_buildx_is_only_checked_for_docker(runtime: str):
         build(runtime=runtime)  # pyright: ignore[reportArgumentType]
 
     buildx.assert_not_called()
+
+
+def test_missing_buildctl_exits_with_one_line(capsys: pytest.CaptureFixture[str]):
+    with (
+        patch("karotte.build._buildctl_available", return_value=False),
+        patch("karotte.cli.build.build_container") as mock_build,
+        pytest.raises(typer.Exit) as exc_info,
+    ):
+        build(runtime="nerdctl")
+
+    assert exc_info.value.exit_code == 1
+    assert capsys.readouterr().err.strip() == (
+        "buildctl not found, and nerdctl needs BuildKit to build the image. "
+        + "Install BuildKit and start buildkitd."
+    )
+    mock_build.assert_not_called()
+
+
+@pytest.mark.parametrize("runtime", ["docker", "podman"])
+def test_buildctl_is_only_checked_for_nerdctl(runtime: str):
+    with (
+        patch("karotte.build._buildctl_available") as buildctl,
+        patch("karotte.cli.build.build_container"),
+    ):
+        build(runtime=runtime)  # pyright: ignore[reportArgumentType]
+
+    buildctl.assert_not_called()
 
 
 @pytest.fixture(autouse=True)

@@ -4,7 +4,7 @@ import typer
 from loguru import logger
 
 from karotte import Runtime
-from karotte.build import build_container, require_buildx, require_runtime
+from karotte.build import build_container, require_builder, require_runtime
 from karotte.hardware import default_hardware, default_runtime
 
 
@@ -81,7 +81,7 @@ def build(
         runtime = _default_build_runtime()
         logger.info(f"Runtime: {runtime} (default; pass --runtime to change)")
     require_runtime(runtime)
-    require_buildx(runtime)
+    require_builder(runtime)
     if runtime == "apple-container":
         from karotte.apple_container import validate_container_runtime
 

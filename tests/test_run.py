@@ -1237,7 +1237,7 @@ class TestPluginRefusesTheLaunch:
         with (
             patch("karotte.cli.run.require_environment"),
             patch("karotte.cli.run.require_runtime"),
-            patch("karotte.cli.run.require_buildx"),
+            patch("karotte.cli.run.require_builder"),
             patch("karotte.cli.run.parse_config", return_value=run_config),
             patch("karotte.cli.run.load_task", return_value=MagicMock()),
             patch("karotte.cli.run._run_without_ui", side_effect=RuntimeError("ran")),
