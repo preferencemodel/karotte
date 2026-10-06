@@ -8,6 +8,9 @@ how it is invoked per step (:meth:`run_step`).
 """
 
 import abc
+import asyncio
+import os
+import signal
 from collections.abc import AsyncGenerator
 from typing import ClassVar, Literal
 
@@ -72,6 +75,23 @@ class CliAgent(abc.ABC):
         """Endpoint the tool's own MCP client connects to. The server binds
         0.0.0.0; a local client reaches it on loopback."""
         return self._config.mcp_server_config.client_url
+
+
+def kill_process_tree(proc: asyncio.subprocess.Process) -> None:
+    """SIGKILL a CLI agent process and its children.
+
+    ``make_preexec`` puts the child in its own session, so its pid is a process
+    group id; killing the group takes down any tools it spawned. Falls back to
+    killing just the process when there is no group (e.g. no ``setsid`` outside
+    a container) or it has already exited.
+    """
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, OSError):
+        try:
+            proc.kill()
+        except (ProcessLookupError, OSError):
+            pass
 
 
 _CLI_AGENTS: dict[str, type[CliAgent]] = {}

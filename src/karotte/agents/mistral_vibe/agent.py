@@ -10,7 +10,6 @@ normalized transcript events derived from it by the adapter.
 
 import asyncio
 import os
-import signal
 from collections.abc import AsyncGenerator, Iterator
 from pathlib import Path
 from typing import ClassVar, Literal, final
@@ -22,6 +21,7 @@ from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     AGENTS_DIR,
     CliAgent,
+    kill_process_tree,
     register_cli_agent,
 )
 from karotte.agents.mistral_vibe.adapter import parse_stream
@@ -211,7 +211,7 @@ class MistralVibeAgent(CliAgent):
             await asyncio.wait_for(proc.wait(), time_limit_seconds)
         except TimeoutError:
             timed_out = True
-            _kill_process_tree(proc)
+            kill_process_tree(proc)
             await proc.wait()
 
         stdout_b = await stdout_task
@@ -242,23 +242,6 @@ class MistralVibeAgent(CliAgent):
         if timed_out and on_time_limit == "error":
             msg = f"Time limit of {time_limit_seconds}s reached."
             raise StepTimeLimitReachedError(msg)
-
-
-def _kill_process_tree(proc: asyncio.subprocess.Process) -> None:
-    """SIGKILL the Vibe process and its children.
-
-    ``make_preexec`` puts the child in its own session, so its pid is a process
-    group id; killing the group takes down any tools it spawned. Falls back to
-    killing just the process when there is no group (e.g. no ``setsid`` outside
-    a container) or it has already exited.
-    """
-    try:
-        os.killpg(proc.pid, signal.SIGKILL)
-    except (ProcessLookupError, OSError):
-        try:
-            proc.kill()
-        except (ProcessLookupError, OSError):
-            pass
 
 
 def _transcript_events(

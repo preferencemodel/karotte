@@ -191,7 +191,7 @@ Whichever agent you use, Karotte still runs the task's hooks, judges and artifac
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                     |
 | `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).    |
-| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself. `mistral-vibe` is one example. |
+| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe` or `grok-build`. |
 
 Set `agent` in the run config:
 
@@ -239,6 +239,13 @@ CLI agents differ from `builtin` in a few ways:
 - `reasoning_effort` isn't applied.
 - The student's firewall only lets them reach the model proxy, so sandboxed runs need `--proxy`.
   `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or straight to Mistral's API when there's no proxy.
+  `grok-build` does the same with the proxy; without one it only runs `xai/` models, against xAI's API.
+
+`grok-build` specifics:
+
+- All steps of a run share one Grok session, so later steps see the earlier conversation.
+- Grok doesn't list MCP tools to the model directly. The model finds the task's tools with `search_tool` and calls them through `use_tool` (as `karotte__<tool>`), and the transcript records those calls as `use_tool`.
+- Grok's web search, image editing, feedback and ask-the-user tools are turned off, along with its telemetry and update checks.
 
 ## Fake model
 
