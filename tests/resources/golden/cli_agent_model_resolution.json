@@ -295,14 +295,6 @@
     },
     "key_env": "XAI_API_KEY"
   },
-  "xai/grok-4.3": {
-    "provider": "xai",
-    "model": "grok-4.3",
-    "env": {
-      "XAI_API_KEY": "test_key"
-    },
-    "key_env": "XAI_API_KEY"
-  },
   "meta/muse-spark-1.3": {
     "provider": "meta",
     "model": "muse-spark-1.3",

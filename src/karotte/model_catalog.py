@@ -68,7 +68,6 @@ CATALOG_MODEL_IDS: tuple[str, ...] = (
     "vertex_ai/gemini-3.7-flash",
     "xai/grok-4.7",
     "xai/grok-4.6",
-    "xai/grok-4.3",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.2",
     SPECIAL_TRAINING_MODEL_NAME,

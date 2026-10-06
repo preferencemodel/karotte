@@ -219,11 +219,6 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
-  "xai/grok-4.3": {
-    "resolved_agent": "builtin",
-    "is_special_training_model": false,
-    "api_key_required": true
-  },
   "meta/muse-spark-1.3": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,

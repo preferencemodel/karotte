@@ -199,7 +199,7 @@ _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
 # (prefix, levels) for families whose snapshots all behave alike, matched in
 # order, so gpt-5 has to come after gpt-5.6. Families left out get no effort
 # parameter: minimax and the older together_ai models answer 400 to it,
-# grok-4.3 and mistral are undocumented, and on Claude 4.5 litellm would turn
+# older grok models and mistral are undocumented, and on Claude 4.5 litellm would turn
 # it into budget_tokens thinking those models do not run with today.
 _REASONING_EFFORT_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
     # max is Responses API only; Chat Completions answers 400 to it.

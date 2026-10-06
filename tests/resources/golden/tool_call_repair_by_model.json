@@ -45,7 +45,6 @@
     "vertex_ai/gemini-3.7-flash": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "xai/grok-4.7": "{\"text\": \"<\\uff5ctool\\u2581call\\u2581begin\\uff5c>hello\"}",
     "xai/grok-4.6": "{\"text\": \"<\\uff5ctool\\u2581call\\u2581begin\\uff5c>hello\"}",
-    "xai/grok-4.3": "{\"text\": \"<\\uff5ctool\\u2581call\\u2581begin\\uff5c>hello\"}",
     "meta/muse-spark-1.3": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "meta/muse-spark-1.2": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "__karotte_special__/training": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",

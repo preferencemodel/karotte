@@ -395,15 +395,6 @@
       "the criterion is met"
     ]
   },
-  "xai/grok-4.3": {
-    "model": "xai/grok-4.3",
-    "max_tokens": 32000,
-    "temperature": 0.3,
-    "parsed": [
-      true,
-      "the criterion is met"
-    ]
-  },
   "meta/muse-spark-1.3": {
     "model": "meta/responses/muse-spark-1.3",
     "max_tokens": 32000,

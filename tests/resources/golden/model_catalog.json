@@ -996,24 +996,6 @@
       "extra_allowed_openai_params": []
     },
     {
-      "model": "xai/grok-4.3",
-      "model_display_name": "Grok 4.3",
-      "provider": "xai",
-      "provider_display_name": "xAI",
-      "litellm_model": "xai/grok-4.3",
-      "max_output_tokens": 64000,
-      "min_reasoning_effort": null,
-      "max_reasoning_effort": null,
-      "reasoning_effort_levels": [],
-      "reasoning_request": {},
-      "supports_sampling_params": true,
-      "tool_call_repairs": [
-        "xai"
-      ],
-      "requires_api_key": true,
-      "extra_allowed_openai_params": []
-    },
-    {
       "model": "meta/muse-spark-1.3",
       "model_display_name": "Muse Spark 1.3",
       "provider": "meta",
