@@ -74,17 +74,10 @@ EXCLUDE_TASKS: set[str] = set()
 A task subclasses `karotte.Task`.
 Karotte creates it with the run config, which the task reads as `self.config`, so any property can depend on the run.
 
-| Member              | Kind            | Default                       | Purpose                                                                  |
-| ------------------- | --------------- | ----------------------------- | ------------------------------------------------------------------------ |
-| `id`                | class attribute | required                      | The task's id.                                                           |
-| `system_prompt`     | property        | required                      | The system message, or `None` for none.                                  |
-| `steps`             | property        | required                      | The steps, in order.                                                     |
-| `tools`             | property        | required                      | Names of the tools the student gets. See [Tools](tools.md).              |
-| `required_hardware` | property        | the plugins' default          | See [Required hardware](#required-hardware).                             |
-| `configure_tools()` | method          | does nothing                  | See [Hooks](#hooks).                                                     |
-| `pre_hook()`        | method          | returns `{}`                  | See [Hooks](#hooks).                                                     |
-| `submission_paths`  | property        | all steps' `submission_paths` | Every path the student hands in.                                         |
-| `data_mounts`       | property        | `[]`                          | Read-only data a [backend](../extending/backend.md) attaches at runtime. |
+You must set `id` and implement `system_prompt`, `steps` and `tools`.
+Everything else has a default.
+[`task.py`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/task.py) describes each member.
+See [Hooks](#hooks) for `configure_tools()` and `pre_hook()`, and [Required hardware](#required-hardware) for `required_hardware`.
 
 Declare the properties with `@property`; overriding one with a plain method raises a `TypeError` when the class is defined.
 
@@ -100,13 +93,9 @@ CLI agents send their own system prompt instead of the task's; see [Run config](
 A step subclasses `karotte.Step`.
 Create steps with the task's config, as in `FindPythonStep(config=self.config)`, so they can read `self.config` too, for example `self.config.use_hints` to add hints to the instructions.
 
-| Member               | Kind                        | Default      | Purpose                                                                    |
-| -------------------- | --------------------------- | ------------ | -------------------------------------------------------------------------- |
-| `instructions`       | property                    | required     | The user message that starts the step.                                     |
-| `judge`              | property                    | required     | The [judge](scoring.md) that scores the step.                              |
-| `submission_paths`   | property or class attribute | `None`       | Where the student writes its answer files, as a tuple of absolute `Path`s. |
-| `pre_scoring_hook()` | method                      | does nothing | See [Hooks](#hooks).                                                       |
-| `post_hook()`        | method                      | does nothing | See [Hooks](#hooks).                                                       |
+You must implement `instructions` and `judge`.
+`submission_paths` lists where the student writes its answer files, as absolute `Path`s; it can be a property or a class attribute.
+[`step.py`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/step.py) describes each member.
 
 Karotte reads `judge` after `pre_scoring_hook` has run, so the judge can use what the hook prepared, such as the saved copy of a submission.
 See [Saving submissions](scoring.md#saving-submissions) for the full pattern.

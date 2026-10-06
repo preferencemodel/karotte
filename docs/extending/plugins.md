@@ -137,15 +137,10 @@ See [Tasks and steps](../tasks/tasks-and-steps.md) for the task property.
 
 ### `karotte.hardware_limits`
 
-The attribute is a function that takes a hardware name and returns a `karotte.hardware.HardwareLimits`.
+The attribute is a function that takes a hardware name and returns a [`HardwareLimits`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/hardware.py).
 For hardware it doesn't know, it returns `None`.
-
-| Field          | Meaning                                                                                                                                      |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `memory_bytes` | The RAM the sandbox gets. The student gets this amount minus 1 GiB, which is left for the harness.                                           |
-| `disk_bytes`   | The cap on the student's disk quota. It doesn't apply if the launcher sets `KAROTTE_DISK_BUDGET_BYTES`.                                      |
-| `cpus`         | The number of CPUs a VM runtime gives the sandbox.                                                                                           |
-| `passthrough`  | `True` for hardware that a VM can't provide, such as a GPU. Tasks on this hardware run under docker by default, and VM runtimes refuse them. |
+`HardwareLimits` sets the sandbox's memory, disk and CPUs, and marks hardware that a VM can't provide, such as a GPU.
+Tasks on such hardware run under docker by default, and VM runtimes refuse them.
 
 ```python
 from karotte.hardware import HardwareLimits

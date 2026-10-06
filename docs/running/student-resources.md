@@ -161,14 +161,9 @@ from environment import STUDENT_UID
 delete_files(STUDENT_UID, extend_exclude=(Path("/workdir/data/answer.txt"),))
 ```
 
-These arguments control what gets deleted:
-
-| Argument         | Default                          | Meaning                                                                    |
-| ---------------- | -------------------------------- | -------------------------------------------------------------------------- |
-| `include`        | the whole filesystem             | Directories to search instead.                                             |
-| `exclude`        | `/root` and `/var/karotte_quota` | Paths to keep. Passing it replaces the defaults.                           |
-| `extend_exclude` | none                             | Paths to keep in addition to `exclude`.                                    |
-| `timeout`        | 600                              | Seconds the search may run before it gives up. `None` means no time limit. |
+`include` limits the search to some directories.
+`exclude` replaces the default paths to keep, `/root` and `/var/karotte_quota`, and `extend_exclude` adds to them.
+[`reclaim.py`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/reclaim.py) has all the arguments and their defaults.
 
 An excluded path is kept along with everything under it and the directories leading to it.
 Other files next to it are still deleted.
