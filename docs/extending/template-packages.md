@@ -1,7 +1,7 @@
 # Template packages
 
 Templates can live in their own Python package.
-karotte finds them through the `karotte.templates` entry point and treats them like its own templates.
+Karotte finds them through the `karotte.templates` entry point and treats them like its own templates.
 They show up in `karotte templates list`, they stack with `default`, and `karotte update` keeps them up to date.
 See [Templates](../environments/templates.md) for how templates stack.
 
@@ -56,7 +56,7 @@ requires = ["default"]
 
 ## Jinja
 
-karotte renders every file in a template with Jinja, not only `.jinja` files.
+Karotte renders every file in a template with Jinja, not only `.jinja` files.
 If a file contains text with `{{` or `{%` in it, wrap that text in `{% raw %}` … `{% endraw %}`.
 
 Templates have access to two variables:
@@ -66,9 +66,9 @@ Templates have access to two variables:
 | `env_name`  | The name of the environment's directory.           |
 | `templates` | The ids of all templates being rendered, in order. |
 
-karotte drops a `.jinja` suffix from the output path.
+Karotte drops a `.jinja` suffix from the output path.
 Use the suffix for files that aren't valid on their own, such as a `pyproject.toml` that starts with `{% extends %}`.
-karotte never copies `template.toml` itself.
+Karotte never copies `template.toml` itself.
 
 To change a file from another template, put a file at the same path that extends it and overrides its blocks:
 
@@ -90,7 +90,7 @@ The `default` template has these blocks:
 ### Partials
 
 Partials let several templates add to the same file without overriding each other's blocks.
-karotte never copies the files under a template's `partials/` directory into the environment.
+Karotte never copies the files under a template's `partials/` directory into the environment.
 Instead, `default` includes them from every template being rendered that has them:
 
 | Partial                        | Included in                                                                                         |
@@ -115,7 +115,7 @@ The `default` template's `justfile` imports `internal.just` if that file exists:
 import? 'internal.just'
 ```
 
-Use it for recipes that belong to your own setup rather than to karotte, such as deploying to your own infrastructure.
+Use it for recipes that belong to your own setup rather than to Karotte, such as deploying to your own infrastructure.
 If a template ships an `internal.just`, every environment created from that template gets its recipes.
 You can also create `internal.just` by hand in a single environment.
 `karotte update` doesn't touch files that no template ships.
@@ -129,13 +129,13 @@ A recipe in `internal.just` can't reuse the name of a recipe in the `justfile`.
 
 ## Installing
 
-Install the package next to karotte when you create the environment:
+Install the package next to Karotte when you create the environment:
 
 ```sh
 uvx --with my-package karotte create-env my_env --template rust
 ```
 
-karotte records the package as `name==version` in the environment's [manifest](../environments/templates.md#the-manifest) (`extra_deps`).
+Karotte records the package as `name==version` in the environment's [manifest](../environments/templates.md#the-manifest) (`extra_deps`).
 That way, `karotte update` installs it again, at its newest release, to re-render the templates.
 If the environment didn't use your package when it was created, pass the package once with `karotte update --with my-package`.
 See [Updating environments](../environments/updating.md).
@@ -146,6 +146,6 @@ If your package isn't on PyPI, it can add its index through `partials/indexes.to
 
 ## Conflicts and failures
 
-- If a package provides a template with the same id as one of karotte's own, karotte uses the package's template instead and logs a warning.
+- If a package provides a template with the same id as one of Karotte's own, Karotte uses the package's template instead and logs a warning.
 - If two packages provide the same template id, that's an error.
-- If a package's entry point fails to load, or one of its template directories has a missing or invalid `template.toml`, karotte skips all of that package's templates with a warning.
+- If a package's entry point fails to load, or one of its template directories has a missing or invalid `template.toml`, Karotte skips all of that package's templates with a warning.

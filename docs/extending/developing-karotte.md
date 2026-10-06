@@ -1,10 +1,10 @@
-# Developing karotte
+# Developing Karotte
 
-This page covers working on karotte itself, and testing a changed karotte inside an environment.
-Before you change karotte for the sake of one environment, check whether a [plugin](plugins.md), a [template package](template-packages.md) or the environment's own code can do what you need.
+This page covers working on Karotte itself, and testing a changed Karotte inside an environment.
+Before you change Karotte for the sake of one environment, check whether a [plugin](plugins.md), a [template package](template-packages.md) or the environment's own code can do what you need.
 If none of them can, open an issue or a pull request on [GitHub](https://github.com/preferencemodel/karotte).
 
-## Working on karotte
+## Working on Karotte
 
 ```sh
 git clone https://github.com/preferencemodel/karotte.git
@@ -35,16 +35,16 @@ Every merge to `main` is released to PyPI once CI passes.
 The major and minor version come from `pyproject.toml`.
 The patch version is the number of commits on `main`.
 
-## Using your karotte in an environment
+## Using your Karotte in an environment
 
-To try a karotte change in an environment, you vendor karotte.
+To try a Karotte change in an environment, you vendor Karotte.
 That means copying its source into the environment's `.karotte/` directory and pointing the environment's `pyproject.toml` at it.
 The `default` template's `Containerfile` copies `.karotte/` into the image, so the image runs your copy.
 
 !!! warning
 
     Vendoring is an escape hatch for testing a change or shipping an urgent fix.
-    Once the change is merged, switch back to the released karotte.
+    Once the change is merged, switch back to the released Karotte.
 
 ### `just vendor-karotte`
 
@@ -63,7 +63,7 @@ The recipe does four things:
 3. Edits `.gitignore` so you can commit `.karotte/`.
 4. Deletes `.venv` and runs `uv lock`.
 
-Without the `[tool.uv.sources]` entry, uv installs karotte from the index and ignores `.karotte/`.
+Without the `[tool.uv.sources]` entry, uv installs Karotte from the index and ignores `.karotte/`.
 
 Then edit `.karotte/src/karotte/` and rebuild the image.
 You can rebuild with `uv run karotte build`, or with any `karotte run` that doesn't pass `--dev`.
@@ -72,7 +72,7 @@ A `--dev` run won't pick up the change, because `--dev` mounts only `src/environ
 After you make more changes in your local checkout, run `just vendor-karotte ~/code/karotte` again.
 It replaces `.karotte/`, deletes `.venv` and locks again.
 
-To go back to the released karotte:
+To go back to the released Karotte:
 
 ```sh
 just unvendor-karotte
@@ -82,7 +82,7 @@ This empties `.karotte/`, restores `pyproject.toml` and `.gitignore`, deletes `.
 
 ### `karotte create-env --vendor-karotte`
 
-`create-env --vendor-karotte` vendors whichever karotte runs the command into the new environment.
+`create-env --vendor-karotte` vendors whichever Karotte runs the command into the new environment.
 To get an environment that runs your code, run it from your checkout:
 
 ```sh
@@ -95,6 +95,6 @@ Unlike the recipe, it leaves `.karotte/` ignored in `.gitignore`.
 
 ### Templates aren't vendored
 
-`create-env --vendor-karotte` and `just vendor-karotte <local path>` don't copy karotte's `templates/` directory.
-If you run `karotte create-env` or `karotte templates list` from such a copy, it stops and asks you to install karotte as a tool (`uv tool install karotte`).
-Run those commands with a karotte installed as a tool, or from your checkout.
+`create-env --vendor-karotte` and `just vendor-karotte <local path>` don't copy Karotte's `templates/` directory.
+If you run `karotte create-env` or `karotte templates list` from such a copy, it stops and asks you to install Karotte as a tool (`uv tool install karotte`).
+Run those commands with a Karotte installed as a tool, or from your checkout.

@@ -35,7 +35,7 @@ The `default` template's `collect_submission()` already saves the submissions it
 ### Where artifacts go
 
 Without a backend, artifacts are copied into a `<run_id>_artifacts/` directory next to the transcript, so `out/<run_id>_artifacts/` with the default run config.
-If that directory already exists, karotte appends `_2`, `_3` and so on instead of overwriting it.
+If that directory already exists, Karotte appends `_2`, `_3` and so on instead of overwriting it.
 `karotte run` prints where the transcript and artifacts are when it finishes.
 
 With `backend_uri` set in the run config, artifacts are uploaded to the backend instead.
@@ -44,13 +44,13 @@ See [Connecting a backend](../extending/backend.md).
 ### Artifacts without code changes
 
 To capture extra files without touching the environment, list their absolute container paths under `extra_artifact_paths` in the run config's `extra_config`.
-karotte saves them after each step, before the `pre_scoring_hook` runs.
+Karotte saves them after each step, before the `pre_scoring_hook` runs.
 See [Run config](../running/run-config.md#extra-config).
 
 ## Transcripts
 
 The transcript records every event of a run: messages, tool calls and their results, scores, token usage and errors.
-karotte writes it as JSON to the run config's `transcript_file`, which `karotte create-run-config` sets to `out/transcript.json`.
+Karotte writes it as JSON to the run config's `transcript_file`, which `karotte create-run-config` sets to `out/transcript.json`.
 The file is written when the run ends.
 A new run with the same config replaces it.
 With `-n 3`, the runs write `transcript_0.json` to `transcript_2.json`.

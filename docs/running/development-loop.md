@@ -17,7 +17,7 @@ That way, changes to task code, judges and tools take effect on the next run.
 Build the image once before your first `--dev` run.
 Rebuild it after you change any of these:
 
-- dependencies (`pyproject.toml`, `uv.lock`, the venvs in `venvs/`), including a karotte update
+- dependencies (`pyproject.toml`, `uv.lock`, the venvs in `venvs/`), including a Karotte update
 - the `Containerfile`
 - data in `student_data/`, `shared_data/`, `root_data/` or `intermediate_data/`
 - the CLI agents in the environment's manifest
@@ -58,12 +58,12 @@ uv run karotte run --config run_config.json --mount @mounts.txt
 ```
 
 The file has one spec per line.
-karotte ignores blank lines and lines starting with `#`.
+Karotte ignores blank lines and lines starting with `#`.
 
 !!! warning
 
     With `-n` (parallel runs), all containers share the same bind mounts.
-    That makes a read-write mount shared state between them, and karotte warns you about it.
+    That makes a read-write mount shared state between them, and Karotte warns you about it.
     Use `:ro` where you can.
 
 The VM runtimes handle mounts differently.
@@ -78,16 +78,16 @@ See [Run config](run-config.md).
 
 `--keep-containers` keeps the containers after the runs instead of removing them, so you can inspect them or copy data out.
 They're named `karotte_run_<run_id>`.
-When the next run starts, karotte removes any container with the same name left over from an earlier run.
+When the next run starts, Karotte removes any container with the same name left over from an earlier run.
 
-When the run ends, karotte prints how to copy the student's workdir out, for example:
+When the run ends, Karotte prints how to copy the student's workdir out, for example:
 
 ```sh
 docker cp karotte_run_<run_id>:/workdir/ ./out/
 ```
 
 `firecracker` doesn't use a container.
-Instead, karotte keeps the VM's drives and logs where they are.
+Instead, Karotte keeps the VM's drives and logs where they are.
 
 ## Credentials in the image
 
@@ -110,9 +110,9 @@ If a credential is written in one layer and deleted in a later one, it passes th
 ## `--no-containerized`
 
 `--no-containerized` runs the task in the current process instead of starting a container.
-It only works inside a karotte image, where the `Containerfile` sets `KAROTTE_CONTAINERIZED`.
+It only works inside a Karotte image, where the `Containerfile` sets `KAROTTE_CONTAINERIZED`.
 Anywhere else, `karotte run` refuses it.
-karotte uses it inside the container it starts.
+Karotte uses it inside the container it starts.
 
 `--dev`, `--mount`, `--keep-containers` and `-n` greater than 1 all need a container, so you can't combine them with `--no-containerized`.
 
