@@ -277,7 +277,7 @@ output.write_text(json.dumps(score))
 Run it:
 
 ```sh
-uv run karotte create-run-config --model anthropic/claude-fable-5 --task q3-revenue
+uv run karotte create-run-config --model anthropic/claude-opus-5-5 --task q3-revenue
 export ANTHROPIC_API_KEY=...
 uv run karotte run --config run_config.json
 ```

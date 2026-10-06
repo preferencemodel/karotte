@@ -14,7 +14,7 @@ The JSON gets parsed as an [`EvaluationRunConfig`](https://github.com/preference
 Without `--config`, `karotte run` builds the config from its flags:
 
 ```sh
-uv run karotte run --task find-python --model anthropic/claude-fable-5
+uv run karotte run --task find-python --model anthropic/claude-opus-5-5
 ```
 
 `--task` and `--model` are then required.
@@ -39,7 +39,7 @@ The other fields have no flag; set them in a config.
 ## Create a run config
 
 ```sh
-uv run karotte create-run-config --model anthropic/claude-fable-5 --task find-python
+uv run karotte create-run-config --model anthropic/claude-opus-5-5 --task find-python
 ```
 
 It loads your tasks, so run it from the environment repo.
@@ -49,7 +49,7 @@ It writes a random `run_id`, sets `transcript_file` to `out/transcript.json`, an
 {
     "run_id": "3f9c1a2b",
     "task_id": "find-python",
-    "model": "anthropic/claude-fable-5",
+    "model": "anthropic/claude-opus-5-5",
     "transcript_file": "out/transcript.json",
     ...
 }
@@ -87,7 +87,7 @@ Karotte itself applies the latter three.
 
 ## Models
 
-`model` is a [litellm](https://docs.litellm.ai/docs/providers) model id with its provider prefix, such as `anthropic/claude-fable-5`, `openai/gpt-5` or `together_ai/moonshotai/Kimi-K3`.
+`model` is a [litellm](https://docs.litellm.ai/docs/providers) model id with its provider prefix, such as `anthropic/claude-opus-5-5`, `openai/gpt-5` or `together_ai/moonshotai/Kimi-K3`.
 
 `karotte models list` shows the models Karotte knows by name, each with its output-token ceiling and the reasoning effort levels it accepts.
 `--json` prints the catalog as JSON.

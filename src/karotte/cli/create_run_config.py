@@ -17,7 +17,7 @@ def create_run_config(
     ] = "run_config.json",
     model: Annotated[
         str, typer.Option(help="Model name.")
-    ] = "anthropic/claude-fable-5",
+    ] = "anthropic/claude-opus-5-5",
     model_api_key: Annotated[
         str | None,
         typer.Option(

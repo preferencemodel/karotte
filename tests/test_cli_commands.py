@@ -60,7 +60,7 @@ class TestCreateEnv:
             "uv run setup_data.py",
             "uv run karotte tasks list",
             "export ANTHROPIC_API_KEY=...",
-            "uv run karotte run --task <task-id> --model anthropic/claude-fable-5",
+            "uv run karotte run --task <task-id> --model anthropic/claude-opus-5-5",
         ]
 
 
