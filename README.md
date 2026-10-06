@@ -1,6 +1,7 @@
 # Karotte 🥕
 
-Karotte is a framework for building robust RL environments.
+Karotte is an open-source framework for building robust RL environments, made by
+[Preference Model](https://preferencemodel.com).
 
 **Documentation: [karotte.dev](https://karotte.dev)**
 

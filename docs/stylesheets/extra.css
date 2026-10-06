@@ -38,3 +38,9 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+@media screen and (min-width: 76.25em) {
+  .md-header__title {
+    margin-left: 0;
+  }
+}

@@ -6,7 +6,7 @@ hide:
 
 # Karotte
 
-Karotte is a framework for building robust RL environments.
+Karotte is an open-source framework for building robust RL environments, made by [Preference Model](https://preferencemodel.com).
 
 You write tasks in Python.
 Karotte builds them into a sandbox, lets an agent work inside it through tools like `bash`, scores what it did, and records every message, tool call and score in a transcript.
