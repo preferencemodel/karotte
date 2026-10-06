@@ -1,6 +1,6 @@
 # Why Karotte?
 
-Karotte is our open-source framework for building robust reinforcement learning (RL) environments.
+Karotte is an open-source framework for building robust reinforcement learning (RL) environments, made by [Preference Model](https://preferencemodel.com).
 It makes it easy to build environments that inherently prevent whole classes of reward hacks.
 On this page we build a small environment twice: once by hand, and once with Karotte.
 For each part of the hand-written version, we'll look at how it can break and how Karotte fixes it.
