@@ -5,6 +5,7 @@ import asyncio
 import os
 from pathlib import Path
 from typing import final
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,6 +14,7 @@ from karotte.agents.agent import StepTimeLimitReachedError
 from karotte.agents.cli_agent import AGENTS_BIN_DIR
 from karotte.agents.mistral_vibe import MistralVibeAgent
 from karotte.agents.models import resolve_model
+from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event, MessageAddedEvent
 
@@ -148,6 +150,52 @@ class TestMistralVibeAgent:
         monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
         config = self._write_config(tmp_path, monkeypatch)
         assert 'api_base = "https://api.mistral.ai/v1"' in config
+
+    @pytest.mark.asyncio
+    async def test_start_without_proxy_forwards_and_withholds_the_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
+        agent = self._agent()
+        agent._vibe_home = tmp_path / ".vibe"  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr(
+            "karotte.agents.mistral_vibe.agent.demoted_uid_gid", lambda: None
+        )
+        await agent.start(MagicMock())
+        try:
+            assert agent.model_url.startswith("http://127.0.0.1:")
+            config = (tmp_path / ".vibe" / "config.toml").read_text()
+            assert f'api_base = "{agent.model_url}/v1"' in config
+            env = agent._env()  # pyright: ignore[reportPrivateUsage]
+            assert env["MISTRAL_API_KEY"] == PROXY_PLACEHOLDER_KEY
+            assert "sk-abc" not in env.values()
+        finally:
+            await agent.stop()
+        assert agent.model_url == "https://api.mistral.ai"
+
+    @pytest.mark.asyncio
+    async def test_start_with_proxy_does_not_forward(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "https://proxy.example/")
+        agent = self._agent()
+        agent._vibe_home = tmp_path / ".vibe"  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr(
+            "karotte.agents.mistral_vibe.agent.demoted_uid_gid", lambda: None
+        )
+        await agent.start(MagicMock())
+        assert agent.model_url == "https://proxy.example"
+        env = agent._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["MISTRAL_API_KEY"] == "sk-abc"
+        await agent.stop()
+
+    def test_env_gets_placeholder_key_through_keyless_proxy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "https://proxy.example")
+        config = EvaluationRunConfig(run_id="r", task_id="t", model="mistral/m")
+        env = MistralVibeAgent(config)._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["MISTRAL_API_KEY"] == PROXY_PLACEHOLDER_KEY
 
 
 @final

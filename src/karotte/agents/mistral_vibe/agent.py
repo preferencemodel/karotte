@@ -40,6 +40,7 @@ _VIBE_BIN = f"{AGENTS_BIN_DIR}/vibe"
 class MistralVibeAgent(CliAgent):
     name: ClassVar[str] = "mistral-vibe"
     version: ClassVar[str] = "2.19.0"
+    provider_url: ClassVar[str] = "https://api.mistral.ai"
     # Vibe ships its own shell and file read/edit tools; use those rather than
     # registering karotte's equivalents over MCP.
     native_tool_names: ClassVar[frozenset[str]] = frozenset(
@@ -74,21 +75,14 @@ class MistralVibeAgent(CliAgent):
         student-writable ``VIBE_HOME`` so the tool can also drop its own session
         state there.
 
-        Model traffic goes through a proxy when ``KAROTTE_PROXY_URL``
-        is set: the student can only reach the proxy, not the provider directly.
-        The proxy exposes an OpenAI-compatible route, so the provider is declared
-        ``generic``/``openai``. Without a proxy the tool talks to the provider
-        directly."""
-        resolved = resolve_model(self._config.model, self._config.model_api_key)
-        key_env = resolved.key_env or "MISTRAL_API_KEY"
-
-        proxy = os.environ.get("KAROTTE_PROXY_URL")
-        if proxy:
-            provider_name = "proxy"
-            api_base = f"{proxy.rstrip('/')}/v1"
-        else:
-            provider_name = "mistral"
-            api_base = "https://api.mistral.ai/v1"
+        Model traffic goes to :attr:`model_url`: the proxy when
+        ``KAROTTE_PROXY_URL`` is set, otherwise the forwarder to Mistral's API.
+        Both expose an OpenAI-compatible route, so the provider is declared
+        ``generic``/``openai``."""
+        resolved = resolve_model(self._config.model, None)
+        key_env = self._key_env()
+        provider_name = "proxy" if os.environ.get("KAROTTE_PROXY_URL") else "mistral"
+        api_base = f"{self.model_url}/v1"
 
         self._vibe_home.mkdir(parents=True, exist_ok=True)
         config = (
@@ -119,7 +113,6 @@ class MistralVibeAgent(CliAgent):
                 os.chown(p, uid, uid)
 
     def _env(self) -> dict[str, str]:
-        resolved = resolve_model(self._config.model, self._config.model_api_key)
         # Runs as the student: start from what the student may see, not from
         # everything the harness was handed (see scrub_harness_secrets). The
         # agent's own model credentials are added below, on purpose.
@@ -144,8 +137,12 @@ class MistralVibeAgent(CliAgent):
             path_parts.insert(0, f"{venv}/bin")
         env["PATH"] = ":".join([*path_parts, env.get("PATH", "")])
 
-        env.update(resolved.env)
+        if (api_key := self.model_api_key) is not None:
+            env[self._key_env()] = api_key
         return env
+
+    def _key_env(self) -> str:
+        return resolve_model(self._config.model, None).key_env or "MISTRAL_API_KEY"
 
     def _argv(self, instructions: str) -> list[str]:
         # Passed to exec (no shell), so the instruction is a single safe argv

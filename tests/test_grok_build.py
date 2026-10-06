@@ -6,6 +6,7 @@ driven by a `grok -p` log recorded against a scripted model
 import json
 import tomllib
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,6 +14,7 @@ from karotte.agents import cli_agent_types
 from karotte.agents.cli_agent import AGENTS_BIN_DIR
 from karotte.agents.grok_build import GrokBuildAgent
 from karotte.agents.grok_build.adapter import parse_stream
+from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import (
     MessageAddedEvent,
@@ -118,6 +120,30 @@ class TestGrokBuildAgent:
         monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
         with pytest.raises(ValueError, match="only reach xAI models"):
             _write_config(tmp_path, monkeypatch, _agent(model="openai/gpt-5"))
+
+    @pytest.mark.asyncio
+    async def test_start_without_proxy_forwards_and_withholds_the_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
+        agent = _agent()
+        agent._grok_home = tmp_path / ".grok_home"  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr(
+            "karotte.agents.grok_build.agent.demoted_uid_gid", lambda: None
+        )
+        await agent.start(MagicMock())
+        try:
+            assert agent.model_url.startswith("http://127.0.0.1:")
+            config = tomllib.loads(
+                (tmp_path / ".grok_home" / "config.toml").read_text()
+            )
+            model = config["model"]["grok-4.7"]
+            assert model["base_url"] == f"{agent.model_url}/v1"
+            env = agent._env()  # pyright: ignore[reportPrivateUsage]
+            assert env["XAI_API_KEY"] == PROXY_PLACEHOLDER_KEY
+            assert "xai-abc" not in env.values()
+        finally:
+            await agent.stop()
 
 
 class TestParseStream:

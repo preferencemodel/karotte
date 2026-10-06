@@ -88,8 +88,11 @@ class EvaluationRunner:
     async def run(self) -> AsyncGenerator[Event]:
         try:
             async with self._prepared_mcp_client() as mcp_client:
-                async for event in self._run(mcp_client):
-                    yield event
+                try:
+                    async for event in self._run(mcp_client):
+                        yield event
+                finally:
+                    await self._agent.stop()
         except (Exception, KeyboardInterrupt) as e:
             error_event = ErrorEvent(
                 exception_type=type(e).__name__,
@@ -113,8 +116,11 @@ class EvaluationRunner:
         earlier real run is left untouched.
         """
         async with self._prepared_mcp_client() as mcp_client:
-            async for event in self._set_up_task(mcp_client):
-                yield event
+            try:
+                async for event in self._set_up_task(mcp_client):
+                    yield event
+            finally:
+                await self._agent.stop()
 
     @asynccontextmanager
     async def _prepared_mcp_client(self):
