@@ -87,15 +87,15 @@ class TestApiKeyResolution:
     def test_a_guessed_variable_is_named_in_a_warning(
         self, monkeypatch: pytest.MonkeyPatch
     ):
-        monkeypatch.setenv("XAI_API_KEY", "sk-xai")
+        monkeypatch.setenv("MINIMAX_API_KEY", "sk-minimax")
         messages, handler = _warnings()
         try:
-            config = parse_config(_config_json(model="xai/grok-4.3"))
+            config = parse_config(_config_json(model="minimax/MiniMax-M3"))
         finally:
             logger.remove(handler)
 
-        assert config.model_api_key == "sk-xai"
-        assert any("XAI_API_KEY" in m for m in messages)
+        assert config.model_api_key == "sk-minimax"
+        assert any("MINIMAX_API_KEY" in m for m in messages)
 
     def test_a_known_litellm_variable_is_not_called_a_guess(
         self, monkeypatch: pytest.MonkeyPatch

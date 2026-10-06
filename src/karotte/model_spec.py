@@ -25,6 +25,7 @@ PROVIDER_API_KEY_ENV: dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
     "gemini": "GEMINI_API_KEY",
+    "xai": "XAI_API_KEY",
 }
 """Provider prefix to the env var that provider's CLI reads its API key from."""
 

@@ -25,10 +25,11 @@ from karotte.agents.cli_agent import (
 )
 from karotte.agents.external import ExternalAgent
 from karotte.agents.fake_source import FakeSource
-from karotte.agents.message_loop import MessageLoopAgent
-from karotte.agents.message_source import MessageSource
 
 # Import agent modules for their `register_cli_agent` side effects.
+from karotte.agents.grok_build import GrokBuildAgent
+from karotte.agents.message_loop import MessageLoopAgent
+from karotte.agents.message_source import MessageSource
 from karotte.agents.mistral_vibe import MistralVibeAgent
 
 __all__ = [
@@ -41,6 +42,7 @@ __all__ = [
     "EmptyTurnLimitReachedError",
     "ExternalAgent",
     "FakeSource",
+    "GrokBuildAgent",
     "MessageLoopAgent",
     "MessageSource",
     "MistralVibeAgent",
