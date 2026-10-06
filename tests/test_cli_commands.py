@@ -58,9 +58,9 @@ class TestCreateEnv:
             f"cd {env}",
             "uv sync --extra dev",
             "uv run setup_data.py",
-            "uv run karotte create-run-config --model anthropic/claude-fable-5",
+            "uv run karotte tasks list",
             "export ANTHROPIC_API_KEY=...",
-            "uv run karotte run --config run_config.json",
+            "uv run karotte run --task <task-id> --model anthropic/claude-fable-5",
         ]
 
 

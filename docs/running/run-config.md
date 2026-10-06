@@ -9,6 +9,33 @@ uv run karotte run --config run_config.json
 
 The JSON gets parsed as an [`EvaluationRunConfig`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/schemas/evaluation_run_config.py).
 
+## Flags
+
+Without `--config`, `karotte run` builds the config from its flags:
+
+```sh
+uv run karotte run --task find-python --model anthropic/claude-fable-5
+```
+
+`--task` and `--model` are then required.
+The run gets a random `run_id`, and `transcript_file` defaults to `out/transcript.json`.
+
+| Flag                 | Field              |
+| -------------------- | ------------------ |
+| `--task`             | `task_id`          |
+| `--model`            | `model`            |
+| `--model-api-key`    | `model_api_key`    |
+| `--reasoning-effort` | `reasoning_effort` |
+| `--transcript-file`  | `transcript_file`  |
+
+With `--config`, the flags override the config's fields, so one config can be run against several models:
+
+```sh
+uv run karotte run --config run_config.json --model openai/gpt-5.5
+```
+
+The other fields have no flag; set them in a config.
+
 ## Create a run config
 
 ```sh
@@ -110,7 +137,7 @@ Without `model_api_key`, Karotte reads the key from the model provider's variabl
 | `together_ai/...`           | `TOGETHERAI_API_KEY`                                     |
 | other `<provider>/...`      | `<PROVIDER>_API_KEY`, e.g. `XAI_API_KEY`, with a warning |
 
-To use another key, set `model_api_key` to the key itself or to a `$VAR` reference to another variable; `create-run-config --model-api-key` writes it for you.
+To use another key, set `model_api_key` to the key itself or to a `$VAR` reference to another variable; `karotte run --model-api-key` and `create-run-config --model-api-key` set it for you.
 If the variable is unset, the run stops with an error, unless it uses the fake model or `--prepare-only`.
 
 ### Rubric judge

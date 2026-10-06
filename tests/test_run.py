@@ -1,5 +1,6 @@
 import functools
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -514,6 +515,143 @@ class TestProxyPlaceholderForReferencedKey:
 
         with pytest.raises(typer.Abort):
             self._run(self._config("$OPENAI_API_KEY"), None)
+
+
+@pytest.mark.usefixtures("in_karotte_image")
+class TestConfigFromFlags:
+    """--task, --model and friends build the run config or override --config."""
+
+    @pytest.fixture(autouse=True)
+    def _keys(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-anthropic")
+        monkeypatch.setenv("MY_KEY", "sk-mine")
+
+    def _run(self, **kwargs: Any) -> EvaluationRunConfig:
+        with (
+            patch("karotte.cli.run.load_task", return_value=MagicMock()),
+            patch(
+                "karotte.mcp_servers.http_mcp_server.run_server",
+                return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
+            ),
+            patch("karotte.cli.run.anyio") as mock_anyio,
+        ):
+            run(containerized=False, no_proxy=True, **kwargs)
+        return mock_anyio.run.call_args.args[1]
+
+    def _config(self, **fields: Any) -> str:
+        return EvaluationRunConfig(
+            run_id="from-config",
+            task_id="config-task",
+            model="openai/gpt-5.5",
+            **fields,
+        ).model_dump_json()
+
+    def test_task_and_model_are_enough(self):
+        run_config = self._run(task="example-task", model="openai/gpt-5.5")
+
+        assert run_config.task_id == "example-task"
+        assert run_config.model == "openai/gpt-5.5"
+        assert re.fullmatch(r"[0-9a-f]{8}", run_config.run_id)
+        assert run_config.transcript_file == "out/transcript.json"
+        assert run_config.model_api_key == "sk-openai"
+
+    @pytest.mark.parametrize(
+        ("flags", "missing"),
+        [
+            ({"model": "openai/gpt-5.5"}, "--task"),
+            ({"task": "example-task"}, "--model"),
+            ({}, "--task and --model"),
+        ],
+    )
+    def test_without_a_config_task_and_model_are_required(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        flags: dict[str, str],
+        missing: str,
+    ):
+        with pytest.raises(typer.Abort):
+            self._run(**flags)
+
+        assert missing in capsys.readouterr().err
+
+    def test_the_other_flags_are_applied(self):
+        run_config = self._run(
+            task="example-task",
+            model="openai/gpt-5.5",
+            model_api_key="$MY_KEY",
+            reasoning_effort="max",
+            transcript_file="elsewhere/t.json",
+        )
+
+        assert run_config.model_api_key == "sk-mine"
+        assert run_config.reasoning_effort == "max"
+        assert run_config.transcript_file == "elsewhere/t.json"
+
+    def test_the_key_can_come_from_a_file(self, tmp_path: Path):
+        key_file = tmp_path / "key"
+        key_file.write_text("sk-from-file")
+
+        run_config = self._run(
+            task="example-task",
+            model="openai/gpt-5.5",
+            model_api_key_file=str(key_file),
+        )
+
+        assert run_config.model_api_key == "sk-from-file"
+
+    def test_flags_override_a_config(self):
+        run_config = self._run(
+            config=self._config(turn_limit=7),
+            task="example-task",
+            model="claude-fable-5",
+            model_api_key="sk-literal",
+        )
+
+        assert run_config.run_id == "from-config"
+        assert run_config.task_id == "example-task"
+        assert run_config.model == "claude-fable-5"
+        assert run_config.model_api_key == "sk-literal"
+        assert run_config.turn_limit == 7
+
+    def test_flags_override_a_config_file(self, tmp_path: Path):
+        config_file = tmp_path / "config.json"
+        config_file.write_text(self._config(transcript_file="out/t.json"))
+
+        run_config = self._run(config=str(config_file), model="claude-fable-5")
+
+        assert run_config.model == "claude-fable-5"
+        assert run_config.task_id == "config-task"
+        assert run_config.transcript_file == "out/t.json"
+
+    def test_unset_flags_leave_a_config_alone(self):
+        run_config = self._run(config=self._config())
+
+        assert run_config.task_id == "config-task"
+        assert run_config.transcript_file is None
+
+    def test_a_proxy_fills_in_the_key_for_the_flags_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("OPENAI_API_KEY")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+        monkeypatch.delenv("ANTHROPIC_API_KEY")
+        with (
+            patch("karotte.cli.run.load_task", return_value=MagicMock()),
+            patch(
+                "karotte.mcp_servers.http_mcp_server.run_server",
+                return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
+            ),
+            patch("karotte.cli.run.anyio") as mock_anyio,
+        ):
+            run(
+                config=self._config(),
+                model="claude-fable-5",
+                containerized=False,
+                proxy="https://proxy.example",
+            )
+
+        assert mock_anyio.run.call_args.args[1].model_api_key == "model_api_key"
 
 
 class TestUncontainerizedProxyEnv:

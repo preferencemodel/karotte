@@ -2,10 +2,11 @@ import glob
 import json
 import os
 import subprocess
+import uuid
 from collections.abc import Sequence
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Annotated, Never, get_args
+from typing import Annotated, Any, Never, get_args
 
 import anyio
 import typer
@@ -51,16 +52,45 @@ def default_proxy_url() -> str | None:
     return None
 
 
+def _read_config(config: str) -> Any:
+    """The data in a JSON config or config file, or None if it has none."""
+    try:
+        return json.loads(config)
+    except ValueError:
+        try:
+            return json.loads(Path(config).read_text())
+        except (OSError, ValueError):
+            return None
+
+
+def _config_with_flags(config: str | None, flags: dict[str, str | None]) -> str:
+    """``config`` with the set ``flags`` on top, or a new config from them."""
+    set_flags = {field: value for field, value in flags.items() if value is not None}
+    if config is None:
+        missing = [
+            f"--{field.removesuffix('_id')}"
+            for field in ("task_id", "model")
+            if field not in set_flags
+        ]
+        if missing:
+            _print_and_abort(f"Pass --config, or {' and '.join(missing)}.")
+        return json.dumps(
+            {
+                "run_id": uuid.uuid4().hex[:8],
+                "transcript_file": "out/transcript.json",
+                **set_flags,
+            }
+        )
+    data = _read_config(config)
+    if not set_flags or not isinstance(data, dict):
+        return config
+    return json.dumps({**data, **set_flags})
+
+
 def _key_env_vars(config: str) -> list[str]:
     """The env vars a JSON config or config file reads its model and rubric
     judge API keys from."""
-    try:
-        data = json.loads(config)
-    except ValueError:
-        try:
-            data = json.loads(Path(config).read_text())
-        except (OSError, ValueError):
-            return []
+    data = _read_config(config)
     try:
         run_config = EvaluationRunConfig.model_validate(data)
     except ValidationError:
@@ -84,13 +114,45 @@ def _export_proxy(proxy_url: str) -> None:
 
 def run(
     config: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--config",
             "-c",
-            help="JSON-serialized EvaluationRunConfig, or a path to a file with one.",
+            help="JSON-serialized EvaluationRunConfig, or a path to a file with one. "
+            + "Without it, --task and --model are required.",
         ),
-    ],
+    ] = None,
+    task: Annotated[
+        str | None,
+        typer.Option(help="Task ID. Overrides the config's task_id."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(help="Model name. Overrides the config's model."),
+    ] = None,
+    model_api_key: Annotated[
+        str | None,
+        typer.Option(
+            help="Model API key, or a `$VAR` reference to one. Overrides the config's model_api_key."
+        ),
+    ] = None,
+    model_api_key_file: Annotated[
+        str | None,
+        typer.Option(hidden=True, help="File holding the model API key."),
+    ] = None,
+    reasoning_effort: Annotated[
+        str | None,
+        typer.Option(
+            help="`min`, `max`, or one of the model's own levels. Overrides the config's reasoning_effort."
+        ),
+    ] = None,
+    transcript_file: Annotated[
+        str | None,
+        typer.Option(
+            help="Where to save the transcript. Overrides the config's transcript_file. "
+            + "Default without --config: out/transcript.json."
+        ),
+    ] = None,
     containerized: Annotated[
         bool,
         typer.Option(
@@ -213,6 +275,19 @@ def run(
     if dev and not containerized:
         _print_and_abort("Cannot use the `--dev` option without containerization.")
 
+    if model_api_key_file is not None:
+        model_api_key = Path(model_api_key_file).read_text()
+    config = _config_with_flags(
+        config,
+        {
+            "task_id": task,
+            "model": model,
+            "model_api_key": model_api_key,
+            "reasoning_effort": reasoning_effort,
+            "transcript_file": transcript_file,
+        },
+    )
+
     proxy_url = None if no_proxy else proxy or default_proxy_url()
 
     if mount and not containerized:
@@ -298,17 +373,17 @@ def run(
         if proxy_url and proxy:
             _export_proxy(proxy_url)
 
-        task = load_task(run_config)
+        loaded_task = load_task(run_config)
 
         error = None
         with run_mcp_server(run_config.mcp_server_config), staged_mounts.copied_back():
             from karotte.run_helpers import hold_prepared_env, run_non_containerized
 
             if prepare_only:
-                hold_prepared_env(run_config, task)
+                hold_prepared_env(run_config, loaded_task)
             else:
                 try:
-                    error = anyio.run(run_non_containerized, run_config, task)
+                    error = anyio.run(run_non_containerized, run_config, loaded_task)
                 finally:
                     chown_outputs(run_config)
         # The backend's pods rely on exit 0; only the host's containers ask for a non-zero exit.
