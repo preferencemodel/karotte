@@ -62,7 +62,8 @@ To get access to `/dev/kvm`, add yourself to the `kvm` group and log in again:
 sudo usermod -aG kvm $USER
 ```
 
-On the first run, Karotte downloads a pinned Firecracker and guest kernel into `~/.cache/karotte/firecracker` (under `$XDG_CACHE_HOME` if it's set) and checks their SHA-256.
+On the first run, Karotte downloads Firecracker and a guest kernel from a [Kata Containers](https://katacontainers.io/) release into `~/.cache/karotte/firecracker` (under `$XDG_CACHE_HOME` if it's set).
+Each Karotte release fixes which versions it downloads and their SHA-256 checksums, and stops with an error if a download doesn't match.
 
 pasta gives the guest a network without needing root.
 On Ubuntu 24.04, AppArmor stops pasta from creating the user namespace it needs.
