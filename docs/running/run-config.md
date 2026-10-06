@@ -264,13 +264,15 @@ CLI agents differ from `builtin` in a few ways:
 - `reasoning_effort` isn't applied.
 - The student's firewall only lets them reach the model proxy, so sandboxed runs need `--proxy`.
   `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or straight to Mistral's API when there's no proxy.
-  `grok-build` does the same with the proxy; without one it only runs `xai/` models, against xAI's API.
+  `grok-build` does the same with the proxy; without one, which only works outside the sandbox, it runs `xai/` models against xAI's API.
+- Each step's raw CLI output is saved as an artifact, `step_<n>.ndjson`.
 
 `grok-build` specifics:
 
 - All steps of a run share one Grok session, so later steps see the earlier conversation.
 - Grok doesn't list MCP tools to the model directly. The model finds the task's tools with `search_tool` and calls them through `use_tool` (as `karotte__<tool>`), and the transcript records those calls as `use_tool`.
 - Grok's web search, image editing, feedback and ask-the-user tools are turned off, along with its telemetry and update checks.
+- Token usage in the transcript is what Grok reports. `mistral-vibe` doesn't report usage, so its counts are estimated from the message text.
 
 ## Fake model
 
