@@ -14,14 +14,18 @@ uv sync --extra dev
 `create-env` renders the `default` template into `my_env/` and locks its dependencies.
 `uv sync --extra dev` installs the environment, Karotte and the dev tools (ruff, pytest, just) into `.venv`.
 
-## Create a run config
+## Run the task
+
+`anthropic/claude-fable-5` needs `ANTHROPIC_API_KEY`:
 
 ```sh
-uv run karotte create-run-config --model anthropic/claude-fable-5
+export ANTHROPIC_API_KEY=...
+uv run karotte run --task example-task --model anthropic/claude-fable-5
 ```
 
-This writes `run_config.json` for the first task in the environment, which in a fresh environment is `example-task`.
-`--task <task-id>` picks another one.
+`karotte run` builds the container image, starts it in the runtime, and runs the task.
+A terminal UI shows the run as it happens; `--no-ui` prints the output to the terminal instead.
+
 `uv run karotte tasks list` shows all tasks in the environment.
 
 `uv run karotte models list` shows the models Karotte knows.
@@ -30,19 +34,7 @@ Model ids are passed to [litellm](https://docs.litellm.ai/).
 Karotte reads the model's API key from the provider's variable, such as `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, when the run starts.
 `--model-api-key` sets another key, or a `$VAR` reference to another variable.
 
-See [Run config](../running/run-config.md) for the other fields.
-
-## Run the task
-
-`anthropic/claude-fable-5` needs `ANTHROPIC_API_KEY`:
-
-```sh
-export ANTHROPIC_API_KEY=...
-uv run karotte run --config run_config.json
-```
-
-`karotte run` builds the container image, starts it in the runtime, and runs the task.
-A terminal UI shows the run as it happens; `--no-ui` prints the output to the terminal instead.
+For options without a flag, write a run config; see [Run config](../running/run-config.md).
 
 The example task has two steps: the student finds the path of its Python executable, then writes the Python version to a file.
 Its code is in `src/environment/tasks/example_task/`.
