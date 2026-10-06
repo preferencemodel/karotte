@@ -9,6 +9,7 @@ copyright = 'MIT licensed. Carrot icon from <a href="https://github.com/googlefo
 extra_css = ["stylesheets/extra.css"]
 nav = [
   { "Home" = "index.md" },
+  { "Why Karotte?" = "why-karotte.md" },
   { "Getting started" = [
     "getting-started/installation.md",
     "getting-started/quick-start.md",
