@@ -39,9 +39,8 @@ Install Apple's [`container`](https://github.com/apple/container/releases) (1.4.
 container system start
 ```
 
-Don't put the environment under `/tmp` or any other path that goes through a symlink.
-Apple's builder copies directories in those places as empty directories.
-Keep the environment under your home directory.
+Don't put the environment under `/tmp`, `/private/tmp` or any other path that goes through a symlink, such as `/var`.
+Apple's builder copies the directories in it as empty directories, so Karotte refuses to build from there.
 
 Images that only have an amd64 variant run under Rosetta.
 
