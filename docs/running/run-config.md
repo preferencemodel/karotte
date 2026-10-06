@@ -43,44 +43,19 @@ uv run karotte create-run-config --model anthropic/claude-fable-5 --task find-py
 ```
 
 It loads your tasks, so run it from the environment repo.
-It writes a random `run_id` and sets `transcript_file` to `out/transcript.json`:
-
-TODO: Can the following be generated during docs build?
+It writes a random `run_id`, sets `transcript_file` to `out/transcript.json`, and fills in every other field with its default:
 
 ```json
 {
     "run_id": "3f9c1a2b",
-    "task_id": "example-task",
-    "agent": null,
+    "task_id": "find-python",
     "model": "anthropic/claude-fable-5",
-    "model_api_key": null,
-    "rubric_judge_model": null,
-    "rubric_judge_api_key": null,
-    "use_hints": true,
-    "reasoning_effort": null,
-    "turn_limit": null,
-    "step_time_limit_seconds": null,
-    "on_step_time_limit": "error",
-    "inject_time_remaining_counter": true,
-    "step_context_window_limit": null,
-    "on_step_context_window_limit": "error",
-    "inject_context_remaining_counter": true,
-    "mcp_server_config": {
-        "host": "0.0.0.0",
-        "port": 8080,
-        "profile_tool_calls": false
-    },
-    "websocket_config": {
-        "host": "0.0.0.0",
-        "port": 8001
-    },
     "transcript_file": "out/transcript.json",
-    "use_fake_model": false,
-    "extra_config": null,
-    "backend_uri": null,
-    "save_artifacts": true
+    ...
 }
 ```
+
+[`EvaluationRunConfig`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/schemas/evaluation_run_config.py) lists every field with its default.
 
 If you rename a task or want to run another one, change `task_id`.
 

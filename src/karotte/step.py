@@ -58,11 +58,13 @@ class Step(ABC):
 
     @property
     @abstractmethod
-    def instructions(self) -> str: ...
+    def instructions(self) -> str:
+        """The user message that starts the step."""
 
     @property
     @abstractmethod
-    def judge(self) -> Judge: ...
+    def judge(self) -> Judge:
+        """Scores the step. Read after `pre_scoring_hook` has run."""
 
     @property
     def submission_paths(self) -> tuple[Path, ...] | None:

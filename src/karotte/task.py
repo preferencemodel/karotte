@@ -43,6 +43,7 @@ class Task(ABC, metaclass=_TaskMeta):
     """
 
     id: str
+    """Must be unique within the environment, at most 255 characters."""
 
     def __init__(self, config: EvaluationRunConfig):
         self.config: Final = config
@@ -92,11 +93,13 @@ class Task(ABC, metaclass=_TaskMeta):
 
     @property
     @abstractmethod
-    def steps(self) -> Iterable[Step]: ...
+    def steps(self) -> Iterable[Step]:
+        """The steps, in order."""
 
     @property
     @abstractmethod
-    def tools(self) -> list[str]: ...
+    def tools(self) -> list[str]:
+        """Names of the tools the student gets."""
 
     @property
     def required_hardware(self) -> str | None:

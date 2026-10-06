@@ -34,7 +34,8 @@ for task_id, (question, answer) in QUESTIONS.items():
     )
 ```
 
-TODO: Point to source code
+`create_task` also takes the task's optional members, such as `pre_hook` and `required_hardware`, and `StepConfig` takes the step's.
+[`task_factory.py`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/task_factory.py) lists them all.
 
 ## Task suites
 

@@ -267,14 +267,7 @@ Anything that looks like tampering raises `StudentMisbehaviorError`, for example
 - a special file,
 - a missing parent directory,
 - a destination error the student can provoke (full disk, name collision, over-long path),
-- or a file tree that exceeds on of these limits:
+- or a file tree that is too large, has too many entries or is nested too deeply.
 
-| Argument          | Default | Meaning                                                                |
-| ----------------- | ------- | ---------------------------------------------------------------------- |
-| `allow_symlinks`  | `False` | Copy symlinks inside a directory as symlinks instead of refusing them. |
-| `max_file_bytes`  | 256 MiB | Largest single file.                                                   |
-| `max_total_bytes` | 1 GiB   | Largest total across the tree.                                         |
-| `max_entries`     | 10,000  | Most entries in the tree.                                              |
-| `max_depth`       | 32      | Deepest nesting.                                                       |
-
+[`save_submission.py`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/save_submission.py) has the limits and their defaults.
 Pass the limits through `collect_submission` as `save_submission_kwargs`.

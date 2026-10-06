@@ -37,7 +37,9 @@ class HardwareLimits:
     """What a sandbox on one hardware type holds; ``None`` means unknown."""
 
     memory_bytes: int | None = None
+    """RAM of the sandbox. The student gets this minus 1 GiB, which is left for the harness."""
     disk_bytes: int | None = None
+    """Cap on the student's disk quota, unless the launcher sets `KAROTTE_DISK_BUDGET_BYTES`."""
     cpus: int | None = None
     """CPUs for a VM runtime to give the sandbox."""
     passthrough: bool = False

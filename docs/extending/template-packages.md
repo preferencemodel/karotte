@@ -41,13 +41,8 @@ It can contain lowercase letters, digits and hyphens, but it can't start or end 
 
 ## `template.toml`
 
-`template.toml` holds the fields of [`EnvironmentTemplate`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/schemas/environment_template.py):
-
-| Field                        | Type                 | Meaning                                                                                                                                             |
-| ---------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `description`                | string, required     | Shown by `karotte templates list`.                                                                                                                  |
-| `requires`                   | list of template ids | Templates that are rendered before this one.                                                                                                        |
-| `do_not_recreate_if_deleted` | list of paths        | Paths in this template that `karotte update` must not recreate after the user has deleted them. A directory entry also matches everything under it. |
+`template.toml` holds the fields of [`EnvironmentTemplate`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/schemas/environment_template.py), except `id`, which comes from the directory name.
+Only `description` is required:
 
 ```toml
 description = "Adds a Rust toolchain."
