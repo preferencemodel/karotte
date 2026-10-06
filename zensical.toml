@@ -1,5 +1,5 @@
 [project]
-site_name = "karotte"
+site_name = "Karotte"
 site_description = "Build robust RL environments to train aligned AI."
 site_url = "https://karotte.dev/"
 repo_url = "https://github.com/preferencemodel/karotte"
@@ -35,7 +35,7 @@ nav = [
     "environments/language-toolchains.md",
     "environments/updating.md",
   ] },
-  { "Extending karotte" = [
+  { "Extending Karotte" = [
     "extending/template-packages.md",
     "extending/plugins.md",
     "extending/backend.md",

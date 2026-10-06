@@ -1,6 +1,6 @@
 # Tasks and steps
 
-A task is a Python class that tells karotte what the student sees, which tools it gets, and how its work is scored.
+A task is a Python class that tells Karotte what the student sees, which tools it gets, and how its work is scored.
 A task has one or more steps.
 Each step sends the student instructions and ends with a judge that scores the result.
 
@@ -59,7 +59,7 @@ A task's `id` must be unique within the environment and at most 255 characters l
 
 ## Discovery
 
-karotte loads tasks by calling `get_tasks()` in `src/environment/__init__.py`.
+Karotte loads tasks by calling `get_tasks()` in `src/environment/__init__.py`.
 It imports every directory in `tasks/` whose name doesn't start with `_`, and collects every `Task` subclass in that package's namespace that has a non-empty `id`.
 
 To load only some tasks, fill in the two sets in `src/environment/__init__.py`:
@@ -72,7 +72,7 @@ EXCLUDE_TASKS: set[str] = set()
 ## The Task class
 
 A task subclasses `karotte.Task`.
-karotte creates it with the run config, which the task reads as `self.config`, so any property can depend on the run.
+Karotte creates it with the run config, which the task reads as `self.config`, so any property can depend on the run.
 
 | Member              | Kind            | Default                       | Purpose                                                                  |
 | ------------------- | --------------- | ----------------------------- | ------------------------------------------------------------------------ |
@@ -108,7 +108,7 @@ Create steps with the task's config, as in `FindPythonStep(config=self.config)`,
 | `pre_scoring_hook()` | method                      | does nothing | See [Hooks](#hooks).                                                       |
 | `post_hook()`        | method                      | does nothing | See [Hooks](#hooks).                                                       |
 
-karotte reads `judge` after `pre_scoring_hook` has run, so the judge can use what the hook prepared, such as the saved copy of a submission.
+Karotte reads `judge` after `pre_scoring_hook` has run, so the judge can use what the hook prepared, such as the saved copy of a submission.
 See [Saving submissions](scoring.md#saving-submissions) for the full pattern.
 
 ## Hooks
@@ -137,7 +137,7 @@ A few keys, such as `extra_task_instructions`, have a built-in meaning; see [Run
 ## Required hardware
 
 `required_hardware` names the hardware a task needs.
-karotte itself knows no hardware names.
+Karotte itself knows no hardware names.
 It is up to a [plugin](../extending/plugins.md#karottehardware_limits) to define them and decide what a sandbox on that hardware should look like.
 
 ```python

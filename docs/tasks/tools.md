@@ -1,11 +1,11 @@
 # Tools
 
 The student interacts with the environment through tools.
-karotte serves them over the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) from a server that runs inside the sandbox.
+Karotte serves them over the [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) from a server that runs inside the sandbox.
 
 ## Built-in tools
 
-karotte ships these tools in `karotte.tools`:
+Karotte ships these tools in `karotte.tools`:
 
 | Tool                 | What it does                                                |
 | -------------------- | ----------------------------------------------------------- |
@@ -26,7 +26,7 @@ def tools(self):
     return ["bash", "view_lines_in_file", "replace_in_file"]
 ```
 
-CLI agents that bring their own shell and file tools use those instead of karotte's.
+CLI agents that bring their own shell and file tools use those instead of Karotte's.
 
 ## Configuring tools
 
@@ -49,12 +49,12 @@ Configs are stored as JSON in `~/.config/karotte/tool_configs/` of the user runn
 ## Custom tools
 
 Put a custom tool in `src/environment/tools/<name>.py`.
-karotte automatically finds it by name; no need to register the tool.
+Karotte automatically finds it by name; no need to register the tool.
 The module must define an object called `<name>` that is either:
 
 - an async or regular function, or
 - a class with a `__call__` method.
-  karotte creates one instance per run, with no arguments.
+  Karotte creates one instance per run, with no arguments.
 
 The function or `__call__` needs
 

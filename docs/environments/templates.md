@@ -2,7 +2,7 @@
 
 A template is a directory of files.
 `karotte create-env` renders those files with [Jinja](https://jinja.palletsprojects.com/) to make a new environment.
-karotte ships two templates:
+Karotte ships two templates:
 
 | Template              | What it gives you                                                                                                           |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -58,8 +58,8 @@ To stack templates, pass `--template` more than once:
 karotte create-env my_env --template default --template language-toolchains
 ```
 
-karotte renders `default` first and then renders `language-toolchains` on top of it.
-karotte always renders a template's `requires` before the template itself.
+Karotte renders `default` first and then renders `language-toolchains` on top of it.
+Karotte always renders a template's `requires` before the template itself.
 So `karotte create-env my_env --template language-toolchains` gives you the same result.
 
 A later template can replace a file completely by shipping its own file at the same path.
@@ -82,7 +82,7 @@ Every environment has a `.manifest.json` file that records how it was made:
 
 | Field                        | Meaning                                                               |
 | ---------------------------- | --------------------------------------------------------------------- |
-| `karotte_version`            | The karotte release that rendered the environment.                    |
+| `karotte_version`            | The Karotte release that rendered the environment.                    |
 | `templates`                  | The templates in the order they were applied, including dependencies. |
 | `agents`                     | CLI agents baked into the image (`create-env --agent`).               |
 | `do_not_recreate_if_deleted` | Paths that `karotte update` won't bring back after you delete them.   |

@@ -1,12 +1,12 @@
 # Concepts
 
-## Environments and the karotte library
+## Environments and the Karotte library
 
 An _environment_ is the isolated world a model (we call it the _student_) works in: the tasks, the tools it can use, the data and dependencies it needs, and the judges that score it.
-You define it as a Python project, created with `karotte create-env`, and karotte builds it into a container image that runs in a sandbox.
+You define it as a Python project, created with `karotte create-env`, and Karotte builds it into a container image that runs in a sandbox.
 In the Python project it is the `environment` package, which depends on the `karotte` library.
 
-karotte provides everything an environment needs:
+Karotte provides everything an environment needs:
 
 - the harness that runs a task, talks to the student and scores the result
 - tools for the student, such as `bash`, `view_lines_in_file` and `replace_in_file`
@@ -20,7 +20,7 @@ The environment adds everything else on top:
 - a `Containerfile` that builds it into a container image
 - data and dependencies for the student and for scoring
 
-Since karotte is a dependency, you get its fixes and features by updating it; see [Updating](../environments/updating.md).
+Since Karotte is a dependency, you get its fixes and features by updating it; see [Updating](../environments/updating.md).
 The files `create-env` generates come from [templates](../environments/templates.md).
 
 ## Terminology

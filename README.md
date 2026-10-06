@@ -1,22 +1,12 @@
-# karotte
+# Karotte 🥕
 
-karotte runs LLM agents on tasks and scores the results.
-
-You write an _environment_: a Python project with one or more tasks. A task is a
-list of steps. Each step gives the agent instructions and a judge that decides
-whether the agent succeeded. karotte builds the environment into a container
-image, lets the model work inside it through tools like `bash`, and records every
-message, tool call and score in a transcript.
-
-The agent runs as an unprivileged user with its own resource limits, a firewall,
-and a disk quota, so a task can hand it a real shell without trusting it.
-The model under test is called the _student_.
+Karotte is a framework for building robust RL environments.
 
 **Documentation: [karotte.dev](https://karotte.dev)**
 
 ## Install
 
-karotte needs Python 3.12+ and [uv](https://docs.astral.sh/uv/). Runs go into a
+Karotte needs Python 3.12+ and [uv](https://docs.astral.sh/uv/). Runs go into a
 VM by default: Apple `container` on macOS, Firecracker on Linux. docker or
 podman work too. See [Installation](https://karotte.dev/getting-started/installation/)
 and [Runtimes](https://karotte.dev/running/runtimes/) for what each needs.
@@ -54,11 +44,11 @@ just test-template default
 ```
 
 Every merge to `main` is released. See
-[Developing karotte](https://karotte.dev/extending/developing-karotte/).
+[Developing Karotte](https://karotte.dev/extending/developing-karotte/).
 
 ## License
 
-karotte is under the [MIT license](https://github.com/preferencemodel/karotte/blob/main/LICENSE). The templates in
+Karotte is under the [MIT license](https://github.com/preferencemodel/karotte/blob/main/LICENSE). The templates in
 `src/karotte/templates/` are under [MIT No Attribution](https://github.com/preferencemodel/karotte/blob/main/src/karotte/templates/LICENSE)
 (`MIT-0`), so environments created from them need no license notice.
 

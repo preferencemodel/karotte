@@ -114,7 +114,7 @@ The template's `.gitignore` ignores the contents of the four data directories th
 The image always has two virtual environments:
 
 - **Root venv** (`/root/.venv`): built from the environment's top-level `pyproject.toml`.
-  karotte and your `src/environment/` code run here.
+  Karotte and your `src/environment/` code run here.
   Root-only.
 - **Student venv** (`/workdir/.venv`): built from `venvs/student/pyproject.toml`.
   It is on the image's `PATH` so the student automaticall works in it.
@@ -196,14 +196,14 @@ For whole language toolchains, see [Language toolchains](../environments/languag
 ## Network access
 
 During a run, a firewall keeps the student off the network.
-By default it can reach localhost and the sandbox's own addresses, except the ports of karotte's progress stream and MCP server.
+By default it can reach localhost and the sandbox's own addresses, except the ports of Karotte's progress stream and MCP server.
 How the firewall is enforced depends on the runtime; see [Runtimes](../running/runtimes.md).
 
 Without network, the student can't look up docs or download packages, so make sure to give it everything it needs to solve the task.
 
 ## Google Cloud Storage
 
-karotte has helpers to download and upload directories from and to Google Cloud Storage.
+Karotte has helpers to download and upload directories from and to Google Cloud Storage.
 They need the `gcs` extra:
 
 ```bash

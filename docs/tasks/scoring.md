@@ -1,11 +1,11 @@
 # Scoring
 
 Every step ends with a judge that scores the student's work.
-This page covers the judges karotte ships, how to combine them, how to write your own, and how to collect files the student hands in.
+This page covers the judges Karotte ships, how to combine them, how to write your own, and how to collect files the student hands in.
 
 ## How a step gets scored
 
-When the student finishes a step, karotte calls the step's `pre_scoring_hook()`, then reads its `judge` property and calls `judge.evaluate(transcript)`.
+When the student finishes a step, Karotte calls the step's `pre_scoring_hook()`, then reads its `judge` property and calls `judge.evaluate(transcript)`.
 The transcript holds every event of the run so far.
 The judge returns a `Scoring`:
 
@@ -45,9 +45,9 @@ ExecutableJudge(
 - The first argument is the full command.
   Use `sys.executable` so the script runs with the environment's Python.
 - The last argument is the name of the file the script writes its result to.
-  karotte puts the file in a fresh temporary directory, passes the script that path, and deletes the directory after scoring finishes.
+  Karotte puts the file in a fresh temporary directory, passes the script that path, and deletes the directory after scoring finishes.
 - The script must write `{"score": <float>, "metadata": {...}}` to that file, with both keys.
-  karotte converts the metadata values to strings and adds the script's `stdout` and `stderr`.
+  Karotte converts the metadata values to strings and adds the script's `stdout` and `stderr`.
 - The script must exit 0.
   A non-zero exit, a missing executable, or an output file that is missing or not valid JSON scores 0 with `continue_task=False` and the error in the scoring metadata.
 - `continue_threshold` (default `-1`): the task continues if the score is at least this.
@@ -176,17 +176,17 @@ The step scores 0 with `continue_task=False` and your message in `metadata["misb
 
 !!! warning
 
-    karotte catches it only in `pre_scoring_hook`, the `judge` property and `judge.evaluate`.
+    Karotte catches it only in `pre_scoring_hook`, the `judge` property and `judge.evaluate`.
     Raised from a tool, `pre_hook`, `post_hook` or anywhere else, it fails the run as an error.
-    A scoring script run by `ExecutableJudge` is a separate process, so the exception never reaches karotte.
+    A scoring script run by `ExecutableJudge` is a separate process, so the exception never reaches Karotte.
     Your scoring script needs to handle student misbehavior and convert it to a score of 0 instead of crashing.
 
 ## Saving submissions
 
-There is a crucial moment during a run when the student is done with its work and karotte needs to grade it.
+There is a crucial moment during a run when the student is done with its work and Karotte needs to grade it.
 You should assume that the student is not trustworthy and will try to break the judge if possible.
 
-karotte's `default` template goes to great lengths to get the environment into a state where you can be sure that the student can't interfere with your grading anymore.
+Karotte's `default` template goes to great lengths to get the environment into a state where you can be sure that the student can't interfere with your grading anymore.
 You only need to set `submission_paths` to point to the files you need from the student for grading:
 
 ```python

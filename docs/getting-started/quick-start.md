@@ -1,7 +1,7 @@
 # Quick start
 
 This creates an environment from the `default` template and runs its example task.
-You need karotte and a runtime installed; see [Installation](installation.md).
+You need Karotte and a runtime installed; see [Installation](installation.md).
 
 ## Create an environment
 
@@ -12,7 +12,7 @@ uv sync --extra dev
 ```
 
 `create-env` renders the `default` template into `my_env/` and locks its dependencies.
-`uv sync --extra dev` installs the environment, karotte and the dev tools (ruff, pytest, just) into `.venv`.
+`uv sync --extra dev` installs the environment, Karotte and the dev tools (ruff, pytest, just) into `.venv`.
 
 ## Create a run config
 
@@ -24,10 +24,10 @@ This writes `run_config.json` for the first task in the environment, which in a 
 `--task <task-id>` picks another one.
 `uv run karotte tasks list` shows all tasks in the environment.
 
-`uv run karotte models list` shows the models karotte knows.
+`uv run karotte models list` shows the models Karotte knows.
 Model ids are passed to [litellm](https://docs.litellm.ai/).
 
-karotte reads the model's API key from the provider's variable, such as `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, when the run starts.
+Karotte reads the model's API key from the provider's variable, such as `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, when the run starts.
 `--model-api-key` sets another key, or a `$VAR` reference to another variable.
 
 See [Run config](../running/run-config.md) for the other fields.

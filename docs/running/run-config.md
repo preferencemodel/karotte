@@ -81,13 +81,13 @@ These keys have a built-in meaning:
 | `extra_artifact_paths`       | string or list of strings | Absolute paths saved as [artifacts](../tasks/artifacts-and-transcripts.md) after each step, before `pre_scoring_hook`. Missing paths are skipped with a warning. |
 
 The first two are read by the `default` template's `get_system_prompt()`, so they only work in tasks that use it.
-karotte itself applies the latter three.
+Karotte itself applies the latter three.
 
 ## Models
 
 `model` is a [litellm](https://docs.litellm.ai/docs/providers) model id with its provider prefix, such as `anthropic/claude-fable-5`, `openai/gpt-5` or `together_ai/moonshotai/Kimi-K3`.
 
-`karotte models list` shows the models karotte knows by name, each with its output-token ceiling and the reasoning effort levels it accepts.
+`karotte models list` shows the models Karotte knows by name, each with its output-token ceiling and the reasoning effort levels it accepts.
 `--json` prints the catalog as JSON.
 
 ```sh
@@ -95,11 +95,11 @@ karotte models list
 ```
 
 It also lists prefixes under which any model id is accepted, such as `together_ai/` and `fireworks_ai/`.
-A model karotte doesn't know still runs, with a 64k output-token ceiling and no reasoning effort parameter.
+A model Karotte doesn't know still runs, with a 64k output-token ceiling and no reasoning effort parameter.
 
 ## API keys
 
-Without `model_api_key`, karotte reads the key from the model provider's variable in your shell when the run starts:
+Without `model_api_key`, Karotte reads the key from the model provider's variable in your shell when the run starts:
 
 | Model                       | Variable                                                 |
 | --------------------------- | -------------------------------------------------------- |
@@ -117,7 +117,7 @@ If the variable is unset, the run stops with an error, unless it uses the fake m
 
 By default, `RubricJudge` grades with the run's own model and API key.
 To grade with a different model, set `rubric_judge_model`.
-karotte then reads its key from `rubric_judge_api_key`, or from the provider's variable in the table above.
+Karotte then reads its key from `rubric_judge_api_key`, or from the provider's variable in the table above.
 If that key is missing, the run still starts.
 
 A model passed to `RubricJudge(model=...)` in the task overrides both.
@@ -133,7 +133,7 @@ For those runs, set `rubric_judge_model` or pass a model to `RubricJudge` in the
 - one of the provider's own level names, such as `"medium"`, if the model accepts it
 - `null`: send nothing and use the provider's default
 
-Providers don't agree on what the levels are called or how many there are, so karotte automatically selects the right level if you pass `min` or `max`.
+Providers don't agree on what the levels are called or how many there are, so Karotte automatically selects the right level if you pass `min` or `max`.
 `karotte models list` shows available levels per model.
 
 ## Limits
@@ -155,13 +155,13 @@ Pass a single value to use it for every step, or a list with one value per step.
 Steps beyond the end of the list have no limit.
 For example, `step_time_limit_seconds: 600` gives the student ten minutes for each step of a two-step task.
 
-karotte checks both step limits between turns.
+Karotte checks both step limits between turns.
 It doesn't interrupt a turn in progress, so a step can go over its limit by up to one turn.
 The context limit uses the input-token count the provider reports for each turn.
 It measures how large the student's context is, not how many tokens were billed over the whole step.
 If the provider doesn't report usage, the context limit never triggers.
 
-When a counter is on, karotte adds a note like `Time remaining: 540 seconds` or `Context remaining: 12000` to the last tool result of each turn, so the model can pace itself.
+When a counter is on, Karotte adds a note like `Time remaining: 540 seconds` or `Context remaining: 12000` to the last tool result of each turn, so the model can pace itself.
 When it's off, the student hits the limit without warning.
 A counter has no effect unless its limit is set.
 
@@ -183,12 +183,12 @@ Agents that run a step in their own process can only enforce the limits their CL
 
 The agent produces the student's messages and tool calls for each step.
 Don't confuse it with the model: `model` picks which LLM answers, `agent` picks the harness that calls it.
-Whichever agent you use, karotte still runs the task's hooks, judges and artifacts.
+Whichever agent you use, Karotte still runs the task's hooks, judges and artifacts.
 
 | Agent      | What it does                                                                                                                                   |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `builtin`  | The default. karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                     |
-| `external` | A backend sends each of the model's messages, and karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).    |
+| `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                     |
+| `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).    |
 | CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself. `mistral-vibe` is one example. |
 
 Set `agent` in the run config:
@@ -201,7 +201,7 @@ Set `agent` in the run config:
 }
 ```
 
-`karotte agents list` shows the agents your karotte version supports, and the version it pins for each CLI agent.
+`karotte agents list` shows the agents your Karotte version supports, and the version it pins for each CLI agent.
 `--json` prints the list as JSON.
 
 ```sh
@@ -268,16 +268,16 @@ If the list runs out, the run fails.
 Pass the base URL without `/v1`:
 
 - Claude models go to `<url>/v1/messages`.
-  karotte sets `ANTHROPIC_BASE_URL` to `<url>` inside the container, and litellm adds `/v1/messages`.
+  Karotte sets `ANTHROPIC_BASE_URL` to `<url>` inside the container, and litellm adds `/v1/messages`.
 - Other models go to `<url>/v1`, so the endpoint needs an OpenAI-compatible API there.
 
-You can use the same flag to point karotte at any endpoint that serves these paths.
+You can use the same flag to point Karotte at any endpoint that serves these paths.
 The URL is used from inside the container, so `localhost` means the container, not your machine.
 Variables like `ANTHROPIC_BASE_URL` set in your shell don't reach the container.
 
 The endpoint may not require a key and instead inject its own key.
-karotte always sends a key, though, so if the key's variable isn't set, `--proxy` fills in a placeholder for both the run's model and the judge model.
+Karotte always sends a key, though, so if the key's variable isn't set, `--proxy` fills in a placeholder for both the run's model and the judge model.
 
-If you don't pass `--proxy`, karotte uses the URL a plugin registers under `karotte.default_proxy_url` (see [Plugins](../extending/plugins.md)).
+If you don't pass `--proxy`, Karotte uses the URL a plugin registers under `karotte.default_proxy_url` (see [Plugins](../extending/plugins.md)).
 Without such a plugin, calls go directly to the provider.
 `--no-proxy` ignores the plugin's URL.

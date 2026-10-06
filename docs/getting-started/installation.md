@@ -7,7 +7,7 @@
 - A runtime to run environments in.
   See [below](#runtime-prerequisites).
 
-## Install karotte
+## Install Karotte
 
 ```sh
 uv tool install karotte
@@ -30,7 +30,7 @@ This installs the `karotte` command you use to create environments.
 You can always explicitly use docker with `--runtime docker`, or podman with `--runtime podman`, instead.
 Ubuntu's `docker.io` package lacks buildx; install `docker-buildx` too.
 
-If the default VM runtime isn't set up, karotte stops before the run and tells you what's missing.
+If the default VM runtime isn't set up, Karotte stops before the run and tells you what's missing.
 
 See [Runtimes](../running/runtimes.md) for the full setup of each runtime and what it gives the student.
 

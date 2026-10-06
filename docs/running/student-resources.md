@@ -1,6 +1,6 @@
 # Student resources
 
-karotte limits how much memory, how many processes and how many files the student can use.
+Karotte limits how much memory, how many processes and how many files the student can use.
 This stops a runaway or hostile student from starving the harness and crashing the run, for example when your grader runs the student's code.
 
 ## The default limits
@@ -8,7 +8,7 @@ This stops a runaway or hostile student from starving the harness and crashing t
 Every task gets three limits, applied when the task starts, right before `pre_hook`:
 
 - **Memory**: the sandbox's memory minus 1 GiB, which is kept for the harness.
-  karotte takes the sandbox's memory from the first of these that gives an answer:
+  Karotte takes the sandbox's memory from the first of these that gives an answer:
   the `karotte.hardware_limits` [plugin](../extending/plugins.md) for the task's `required_hardware`, `KAROTTE_SANDBOX_MEMORY_BYTES` (which the VM runtimes set), the cgroup limit above the student, or the machine's RAM.
   If cgroups don't work and neither the plugin nor the variable gives a size, there's no memory limit.
   In a VM without a plugin, the student gets 3 GiB; see [Runtimes](runtimes.md#vm-size).
@@ -41,7 +41,7 @@ get_resource_limits()
 
 `FileLimit.path` also accepts a tuple of paths.
 The limits apply to the student by default; pass `uid=` to limit a different uid.
-Outside a karotte container, `limit_resources` does nothing.
+Outside a Karotte container, `limit_resources` does nothing.
 
 `get_resource_limits()` returns a `ResourceLimits` with `memory_bytes`, `process_count` and `file`.
 It reads them from whatever enforces each limit, and uses `None` where there's no limit.
@@ -56,7 +56,7 @@ It reads them from whatever enforces each limit, and uses `None` where there's n
 | `detected_and_reaped` | Nothing stops the student from going over the limit, but a watchdog notices and kills every process the student owns with SIGKILL. |
 | `not_supported`       | Nothing enforces the limit in this sandbox.                                                                                        |
 
-karotte uses the strongest method the sandbox supports.
+Karotte uses the strongest method the sandbox supports.
 By default, each runtime gives:
 
 | Limit     | `apple-container`, `firecracker` | `docker`/`podman` (runc) | `docker:gvisor`       |
@@ -73,7 +73,7 @@ Why each runtime ends up where it does:
 - A VM has its own kernel with writable cgroups, so the kernel enforces its memory and process caps.
 - runc mounts the cgroups read-only, so it falls back to the watchdog.
 - gVisor accepts cgroup settings but doesn't enforce them, so it always uses the watchdog.
-- For the file limit, karotte creates a filesystem exactly as large as the budget, in both bytes and number of files, and mounts it over the directories the student can write to.
+- For the file limit, Karotte creates a filesystem exactly as large as the budget, in both bytes and number of files, and mounts it over the directories the student can write to.
   A write that doesn't fit fails with "no space left on device".
   Only files written during the run count; files that were already in the image stay visible and don't use up the budget.
   This needs root and loop devices, which a VM has.
@@ -117,7 +117,7 @@ It can't outlive the launch, though: the namespace frees it when the launch's la
 
 ## What isn't limited
 
-karotte doesn't limit the student's CPU use.
+Karotte doesn't limit the student's CPU use.
 A VM runtime gives the whole VM a fixed number of CPUs; see [Runtimes](runtimes.md#vm-size).
 
 ## Killing student processes
@@ -134,8 +134,8 @@ kill_processes(STUDENT_UID)
 ```
 
 If the student has a real cgroup, `kill_processes` first kills the whole group in a single atomic kernel operation, which a fork bomb can't escape by spawning new processes.
-It also kills the student's processes in PID namespaces below karotte's, which takes down everything in a namespace at once.
-Then a helper running as the student's uid kills everything that uid owns with `kill(-1, SIGKILL)`, and karotte checks `/proc` for anything that survived.
+It also kills the student's processes in PID namespaces below Karotte's, which takes down everything in a namespace at once.
+Then a helper running as the student's uid kills everything that uid owns with `kill(-1, SIGKILL)`, and Karotte checks `/proc` for anything that survived.
 It repeats this until a pass finds nothing left.
 
 If it can't confirm that the student's processes are gone, it raises an error instead of returning.
@@ -148,7 +148,7 @@ Grading must never run while a student process is still alive.
 
 Once the student's processes are gone, `delete_files(uid)` removes what that uid still has: every file it owns anywhere on the filesystem, and the SysV shared-memory segments it created.
 It returns how many things it removed.
-karotte doesn't call it for you.
+Karotte doesn't call it for you.
 Call it from a hook, after saving any files you still need for grading.
 
 ```python
@@ -173,10 +173,10 @@ These arguments control what gets deleted:
 An excluded path is kept along with everything under it and the directories leading to it.
 Other files next to it are still deleted.
 Read-only and virtual filesystems are skipped, and so are the paths in `KAROTTE_RECLAIM_EXCLUDE` (separated by `:`).
-Outside a karotte container, `delete_files` refuses to search the whole filesystem, because the uid might belong to a real user of the machine.
+Outside a Karotte container, `delete_files` refuses to search the whole filesystem, because the uid might belong to a real user of the machine.
 
 `delete_files` raises `ReclaimError` if it can't guarantee that it deleted everything the uid owned, or if it ran past `timeout`.
-The timeout exists because a student can leave behind more files than karotte can go through in a reasonable time.
+The timeout exists because a student can leave behind more files than Karotte can go through in a reasonable time.
 `ReclaimError` is also a `StudentMisbehaviorError`, so in `pre_scoring_hook` either case scores the step 0.
 
 A common use of `extend_exclude` is freeing up disk space before copying a large submission; see [Scoring](../tasks/scoring.md).
