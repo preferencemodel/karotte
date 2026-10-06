@@ -26,7 +26,7 @@ cd my_env
 uv sync --extra dev
 uv run setup_data.py
 export ANTHROPIC_API_KEY=...
-uv run karotte run --task example-task --model anthropic/claude-fable-5
+uv run karotte run --task example-task --model anthropic/claude-opus-5-5
 ```
 
 `karotte run` builds the image, runs the task, and writes the transcript to

@@ -16,11 +16,11 @@ uv sync --extra dev
 
 ## Run the task
 
-`anthropic/claude-fable-5` needs `ANTHROPIC_API_KEY`:
+`anthropic/claude-opus-5-5` needs `ANTHROPIC_API_KEY`:
 
 ```sh
 export ANTHROPIC_API_KEY=...
-uv run karotte run --task example-task --model anthropic/claude-fable-5
+uv run karotte run --task example-task --model anthropic/claude-opus-5-5
 ```
 
 `karotte run` builds the container image, starts it in the runtime, and runs the task.

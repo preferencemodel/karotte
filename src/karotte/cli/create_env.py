@@ -76,7 +76,7 @@ def create_env(
     steps += [
         "uv run karotte tasks list",
         "export ANTHROPIC_API_KEY=...",
-        "uv run karotte run --task <task-id> --model anthropic/claude-fable-5",
+        "uv run karotte run --task <task-id> --model anthropic/claude-opus-5-5",
     ]
     typer.secho("\nNext steps:", bold=True)
     for step in steps:

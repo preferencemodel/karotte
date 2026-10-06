@@ -68,7 +68,7 @@ class TestCreateRunConfig:
         create_run_config(config_path=str(config_path))
 
         config = json.loads(config_path.read_text())
-        assert config["model"] == "anthropic/claude-fable-5"
+        assert config["model"] == "anthropic/claude-opus-5-5"
 
     def test_custom_model_is_written(self, tmp_path: Path):
         config_path = tmp_path / "config.json"
