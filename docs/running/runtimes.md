@@ -51,10 +51,16 @@ They're copied into the VM when the run starts, and read-write ones are copied b
 
 You need:
 
-- read and write access to `/dev/kvm`: join the `kvm` group (`sudo usermod -aG kvm $USER`), then log in again
+- read and write access to `/dev/kvm`
 - docker with [buildx](https://github.com/docker/buildx#installing) to build the image
 - `pasta` (package `passt`), `ip` and `iptables` for the guest's network
 - `mkfs.ext4` and `debugfs` (package `e2fsprogs`) to build the guest's drives
+
+To get access to `/dev/kvm`, add yourself to the `kvm` group and log in again:
+
+```sh
+sudo usermod -aG kvm $USER
+```
 
 On the first run, Karotte downloads a pinned Firecracker and guest kernel into `~/.cache/karotte/firecracker` (under `$XDG_CACHE_HOME` if it's set) and checks their SHA-256.
 
