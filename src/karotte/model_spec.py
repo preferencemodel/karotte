@@ -103,6 +103,23 @@ class ModelSpec(BaseModel, frozen=True):
             return self.max_reasoning_effort
         return level
 
+    @property
+    def temperature(self) -> float | None:
+        """The temperature every agent sends for this model, or None to leave
+        the provider's default. Only grok models are pinned."""
+        return _GROK_TEMPERATURE if self.provider == "xai" else None
+
+    @property
+    def default_reasoning_effort(self) -> str | None:
+        """The effort sent when the run config sets none, or None to send
+        nothing. Grok models default to high, as Grok Build does."""
+        if self.provider == "xai" and "high" in self.reasoning_effort_levels:
+            return "high"
+        return None
+
+
+_GROK_TEMPERATURE = 0.7
+
 
 def is_special_training_model(model: str) -> bool:
     """Whether a run on this model gets its messages from the training backend

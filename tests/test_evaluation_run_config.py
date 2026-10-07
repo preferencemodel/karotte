@@ -347,9 +347,35 @@ class TestAppliedReasoningEffort:
         config = self._config(agent=agent, reasoning_effort="max")
         assert config.applied_reasoning_effort is None
 
+    @pytest.mark.parametrize("agent", ["builtin", "grok-build"])
+    def test_grok_models_default_to_high(self, agent: str):
+        config = self._config(model="xai/grok-4.7", agent=agent)
+        assert config.applied_reasoning_effort == "high"
+        config = self._config(model="xai/grok-4.7", agent=agent, reasoning_effort="max")
+        assert config.applied_reasoning_effort == "xhigh"
+
+    def test_other_models_get_no_default(self):
+        config = self._config(model="openai/gpt-5.5")
+        assert config.applied_reasoning_effort is None
+
     def test_fake_model_never_sends_it(self):
         config = self._config(use_fake_model=True, reasoning_effort="max")
         assert config.applied_reasoning_effort is None
+
+
+@pytest.mark.parametrize(
+    "model", ["openai/gpt-5.5", "anthropic/claude-sonnet-5-5", "claude-opus-5"]
+)
+def test_grok_build_rejects_non_grok_models(model: str):
+    with pytest.raises(ValueError, match="grok-build only runs xai/ grok models"):
+        EvaluationRunConfig(run_id="r", task_id="t", model=model, agent="grok-build")
+
+
+def test_grok_build_accepts_grok_models():
+    config = EvaluationRunConfig(
+        run_id="r", task_id="t", model="xai/grok-4.7", agent="grok-build"
+    )
+    assert config.resolved_agent == "grok-build"
 
 
 def test_unknown_fields_are_ignored():

@@ -1315,10 +1315,12 @@
       "tool_choice",
       "reasoning_effort"
     ],
+    "temperature": 0.7,
     "api_key": "test_key",
     "extra_headers": {
       "x-grok-conv-id": "golden-run"
-    }
+    },
+    "reasoning_effort": "high"
   },
   "xai/grok-4.6": {
     "stream": true,
@@ -1343,10 +1345,12 @@
       "tools",
       "tool_choice"
     ],
+    "temperature": 0.7,
     "api_key": "test_key",
     "extra_headers": {
       "x-grok-conv-id": "golden-run"
-    }
+    },
+    "reasoning_effort": "high"
   },
   "xai/grok-4.3": {
     "stream": true,
@@ -1371,6 +1375,7 @@
       "tools",
       "tool_choice"
     ],
+    "temperature": 0.7,
     "api_key": "test_key",
     "extra_headers": {
       "x-grok-conv-id": "golden-run"
