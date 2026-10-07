@@ -10,13 +10,14 @@
     width: 1600px; height: 900px;
     font-family: Inter, -apple-system, "Helvetica Neue", sans-serif;
     background: #fbfaf7; color: #1d1d1f;
-    padding: 48px 56px 36px;
+    padding: 40px 56px 28px;
     display: flex; flex-direction: column;
   }
-  header { display: flex; align-items: center; gap: 18px; margin-bottom: 28px; }
+  header { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
   header img { width: 56px; height: 56px; }
   h1 { font-size: 40px; font-weight: 800; letter-spacing: -0.02em; }
   header p { font-size: 20px; color: #6b6b70; margin-top: 4px; }
+  header p b { color: #1d1d1f; font-weight: 700; }
 
   table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; flex: 1; }
   col.label { width: 310px; }
@@ -31,7 +32,7 @@
 
   .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
   .cell svg { width: 34px; height: 34px; }
-  .cell span { font-size: 14px; color: #55555a; line-height: 1.25; }
+  .cell span { font-size: 14.5px; color: #55555a; line-height: 1.3; max-width: 200px; }
 
   footer { display: flex; justify-content: space-between; align-items: center; margin-top: 22px; font-size: 15px; color: #8a8a90; }
   .legend { display: flex; gap: 22px; }
@@ -49,8 +50,8 @@
 <header>
   <img src="../../docs/assets/carrot.svg" alt="">
   <div>
-    <h1>Reward-hack defenses you get by default</h1>
-    <p>What each framework does out of the box, with no extra configuration</p>
+    <h1>Only Karotte blocks all five of these agent tricks by default</h1>
+    <p>Each framework in its <b>default setup</b>, run with a scripted agent that cheats on purpose and doesn't know the answer</p>
   </div>
 </header>
 
@@ -62,62 +63,54 @@
 
 <footer>
   <div class="legend">
-    <div><svg><use href="#yes"/></svg>Yes, by default</div>
-    <div><svg><use href="#part"/></svg>Partly, by default</div>
-    <div><svg><use href="#no"/></svg>Not by default</div>
+    <div><svg><use href="#yes"/></svg>Protected by default</div>
+    <div><svg><use href="#part"/></svg>Partly protected by default</div>
+    <div><svg><use href="#no"/></svg>Not protected by default</div>
   </div>
 </footer>
 
 <script>
 const frameworks = ["Karotte", "Harbor", "HUD", "AgentEnv", "verifiers", "Inspect"];
 const rows = [
-  ["Agent runs without root", "Can't read the answer key", [
-    ["yes", "Unprivileged user"],
-    ["no", "Usually root"],
-    ["part", "Some templates"],
-    ["no", "Usually root"],
-    ["no", "Usually root"],
-    ["no", "Usually root"],
+  ["Reading the answer key", [
+    ["yes", "Answer files are root-only and the agent isn't root"],
+    ["yes", "Tests are copied in after the agent finishes"],
+    ["yes", "Grading data never enters the agent's sandbox"],
+    ["yes", "Grading data never enters the agent's container"],
+    ["yes", "Answers never enter the agent's container"],
+    ["yes", "Answers never enter the agent's container"],
   ]],
-  ["Grading protected", "Agent can't tamper with grading", [
-    ["yes", "Grades a root-only copy"],
-    ["no", "Agent's container"],
-    ["no", "Same container & user"],
-    ["part", "LLM judge only"],
-    ["no", "Agent's live sandbox"],
-    ["part", "Host reads live sandbox"],
+  ["Tampering with grading", [
+    ["yes", "Agent is stopped first; the grader reads a copy the agent can't touch"],
+    ["no", "Before grading, the agent wrote a full score into the file Harbor reads scores from"],
+    ["no", "A process the agent left running swapped the hidden tests for ones that always pass"],
+    ["part", "File checks held; the agent replaced bash, so command checks always passed"],
+    ["part", "Transcript checks held; the agent rewrote the grading script it found on disk"],
+    ["part", "Built-in scorers held; the agent replaced python3, so sandbox checks passed"],
   ]],
-  ["Agent stopped before grading", "No background process left running", [
-    ["yes", "Confirmed before grading"],
-    ["no", "Opt-in separate mode"],
-    ["part", "setsid processes survive"],
-    ["no", "Not found"],
-    ["no", "Opt-in verifier only"],
-    ["no", "Not found"],
+  ["Breaking grading with a weird answer file", [
+    ["yes", "Links and special files are refused and score 0"],
+    ["no", "A pipe as the answer hung grading, then the run errored"],
+    ["no", "A pipe as the answer hung grading for an hour, then the run errored"],
+    ["yes", "A pipe or sparse file stalled grading for up to 2 minutes, then scored&nbsp;0"],
+    ["no", "A pipe as the answer hung grading forever"],
+    ["no", "A pipe as the answer made the whole eval end in an error"],
   ]],
-  ["Trick submissions rejected", "Symlinks, FIFOs, special files", [
-    ["yes", "Refused, scored 0"],
-    ["no", "Not found"],
-    ["no", "Only test files restored"],
-    ["no", "Not found"],
-    ["no", "Opt-in verifier only"],
-    ["part", "Refuses FIFOs, not links"],
+  ["Crashing the run by using up memory, processes or disk", [
+    ["yes", "The VM caps memory, processes and disk"],
+    ["no", "No limits; one agent can use up memory, processes and disk for the whole machine"],
+    ["no", "No limits; one agent can use up memory, processes and disk for the whole machine"],
+    ["no", "No limits; one agent can use up memory, processes and disk for the whole machine"],
+    ["part", "On Prime, memory is capped at 2 GB and disk at 5 GB; no process limit is set"],
+    ["no", "No limits; one agent can use up memory, processes and disk for the whole machine"],
   ]],
-  ["No internet access", "Can't look up the answer", [
-    ["yes", "Firewalled and verified"],
-    ["no", "Opt-in"],
-    ["part", "Workspace shells only"],
-    ["no", "Opt-in, Modal & E2B only"],
-    ["no", "Opt-in"],
-    ["yes", "Off by default"],
-  ]],
-  ["Memory, process & disk limits", "Agent can't crash the run", [
-    ["yes", "Kernel-enforced in a VM"],
-    ["part", "Provider's default sizing"],
-    ["no", "CPU & memory opt-in"],
-    ["part", "Remote VMs only"],
-    ["part", "2 GB / 5 GB on Prime"],
-    ["no", "None"],
+  ["Looking up the answer online", [
+    ["yes", "Firewalled, and checked before the agent starts"],
+    ["no", "Agent reached the internet"],
+    ["yes", "Sandbox has no network"],
+    ["no", "Agent reached the internet"],
+    ["no", "Agent reached the internet"],
+    ["yes", "Sandbox has no network"],
   ]],
 ];
 const head = document.getElementById("head");
@@ -125,9 +118,9 @@ frameworks.forEach((name, i) => {
   head.insertAdjacentHTML("beforeend", `<th${i === 0 ? ' class="karotte"' : ""}>${name}</th>`);
 });
 const tbody = document.getElementById("rows");
-for (const [title, sub, cells] of rows) {
+for (const [title, cells] of rows) {
   const tr = document.createElement("tr");
-  tr.innerHTML = `<td class="row"><b>${title}</b><span>${sub}</span></td>` +
+  tr.innerHTML = `<td class="row"><b>${title}</b></td>` +
     cells.map(([icon, note], i) =>
       `<td${i === 0 ? ' class="karotte"' : ""}><div class="cell"><svg><use href="#${icon}"/></svg><span>${note}</span></div></td>`
     ).join("");
