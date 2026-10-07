@@ -8,7 +8,7 @@ Pick one with `--runtime` on `karotte run` and `karotte build`:
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `apple-container`             | A VM per run through Apple's [`container`](https://github.com/apple/container).                          |
 | `firecracker`                 | A [Firecracker](https://firecracker-microvm.github.io/) microVM per run. The image is built with docker. |
-| `docker`, `podman`, `nerdctl` | A container on the host kernel (runc).                                                                   |
+| `docker`, `podman`, `nerdctl` | A container on the host kernel, under the engine's default OCI runtime (usually runc).                   |
 | `docker:gvisor`               | A docker container under [gVisor](https://gvisor.dev/), which runs its own kernel in user space.         |
 
 ## The default
@@ -39,9 +39,8 @@ Install Apple's [`container`](https://github.com/apple/container/releases) (1.4.
 container system start
 ```
 
-Don't put the environment under `/tmp` or any other path that goes through a symlink.
-Apple's builder copies directories in those places as empty directories.
-Keep the environment under your home directory.
+Don't put the environment under `/tmp`, `/private/tmp` or any other path that goes through a symlink, such as `/var`.
+Apple's builder copies the directories in it as empty directories, so Karotte refuses to build from there.
 
 Images that only have an amd64 variant run under Rosetta.
 
@@ -52,11 +51,19 @@ They're copied into the VM when the run starts, and read-write ones are copied b
 
 You need:
 
-- read and write access to `/dev/kvm`: join the `kvm` group (`sudo usermod -aG kvm $USER`), then log in again
+- read and write access to `/dev/kvm`
 - docker with [buildx](https://github.com/docker/buildx#installing) to build the image
 - `pasta` (package `passt`), `ip` and `iptables` for the guest's network
+- `mkfs.ext4` and `debugfs` (package `e2fsprogs`) to build the guest's drives
 
-On the first run, Karotte downloads a pinned Firecracker and guest kernel into `~/.cache/karotte` and checks their SHA-256.
+To get access to `/dev/kvm`, add yourself to the `kvm` group and log in again:
+
+```sh
+sudo usermod -aG kvm $USER
+```
+
+On the first run, Karotte downloads Firecracker and a guest kernel from a [Kata Containers](https://katacontainers.io/) release into `~/.cache/karotte/firecracker` (under `$XDG_CACHE_HOME` if it's set).
+Each Karotte release fixes which versions it downloads and their SHA-256 checksums, and stops with an error if a download doesn't match.
 
 pasta gives the guest a network without needing root.
 On Ubuntu 24.04, AppArmor stops pasta from creating the user namespace it needs.
@@ -76,11 +83,18 @@ The VM can't share a writable directory with the host, so `firecracker` only acc
 
 ### docker, podman, nerdctl
 
-Install the engine.
-docker also needs [buildx](https://github.com/docker/buildx#installing).
-Ubuntu's `docker.io` package doesn't include it, so install `docker-buildx` as well.
-nerdctl builds through [BuildKit](https://github.com/moby/buildkit): install `buildctl` and `buildkitd`, and start `buildkitd` before you build.
-Karotte checks that `buildctl` is installed, not that `buildkitd` is running.
+docker needs [buildx](https://github.com/docker/buildx#installing) to build the image.
+On Ubuntu, install `docker.io` and `docker-buildx`; Docker's own packages from [its apt repository](https://docs.docker.com/engine/install/ubuntu/) include buildx already.
+Then add yourself to the `docker` group (`sudo usermod -aG docker $USER`) and log in again.
+
+podman builds on its own.
+On macOS, start its VM first with `podman machine init` and `podman machine start`.
+
+nerdctl needs [BuildKit](https://github.com/moby/buildkit): `buildctl` on your `PATH` and `buildkitd` running.
+nerdctl's ["full" release](https://github.com/containerd/nerdctl/releases) bundles both.
+Karotte checks for `buildctl` but not for `buildkitd`.
+
+On a machine with `/dev/kvm`, the default runtime is `firecracker`, so pass `--runtime` to use one of these.
 
 ### docker:gvisor
 
@@ -126,8 +140,12 @@ See [Student resources](student-resources.md) for how these limits are enforced.
 
 "Watchdog" means nothing stops the student from going over the limit, but Karotte notices and kills all of the student's processes.
 
+The `docker`/`podman`/`nerdctl` column is what you get in the usual case.
+Karotte tries a writable cgroup first, so if the container has one, the kernel enforces the memory and process limits as it does in a VM.
+
 On `firecracker`, the host-side filter blocks the whole guest, root included, from reaching link-local addresses, private address ranges and the host itself.
 The model proxy is the only exception.
+This holds even with `KAROTTE_STUDENT_NETWORK=internal`.
 
 To see what your sandbox actually enforces, run `karotte check confinement` as root inside it.
 It exits with 1 if the student gets less protection than it should:
@@ -138,24 +156,29 @@ karotte check confinement --json
 ```
 
 It tests limits and firewall rules on an unused uid, mounts and unmounts a small file quota, and starts one student session under the default limits.
-It undoes each of these afterwards.
+It undoes each of these afterwards, with one exception: it can leave the harness in the `karotte_harness` cgroup, which every run does at start anyway.
+The report lists anything left behind.
 `--hardware` picks which hardware's default memory limit to apply.
 
 ## Environment variables
 
 Variables a launcher or task can set inside the sandbox:
 
-| Variable                       | Effect                                                                                                                                                                                       |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `KAROTTE_SANDBOX`              | `runc`, `gvisor` or `vm`. Tells Karotte what kind of sandbox it's in when it can't detect that itself. Karotte's own launchers set it.                                                       |
-| `KAROTTE_STUDENT_NETWORK`      | Unset or `strict`: the student can reach localhost, the sandbox's own addresses and the model proxy. `internal`: it can also reach link-local and private ranges. Forwarded from your shell. |
-| `KAROTTE_DISK_BUDGET_BYTES`    | Cap on the student's disk quota. Set by whoever knows the host's free space; VM launchers set it.                                                                                            |
-| `KAROTTE_SANDBOX_MEMORY_BYTES` | How much memory the sandbox has for the student, when no plugin says. VM launchers set it.                                                                                                   |
-| `KAROTTE_VM_LAUNCHER`          | Set by Karotte's VM runtimes. `karotte check confinement` then fails if the VM doesn't have 1 GiB more than the sandbox's memory. In a VM sized by another launcher, it only warns.          |
+| Variable                       | Effect                                                                                                                                                                                                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KAROTTE_SANDBOX`              | `runc`, `gvisor` or `vm`. Tells Karotte what kind of sandbox it's in, and takes precedence over detection. Without it, Karotte can only tell gVisor from runc, so a VM must set it. Karotte's own launchers set it.                                                                   |
+| `KAROTTE_STUDENT_NETWORK`      | Unset or `strict`: the student can reach localhost, the sandbox's own addresses and the model proxy. `internal`: it can also reach link-local and private ranges, except on `firecracker`, where the host blocks them. Any other value counts as `strict`. Forwarded from your shell. |
+| `KAROTTE_DISK_BUDGET_BYTES`    | Cap on the student's disk quota. Set by whoever knows the host's free space; VM launchers set it.                                                                                                                                                                                     |
+| `KAROTTE_SANDBOX_MEMORY_BYTES` | The sandbox's total memory, when no plugin says. The student gets this minus 1 GiB, so a value of 1 GiB or less is ignored. VM launchers set it.                                                                                                                                      |
+| `KAROTTE_VM_LAUNCHER`          | Set by Karotte's VM runtimes. `karotte check confinement` always fails if the VM has less memory than the sandbox's. With this variable set, it also fails if the VM lacks the extra 1 GiB for the guest kernel; without it, that only warns.                                         |
 
 Variables for the host:
 
-| Variable                      | Effect                                                      |
-| ----------------------------- | ----------------------------------------------------------- |
-| `KAROTTE_FIRECRACKER_NETWORK` | `pasta` (the default), or `none` for a VM with no network.  |
-| `KAROTTE_FIRECRACKER_JAILER`  | `1` starts the VM through Firecracker's jailer. Needs root. |
+| Variable                               | Effect                                                                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `KAROTTE_FIRECRACKER_NETWORK`          | `pasta` (the default), or `none` for a VM with no network. Unset without pasta installed, the run stops instead of falling back to `none`. |
+| `KAROTTE_FIRECRACKER_JAILER`           | `1` starts the VM through Firecracker's jailer. Needs root.                                                                                |
+| `KAROTTE_FIRECRACKER_DNS`              | Comma-separated nameservers for the guest, instead of the host's.                                                                          |
+| `KAROTTE_FIRECRACKER_WATCHDOG_SECONDS` | How long the guest may go without answering before Karotte kills its VM. Default 120; `0` turns it off.                                    |
+
+`KAROTTE_STUDENT_NETWORK`, `KAROTTE_INFERENCE_SERVICE_TIER` and `LOGURU_LEVEL` are forwarded from your shell into the sandbox.
