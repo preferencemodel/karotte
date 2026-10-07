@@ -8,6 +8,7 @@ import json
 import sys
 import tomllib
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -148,6 +149,55 @@ class TestGrokBuildAgent:
             assert "xai-abc" not in env.values()
         finally:
             await agent.stop()
+
+
+class TestGrokBuildSampling:
+    def _model_table(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **kwargs: object
+    ) -> dict[str, Any]:
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://proxy:4000")
+        model = str(kwargs.pop("model", "xai/grok-4.7"))
+        agent = _agent(model=model, agent="grok-build", **kwargs)
+        config: dict[str, Any] = _write_config(tmp_path, monkeypatch, agent)
+        return config["model"][model.split("/", 1)[1]]
+
+    def test_sends_fixed_temperature(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        assert self._model_table(tmp_path, monkeypatch)["temperature"] == 0.7
+
+    def test_effort_defaults_to_high(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        menu = self._model_table(tmp_path, monkeypatch)["reasoning_efforts"]
+        assert menu == [
+            {"value": "low"},
+            {"value": "medium"},
+            {"value": "high", "default": True},
+            {"value": "xhigh"},
+        ]
+
+    @pytest.mark.parametrize(
+        ("requested", "sent"), [("medium", "medium"), ("min", "low"), ("max", "xhigh")]
+    )
+    def test_effort_follows_the_run_config(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        requested: str,
+        sent: str,
+    ):
+        table = self._model_table(tmp_path, monkeypatch, reasoning_effort=requested)
+        defaults = [o["value"] for o in table["reasoning_efforts"] if o.get("default")]
+        assert defaults == [sent]
+
+    def test_no_temperature_for_models_that_reject_it(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        table = self._model_table(
+            tmp_path, monkeypatch, model="anthropic/claude-opus-4-8"
+        )
+        assert "temperature" not in table
 
 
 class TestParseStream:

@@ -28,6 +28,7 @@ from karotte.agents.cli_agent import (
 )
 from karotte.agents.grok_build.adapter import parse_line
 from karotte.agents.models import resolve_model
+from karotte.model_spec import spec_for
 from karotte.save_artifact import save_artifact
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -42,6 +43,9 @@ _SHA256: dict[str, str] = {
     "x86_64": "41626a53292324140b92556b9d42ff5542e3dcd04aff85eafb8689dd4adb44fc",
     "aarch64": "45b0943e736f00a249b9cf02af2be9e0749d97c09a6f55cfcf3029a1a836f23e",
 }
+
+# Sampling temperature sent with every Grok request.
+TEMPERATURE = 0.7
 
 # Grok tools that need xAI's backend or a human, which a task run has neither of.
 _DISALLOWED_TOOLS = ("send_feedback", "image_edit", "ask_user_question")
@@ -136,7 +140,8 @@ class GrokBuildAgent(CliAgent):
             f"model = {model}\n"
             f"base_url = {_toml(f'{self.model_url}/v1')}\n"
             f"env_key = {_toml(self._key_env())}\n"
-            'api_backend = "chat_completions"\n\n'
+            'api_backend = "chat_completions"\n'
+            f"{self._sampling_config()}\n"
             "[mcp_servers.karotte]\n"
             f"url = {_toml(self.mcp_url)}\n"
         )
@@ -148,6 +153,28 @@ class GrokBuildAgent(CliAgent):
             # Grok runs as the student and writes its own state under GROK_HOME.
             for p in (self._grok_home, self._grok_home / "config.toml"):
                 os.chown(p, uid, uid)
+
+    def _sampling_config(self) -> str:
+        """Temperature and reasoning-effort lines for the model's config table.
+
+        Grok sends a model's ``temperature`` and the default entry of its
+        ``reasoning_efforts`` menu with every request (its ``--reasoning-effort``
+        flag is ignored for a model without a menu). Temperature is left out
+        for models that reject sampling params."""
+        spec = spec_for(self._config.model)
+        lines: list[str] = []
+        if spec.supports_sampling_params:
+            lines.append(f"temperature = {TEMPERATURE}")
+        effort = self._config.applied_reasoning_effort
+        if effort is not None:
+            options = [
+                f"{{ value = {_toml(level)}"
+                + (", default = true" if level == effort else "")
+                + " }"
+                for level in spec.reasoning_effort_levels
+            ]
+            lines.append(f"reasoning_efforts = [{', '.join(options)}]")
+        return "".join(f"{line}\n" for line in lines)
 
     def _key_env(self) -> str:
         return resolve_model(self._config.model, None).key_env or "XAI_API_KEY"
