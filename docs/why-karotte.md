@@ -19,6 +19,8 @@ However, making the environment produce a robust reward signal while an agent is
 
 You can jump straight to the [working example in Karotte](#build-it-with-karotte) or see [how it compares to other frameworks](#how-other-frameworks-compare).
 
+![Reward-hack defenses that Karotte, Harbor, HUD, AgentEnv, verifiers and Inspect provide by default](assets/framework-comparison.png)
+
 ## Why RL environments are different from evals
 
 An environment like the one described above can be used for both evals (to see how well an agent performs at a task) and training (to make an agent better at a task).
@@ -139,6 +141,7 @@ Every Karotte task starts with limits on the student's memory, processes and dis
 The memory limit counts files in RAM-backed temp directories and SysV shared memory, and student processes get the highest OOM score, so the kernel kills them first.
 
 By default, each run gets a VM where the hardware supports it (Apple's `container` on macOS, Firecracker on Linux), and the kernel stops the student at each limit.
+Outside a VM, there's no memory limit if Karotte can't manage the sandbox's cgroups and nothing tells it the sandbox's size.
 See [Student resources](running/student-resources.md) and [Runtimes](running/runtimes.md).
 
 ## Grade without being fooled
@@ -328,7 +331,7 @@ The step scores 0, with `/workdir/data/answer.txt is a symlink` in `metadata["mi
 
 ## How other frameworks compare
 
-[Inspect](https://inspect.aisi.org.uk/), [verifiers](https://github.com/PrimeIntellect-ai/verifiers), [Harbor](https://harborframework.com/) and [HUD](https://hud.ai) are popular frameworks for building evals and RL environments.
+[Harbor](https://harborframework.com/), [HUD](https://hud.ai), [AgentEnv](https://github.com/scaleapi/agentenv-framework), [verifiers](https://github.com/PrimeIntellect-ai/verifiers) and [Inspect](https://inspect.aisi.org.uk/) are popular frameworks for building evals and RL environments.
 They also run agents in sandboxes and score their work.
 All of them let you set up most of what this page describes if you want to.
 
@@ -336,20 +339,20 @@ However, Karotte is opinionated: the defaults take care of many subtle issues so
 You still have full control because you can modify the `Containerfile`, `collect_submission`, the tools and the limits.
 We at [Preference Model](https://preferencemodel.com) build robust environments at scale, and Karotte's defaults let us spin up environments that just work out of the box.
 
-This table compares defaults as of October 2026 (Inspect `c9f2d1c`, verifiers `395f35b`, Harbor 0.23.0, HUD `9e916fa`), from their docs and source code.
+This table compares defaults, i.e., what you get without extra configuration, as of October 2026 (Harbor 0.23.0, HUD `9e916fa`, AgentEnv 0.9.1277, verifiers `395f35b`, Inspect `c9f2d1c`), from their docs and source code.
 
-|                                        | Karotte                                               | Inspect                                       | verifiers                                                           | Harbor                                                 | HUD                                                         |
-| -------------------------------------- | ----------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
-| Agent runs as                          | An unprivileged user                                  | The image's default user, usually root        | The image's default user, usually root                              | The image's default user, usually root                 | An unprivileged user in the coding template; root otherwise |
-| Grading runs                           | As root in the sandbox, after the student is stopped  | On the host, reading from the agent's sandbox | In the worker, against the agent's sandbox. Opt-in: a fresh sandbox | In the agent's container. Opt-in: a separate container | In the agent's container, as the agent's user               |
-| Agent processes stopped before grading | Yes, and grading doesn't start until that's confirmed | Not that we found                             | Not that we found                                                   | Not that we found                                      | Shell sessions are killed; `setsid` processes survive       |
-| Symlinks and FIFOs in submissions      | Refused, scored 0                                     | Not that we found                             | Refused in the opt-in isolated verifier                             | Not that we found                                      | Test files are restored; the test report isn't checked      |
-| Network                                | Firewalled, checked before the first step             | None, with the generated compose file         | Open                                                                | Open; `no-network` and allowlists available            | None in the coding template's shell; allowlists available   |
-| Memory, process and disk limits        | All three; enforced by the kernel in a VM             | None                                          | None on docker; the provider's defaults on remote sandboxes         | Left to the provider                                   | None; CPU and memory opt-in                                 |
+|                                        | Karotte                                               | Harbor                                                              | HUD                                                                                                   | AgentEnv                                                                       | verifiers                                                                         | Inspect                                       |
+| -------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | --------------------------------------------- |
+| Agent runs as                          | An unprivileged user                                  | The image's default user, usually root                              | An unprivileged user in the coding and desktop templates; root otherwise                              | The image's default user, usually root                                         | The image's default user, usually root                                            | The image's default user, usually root        |
+| Grading runs                           | As root in the sandbox, after the student is stopped  | In the agent's container. Opt-in: a separate container              | In the agent's container, as the agent's user. Opt-in (experimental): a separate verifier environment | LLM judges in their own sandbox; file and test checks in the agent's container | In the worker, against the agent's sandbox. Opt-in: a fresh sandbox               | On the host, reading from the agent's sandbox |
+| Agent processes stopped before grading | Yes, and grading doesn't start until that's confirmed | Only with the opt-in separate container                             | Shell sessions are killed; `setsid` processes survive                                                 | Not that we found                                                              | Only with the opt-in fresh sandbox                                                | Not that we found                             |
+| Symlinks and FIFOs in submissions      | Refused, scored 0                                     | Not that we found                                                   | Not that we found; the test files are restored                                                        | Not that we found                                                              | Only with the opt-in fresh sandbox: escaping symlinks refused, FIFOs dropped      | FIFOs refused; symlinks followed              |
+| Network                                | Firewalled, checked before the first step             | Open; `no-network` and allowlists available                         | None in workspace shells; allowlists available                                                        | Open; allowlists available on Modal and E2B                                    | Open; allow and block lists available                                             | None, with the generated compose file         |
+| Memory, process and disk limits        | All three; enforced by the kernel in a VM             | The provider's default sizing; CPU and memory if the task sets them | None; CPU and memory opt-in                                                                           | None locally; the VM's size on E2B                                             | 2 GB memory and 5 GB disk on Prime, the default; none on docker; no process limit | None                                          |
 
 Karotte's scope is narrower than the others'.
 It focuses on the environment itself, i.e., what runs in the sandbox, and how to keep the student from breaking it.
-It comes with a runner for local runs, but it doesn't integrate with cloud sandbox providers like Modal, Daytona or E2B, which the other four support.
+It comes with a runner for local runs, but it doesn't integrate with cloud sandbox providers like Modal, Daytona or E2B, which the other five support.
 Running at scale doesn't need that, though.
 A built Karotte environment is one self-contained image.
 Start it on whatever infrastructure you use, and run `karotte run --no-containerized --config run_config.json` inside it.

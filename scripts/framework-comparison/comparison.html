@@ -1,0 +1,138 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Karotte framework comparison</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1600px; height: 900px;
+    font-family: Inter, -apple-system, "Helvetica Neue", sans-serif;
+    background: #fbfaf7; color: #1d1d1f;
+    padding: 48px 56px 36px;
+    display: flex; flex-direction: column;
+  }
+  header { display: flex; align-items: center; gap: 18px; margin-bottom: 28px; }
+  header img { width: 56px; height: 56px; }
+  h1 { font-size: 40px; font-weight: 800; letter-spacing: -0.02em; }
+  header p { font-size: 20px; color: #6b6b70; margin-top: 4px; }
+
+  table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; flex: 1; }
+  col.label { width: 310px; }
+  th { font-size: 22px; font-weight: 700; padding: 14px 10px; text-align: center; }
+  th.karotte { background: #ff8d02; color: #fff; border-radius: 16px 16px 0 0; }
+  td { padding: 12px 10px; text-align: center; border-top: 1px solid #e8e6e0; vertical-align: top; padding-top: 18px; }
+  td.karotte { background: #fff3e3; border-top-color: #fbe0bd; }
+  tr:last-child td.karotte { border-radius: 0 0 16px 16px; }
+  td.row { text-align: left; padding-left: 0; vertical-align: middle; padding-top: 12px; }
+  td.row b { display: block; font-size: 20px; font-weight: 700; }
+  td.row span { display: block; font-size: 15px; color: #6b6b70; margin-top: 3px; }
+
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .cell svg { width: 34px; height: 34px; }
+  .cell span { font-size: 14px; color: #55555a; line-height: 1.25; }
+
+  footer { display: flex; justify-content: space-between; align-items: center; margin-top: 22px; font-size: 15px; color: #8a8a90; }
+  .legend { display: flex; gap: 22px; }
+  .legend div { display: flex; align-items: center; gap: 7px; }
+  .legend svg { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="yes" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1fa855"/><path d="M6.5 12.5l3.7 3.7 7.3-8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="part" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#f2b100"/><path d="M7 12h10" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/></symbol>
+  <symbol id="no" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#e5484d"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></symbol>
+</svg>
+
+<header>
+  <img src="../../docs/assets/carrot.svg" alt="">
+  <div>
+    <h1>Reward-hack defenses you get by default</h1>
+    <p>What each framework does out of the box, with no extra configuration</p>
+  </div>
+</header>
+
+<table>
+  <colgroup><col class="label"><col><col><col><col><col><col></colgroup>
+  <thead><tr id="head"><th></th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<footer>
+  <div class="legend">
+    <div><svg><use href="#yes"/></svg>Yes, by default</div>
+    <div><svg><use href="#part"/></svg>Partly, by default</div>
+    <div><svg><use href="#no"/></svg>Not by default</div>
+  </div>
+</footer>
+
+<script>
+const frameworks = ["Karotte", "Harbor", "HUD", "AgentEnv", "verifiers", "Inspect"];
+const rows = [
+  ["Agent runs without root", "Can't read the answer key", [
+    ["yes", "Unprivileged user"],
+    ["no", "Usually root"],
+    ["part", "Some templates"],
+    ["no", "Usually root"],
+    ["no", "Usually root"],
+    ["no", "Usually root"],
+  ]],
+  ["Grading protected", "Agent can't tamper with grading", [
+    ["yes", "Grades a root-only copy"],
+    ["no", "Agent's container"],
+    ["no", "Same container & user"],
+    ["part", "LLM judge only"],
+    ["no", "Agent's live sandbox"],
+    ["part", "Host reads live sandbox"],
+  ]],
+  ["Agent stopped before grading", "No background process left running", [
+    ["yes", "Confirmed before grading"],
+    ["no", "Opt-in separate mode"],
+    ["part", "setsid processes survive"],
+    ["no", "Not found"],
+    ["no", "Opt-in verifier only"],
+    ["no", "Not found"],
+  ]],
+  ["Trick submissions rejected", "Symlinks, FIFOs, special files", [
+    ["yes", "Refused, scored 0"],
+    ["no", "Not found"],
+    ["no", "Only test files restored"],
+    ["no", "Not found"],
+    ["no", "Opt-in verifier only"],
+    ["part", "Refuses FIFOs, not links"],
+  ]],
+  ["No internet access", "Can't look up the answer", [
+    ["yes", "Firewalled and verified"],
+    ["no", "Opt-in"],
+    ["part", "Workspace shells only"],
+    ["no", "Opt-in, Modal & E2B only"],
+    ["no", "Opt-in"],
+    ["yes", "Off by default"],
+  ]],
+  ["Memory, process & disk limits", "Agent can't crash the run", [
+    ["yes", "Kernel-enforced in a VM"],
+    ["part", "Provider's default sizing"],
+    ["no", "CPU & memory opt-in"],
+    ["part", "Remote VMs only"],
+    ["part", "2 GB / 5 GB on Prime"],
+    ["no", "None"],
+  ]],
+];
+const head = document.getElementById("head");
+frameworks.forEach((name, i) => {
+  head.insertAdjacentHTML("beforeend", `<th${i === 0 ? ' class="karotte"' : ""}>${name}</th>`);
+});
+const tbody = document.getElementById("rows");
+for (const [title, sub, cells] of rows) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td class="row"><b>${title}</b><span>${sub}</span></td>` +
+    cells.map(([icon, note], i) =>
+      `<td${i === 0 ? ' class="karotte"' : ""}><div class="cell"><svg><use href="#${icon}"/></svg><span>${note}</span></div></td>`
+    ).join("");
+  tbody.appendChild(tr);
+}
+</script>
+</body>
+</html>
