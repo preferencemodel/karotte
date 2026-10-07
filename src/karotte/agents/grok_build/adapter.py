@@ -145,15 +145,98 @@ def _usage_event(usage: dict[str, Any]) -> TokenUsageEvent:
 
 
 def _result_text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
     if isinstance(content, list):
-        return "".join(
+        content = "".join(
             str(block.get("text") or "")
             for block in content
             if isinstance(block, dict) and block.get("type") == "text"
         )
-    return ""
+    if not isinstance(content, str):
+        return ""
+    return _readable_result(content)
+
+
+# Keys, in order of preference, under which Grok puts the text it shows the
+# model for a tool result.
+_PROMPT_TEXT_KEYS = (
+    "output_for_prompt",
+    "tool_output_for_prompt",
+    "summary_for_prompt",
+    "content",
+    "output",
+    "OkayOutput",
+    "ErrorOutput",
+)
+
+
+def _readable_result(text: str) -> str:
+    """The readable part of a Grok tool result.
+
+    Grok serializes each tool's result as JSON tagged by ``type``, e.g.
+    ``{"type":"Bash","output":[<bytes>],"output_for_prompt":"exit: 0\\n..."}``
+    or ``{"type":"ReadFile","FileContent":{"content":...}}``, with some output
+    as arrays of byte values. Pull out the text Grok shows the model, falling
+    back to the raw string for shapes this doesn't know. The NDJSON artifact
+    keeps the full result.
+    """
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+    if isinstance(parsed, list):
+        # ACP content blocks, as on tool-argument errors.
+        texts = [
+            str(block["content"].get("text") or "")
+            for block in parsed
+            if isinstance(block, dict) and isinstance(block.get("content"), dict)
+        ]
+        return "".join(texts) if texts else text
+    if not isinstance(parsed, dict):
+        return text
+
+    found = _prompt_text(parsed)
+    if found is None:
+        # One level down: tagged variants wrap their payload, e.g.
+        # {"type":"ReadFile","FileContent":{...}} or {"FileNotFound":"Error: ..."}.
+        # Variant names are CamelCase; other keys (tool_name, command, ...) are
+        # metadata, not output.
+        for key, value in parsed.items():
+            if not key[:1].isupper():
+                continue
+            if isinstance(value, str):
+                found = value
+            elif isinstance(value, dict):
+                found = _prompt_text(value)
+            if found is not None:
+                break
+    if found is not None:
+        return found
+
+    # Grep reports raw stdout/stderr bytes and nothing else readable.
+    streams = [_decode_bytes(parsed.get(key)) for key in ("stdout", "stderr")]
+    if any(s is not None for s in streams):
+        return "".join(s for s in streams if s)
+    return text
+
+
+def _prompt_text(record: dict[str, Any]) -> str | None:
+    for key in _PROMPT_TEXT_KEYS:
+        value = record.get(key)
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            nested = _prompt_text(value)
+            if nested is not None:
+                return nested
+    return None
+
+
+def _decode_bytes(value: Any) -> str | None:
+    if not isinstance(value, list) or not all(
+        isinstance(b, int) and 0 <= b < 256 for b in value
+    ):
+        return None
+    return bytes(value).decode("utf-8", errors="replace")
 
 
 def _int(value: Any) -> int:

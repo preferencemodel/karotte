@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from mcp.types import TextContent
 
 from karotte.agents import cli_agent_types
 from karotte.agents.cli_agent import AGENTS_BIN_DIR
@@ -238,3 +239,82 @@ class TestParseStream:
             }
         )
         assert list(parse_stream(["not json", "[]", subagent, ""])) == []
+
+    def test_tool_results_show_the_text_grok_gives_the_model(self):
+        texts = [
+            e.message.content
+            for e in self._events()
+            if isinstance(e, MessageAddedEvent) and e.message.role == "tool"
+        ]
+        assert texts == [
+            'echo: hi\n{"result":"echo: hi"}',
+            "Failed to parse arguments for tool `run_terminal_command`: missing field"
+            + ' `description`\n\nYour original arguments:\n{"command": "echo from-bash"}',
+        ]
+
+
+class TestToolResultText:
+    """Each of Grok's built-in tools, from a recorded `grok -p` run."""
+
+    _FIXTURE: Path = (
+        Path(__file__).parent / "resources" / "grok_build" / "tool_results.ndjson"
+    )
+
+    def _results(self) -> dict[str, list[str]]:
+        events = list(parse_stream(self._FIXTURE.read_text().splitlines()))
+        names = {
+            e.tool_call.id: str(e.tool_call.function.name)
+            for e in events
+            if isinstance(e, ToolCallStartedEvent)
+        }
+        results: dict[str, list[str]] = {}
+        for e in events:
+            if isinstance(e, ToolCallCompletedEvent):
+                content = e.result.content[0]
+                assert isinstance(content, TextContent)
+                results.setdefault(names[e.tool_call_id], []).append(content.text)
+        return results
+
+    def test_each_tool(self):
+        results = self._results()
+        assert results["list_dir"] == ["- /workdir/\n  - notes.txt"]
+        assert results["read_file"] == [
+            "1→alpha\nbeta\ngamma\n",
+            "Error: /workdir/missing.txt does not exist.",
+        ]
+        assert "2:beta" in results["grep"][0]
+        assert results["search_replace"] == [
+            "The file notes.txt has been updated successfully."
+        ]
+        assert results["write"] == ["The file /workdir/new.txt has been created."]
+        assert results["run_terminal_command"] == [
+            "exit: 0\nalpha\nbeta\ndelta\nhello",
+            "exit: 3\n",
+        ]
+        assert results["todo_write"] == ["- [completed] 1: Probe sequence item\n"]
+
+    def test_no_byte_arrays_or_raw_json_left(self):
+        for texts in self._results().values():
+            for text in texts:
+                assert not text.lstrip().startswith("{")
+                assert "[47," not in text and "[97," not in text
+
+    def test_unknown_shape_falls_back_to_raw(self):
+        raw = json.dumps({"type": "Mystery", "count": 3})
+        line = json.dumps(
+            {
+                "type": "user",
+                "parent_tool_use_id": None,
+                "message": {
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": "c", "content": raw}
+                    ]
+                },
+            }
+        )
+        completed = next(
+            e for e in parse_stream([line]) if isinstance(e, ToolCallCompletedEvent)
+        )
+        content = completed.result.content[0]
+        assert isinstance(content, TextContent)
+        assert content.text == raw
