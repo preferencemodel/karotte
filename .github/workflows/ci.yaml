@@ -14,6 +14,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,7 +107,10 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Install pasta
-        run: sudo apt-get update && sudo apt-get install -y passt
+        timeout-minutes: 5
+        run: |
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30"
+          sudo apt-get $APT_OPTS update && sudo apt-get $APT_OPTS install -y passt
       - name: Install uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install just
@@ -146,6 +150,7 @@ jobs:
     needs: [lint, core-tests, root-tests, default-template, firecracker-template]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -176,6 +181,7 @@ jobs:
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     environment:
       name: pypi
       url: https://pypi.org/project/karotte/${{ needs.build.outputs.version }}/
