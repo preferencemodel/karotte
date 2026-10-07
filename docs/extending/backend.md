@@ -64,7 +64,7 @@ Karotte retries `/api/internal/` requests on connection errors, timeouts and 5xx
 It uses exponential backoff and keeps trying for up to 25 minutes per request.
 Each attempt times out after 30 seconds.
 Other error responses aren't retried.
-`presign` is retried the same way, but for up to 5 minutes.
+`presign` is retried the same way, but for up to 5 minutes, and each attempt times out after 60 seconds.
 
 ## Authentication
 

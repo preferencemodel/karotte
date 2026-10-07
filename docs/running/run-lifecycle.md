@@ -14,6 +14,7 @@ uv run karotte run --config run_config.json
    Then the run config preprocessors from [plugins](../extending/plugins.md) can rewrite the config, in order of their entry point names.
 2. **Pick the runtime.** This is `--runtime` if you passed it, otherwise your platform's default for the task's hardware.
    Karotte checks that the runtime is installed and set up before it goes any further.
+   An explicit `--runtime` is checked before step 1, since it doesn't depend on the task.
 3. **Split parallel runs.** With `-n N`, run `i` gets the run id `<run_id>-<i>`, the transcript file `<name>_<i>.json`, and the websocket port plus `i`.
 4. **Build the image** and tag it `karotte`.
    `--dev` skips this step; see [Development loop](development-loop.md).
@@ -123,7 +124,7 @@ A turn without tool calls ends the step.
 
 Some turns have neither text nor tool calls, because they were cut off at the output-token limit or only contain reasoning.
 These don't end the step.
-Karotte asks the model to continue instead, and gives up with an error after three of these turns in a row.
+Karotte asks the model to continue instead, up to three times in a row, and stops with an error on the fourth.
 
 The `external` agent runs the same loop, but gets each message from the backend instead of calling a model.
 It waits up to two hours for each message.

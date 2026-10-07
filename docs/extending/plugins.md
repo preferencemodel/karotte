@@ -50,15 +50,15 @@ For a tool install, use `uv tool install karotte --with my-plugin` or `uvx --wit
 If only one value can win, Karotte sorts the entry points by name and takes the first one that loads.
 If the values add up, Karotte uses all of them.
 
-| Entry point                                                                                   | When several are installed                                                            |
-| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `karotte.cli`                                                                                 | Each one adds its subcommand.                                                         |
-| `karotte.run_config_preprocessors`                                                            | All of them run, in entry point name order. Each one gets the previous one's output.  |
-| `karotte.default_proxy_url`                                                                   | The first by name wins.                                                               |
-| `karotte.harness_secret_env`, `karotte.platform_tooling_dirs`, `karotte.age_delay_exemptions` | Karotte merges the lists.                                                             |
-| `karotte.update_migrations`                                                                   | All of them run. For `tool`, the first one that doesn't return `None` wins.           |
-| `karotte.default_hardware`, `karotte.hardware_limits`                                         | The first by name wins.                                                               |
-| `karotte.container_run_args`                                                                  | All of them run, in entry point name order, and Karotte concatenates their arguments. |
+| Entry point                                                                                   | When several are installed                                                                                              |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `karotte.cli`                                                                                 | Each one adds its subcommand.                                                                                           |
+| `karotte.run_config_preprocessors`                                                            | All of them run, in entry point name order. Each one gets the previous one's output.                                    |
+| `karotte.default_proxy_url`                                                                   | The first by name wins.                                                                                                 |
+| `karotte.harness_secret_env`, `karotte.platform_tooling_dirs`, `karotte.age_delay_exemptions` | Karotte merges the lists.                                                                                               |
+| `karotte.update_migrations`                                                                   | All of them run, in installation order (not sorted by name). For `tool`, the first one that doesn't return `None` wins. |
+| `karotte.default_hardware`, `karotte.hardware_limits`                                         | The first by name wins.                                                                                                 |
+| `karotte.container_run_args`                                                                  | All of them run, in entry point name order, and Karotte concatenates their arguments.                                   |
 
 ## When a plugin fails to load
 
@@ -172,7 +172,7 @@ It returns extra arguments for the engine's `run` command.
 You can use it to pass devices through, for example.
 Karotte adds these arguments for `docker`, `podman`, `docker:gvisor` and `nerdctl`.
 
-`karotte run` calls every hook before it launches, whatever the runtime.
+`karotte run` calls every hook before it launches a container.
 If a hook raises an exception, Karotte refuses to launch and shows the exception's message.
 
 ```python

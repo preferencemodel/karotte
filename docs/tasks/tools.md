@@ -65,7 +65,7 @@ The function or `__call__` needs
 Raise an exception to report an error; the model sees the error message.
 The `builtin` and `external` agents pass only the first content block of a result to the model.
 
-A tool that records an answer from the student answer and saves it in a place where the student can't change it:
+A tool that records the student's answer and saves it in a place where the student can't change it:
 
 ```python
 # src/environment/tools/submit_answer.py

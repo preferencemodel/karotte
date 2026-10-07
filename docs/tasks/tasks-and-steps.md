@@ -79,7 +79,8 @@ Everything else has a default.
 [`task.py`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/task.py) describes each member.
 See [Hooks](#hooks) for `configure_tools()` and `pre_hook()`, and [Required hardware](#required-hardware) for `required_hardware`.
 
-Declare the properties with `@property`; overriding one with a plain method raises a `TypeError` when the class is defined.
+Declare the properties with `@property`; on a `Task`, overriding one with a plain method raises a `TypeError` when the class is defined.
+On a `Step`, only `submission_paths` is checked this way.
 
 !!! note
 
