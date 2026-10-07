@@ -83,11 +83,16 @@ The VM can't share a writable directory with the host, so `firecracker` only acc
 
 ### docker, podman, nerdctl
 
-Install the engine. What else each one needs:
+docker needs [buildx](https://github.com/docker/buildx#installing) to build the image.
+On Ubuntu, install `docker.io` and `docker-buildx`; Docker's own packages from [its apt repository](https://docs.docker.com/engine/install/ubuntu/) include buildx already.
+Then add yourself to the `docker` group (`sudo usermod -aG docker $USER`) and log in again.
 
-- **docker** needs [buildx](https://github.com/docker/buildx#installing). On Ubuntu, install `docker.io` and `docker-buildx`; Docker's own packages from [its apt repository](https://docs.docker.com/engine/install/ubuntu/) include buildx already. Then add yourself to the `docker` group (`sudo usermod -aG docker $USER`) and log in again.
-- **podman** builds on its own. On macOS, start its VM first with `podman machine init` and `podman machine start`.
-- **nerdctl** needs [BuildKit](https://github.com/moby/buildkit): `buildctl` on your `PATH` and `buildkitd` running. nerdctl's ["full" release](https://github.com/containerd/nerdctl/releases) bundles both. Karotte checks for `buildctl` but not for `buildkitd`.
+podman builds on its own.
+On macOS, start its VM first with `podman machine init` and `podman machine start`.
+
+nerdctl needs [BuildKit](https://github.com/moby/buildkit): `buildctl` on your `PATH` and `buildkitd` running.
+nerdctl's ["full" release](https://github.com/containerd/nerdctl/releases) bundles both.
+Karotte checks for `buildctl` but not for `buildkitd`.
 
 On a machine with `/dev/kvm`, the default runtime is `firecracker`, so pass `--runtime` to use one of these.
 
