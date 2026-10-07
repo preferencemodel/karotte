@@ -237,9 +237,11 @@ CLI agents differ from `builtin` in a few ways:
   If they bring their own tools, such as a shell, those replace the task's tools of the same name.
 - They send their own system prompt instead of the task's.
 - `reasoning_effort` isn't applied.
-- The student's firewall only lets them reach the model proxy, so sandboxed runs need `--proxy`.
-  `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or straight to Mistral's API when there's no proxy.
-  `grok-build` does the same with the proxy; without one it only runs `xai/` models, against xAI's API.
+- The student's firewall only lets them reach localhost and the model proxy.
+  Without `--proxy`, Karotte listens on a local port and forwards the agent's model calls from there to the provider, adding the API key itself.
+  The agent gets a placeholder key, so the real one never reaches the student.
+- `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or through that forwarder to Mistral's API when there's no proxy.
+  `grok-build` does the same with the proxy; without one it only runs `xai/` models, through the forwarder to xAI's API.
 
 `grok-build` specifics:
 
@@ -288,5 +290,5 @@ The endpoint may not require a key and instead inject its own key.
 Karotte always sends a key, though, so if the key's variable isn't set, `--proxy` fills in a placeholder for both the run's model and the judge model.
 
 If you don't pass `--proxy`, Karotte uses the URL a plugin registers under `karotte.default_proxy_url` (see [Plugins](../extending/plugins.md)).
-Without such a plugin, calls go directly to the provider.
+Without such a plugin, calls go directly to the provider, and a CLI agent's calls go through the forwarder described in [CLI agents](#cli-agents).
 `--no-proxy` ignores the plugin's URL.

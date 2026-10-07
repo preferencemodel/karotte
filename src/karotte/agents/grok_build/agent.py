@@ -28,7 +28,6 @@ from karotte.agents.cli_agent import (
 )
 from karotte.agents.grok_build.adapter import parse_stream
 from karotte.agents.models import resolve_model
-from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.save_artifact import save_artifact
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -37,7 +36,6 @@ from karotte.subprocess import demoted_uid_gid, make_preexec, scrub_harness_secr
 
 _GROK_BIN = f"{AGENTS_BIN_DIR}/grok"
 _RELEASE_URL = "https://x.ai/cli/grok-{version}-linux-{arch}.gz"
-_XAI_API_BASE = "https://api.x.ai/v1"
 
 # SHA-256 of the decompressed linux binary, per `uname -m` spelling xAI uses.
 _SHA256: dict[str, str] = {
@@ -54,6 +52,7 @@ _DISALLOWED_TOOLS = ("send_feedback", "image_edit", "ask_user_question")
 class GrokBuildAgent(CliAgent):
     name: ClassVar[str] = "grok-build"
     version: ClassVar[str] = "1.0.46"
+    provider_url: ClassVar[str] = "https://api.x.ai"
     # Grok ships its own shell and file read/edit tools (run_terminal_command,
     # read_file, search_replace); use those rather than karotte's over MCP.
     native_tool_names: ClassVar[frozenset[str]] = frozenset(
@@ -97,17 +96,12 @@ class GrokBuildAgent(CliAgent):
 
         Model traffic goes through the proxy's OpenAI-compatible route when
         ``KAROTTE_PROXY_URL`` is set, so any provider works; without a proxy
-        Grok talks to xAI directly, which only serves xAI models. Features that
+        it goes through the forwarder to xAI, which only serves xAI models. Features that
         call xAI's backend on their own (telemetry, remote model catalog,
         backend web search, media generation) are turned off, and session
         titles use the run's model rather than Grok's default."""
-        resolved = resolve_model(self._config.model, self._config.model_api_key)
-        proxy = os.environ.get("KAROTTE_PROXY_URL")
-        if proxy:
-            base_url = f"{proxy.rstrip('/')}/v1"
-        elif resolved.provider == "xai":
-            base_url = _XAI_API_BASE
-        else:
+        resolved = resolve_model(self._config.model, None)
+        if not os.environ.get("KAROTTE_PROXY_URL") and resolved.provider != "xai":
             msg = (
                 f"grok-build can only reach xAI models without a proxy; got "
                 f"{self._config.model!r}. Set KAROTTE_PROXY_URL to use other providers."
@@ -136,7 +130,7 @@ class GrokBuildAgent(CliAgent):
             f"session_summary = {model}\n\n"
             f"[model.{model}]\n"
             f"model = {model}\n"
-            f"base_url = {_toml(base_url)}\n"
+            f"base_url = {_toml(f'{self.model_url}/v1')}\n"
             f"env_key = {_toml(self._key_env())}\n"
             'api_backend = "chat_completions"\n\n'
             "[mcp_servers.karotte]\n"
@@ -179,11 +173,7 @@ class GrokBuildAgent(CliAgent):
             path_parts.insert(0, f"{venv}/bin")
         env["PATH"] = ":".join([*path_parts, env.get("PATH", "")])
 
-        api_key = self._config.model_api_key
-        if api_key is None and os.environ.get("KAROTTE_PROXY_URL"):
-            # Grok refuses to start without a key; the proxy needs none.
-            api_key = PROXY_PLACEHOLDER_KEY
-        if api_key is not None:
+        if (api_key := self.model_api_key) is not None:
             env[self._key_env()] = api_key
         return env
 

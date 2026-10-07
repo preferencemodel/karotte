@@ -15,6 +15,8 @@ from collections.abc import AsyncGenerator
 from typing import ClassVar, Literal
 
 from karotte.agents.agent import RunContext
+from karotte.model_forwarder import ModelForwarder
+from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event
 
@@ -34,9 +36,15 @@ class CliAgent(abc.ABC):
     allows_student_mcp_access: ClassVar[bool] = True
     native_tool_names: ClassVar[frozenset[str]] = frozenset()
 
+    provider_url: ClassVar[str]
+    """The provider API root, without ``/v1``, the tool calls when there is no
+    proxy. It sits outside the student firewall, so the tool reaches it through
+    a :class:`ModelForwarder`."""
+
     def __init__(self, config: EvaluationRunConfig) -> None:
         self._config: EvaluationRunConfig = config
         self._ctx: RunContext
+        self._forwarder: ModelForwarder | None = None
 
     @classmethod
     @abc.abstractmethod
@@ -47,6 +55,11 @@ class CliAgent(abc.ABC):
 
     async def start(self, ctx: RunContext) -> None:
         self._ctx = ctx
+        if not os.environ.get("KAROTTE_PROXY_URL") and self._config.model_api_key:
+            self._forwarder = ModelForwarder(
+                self.provider_url, self._config.model_api_key
+            )
+            _ = await self._forwarder.start()
 
     @abc.abstractmethod
     def run_step(
@@ -68,7 +81,30 @@ class CliAgent(abc.ABC):
         ...
 
     async def stop(self) -> None:
-        return None
+        if self._forwarder is not None:
+            await self._forwarder.stop()
+            self._forwarder = None
+
+    @property
+    def model_url(self) -> str:
+        """Where the tool sends model calls, without ``/v1``: the proxy, the
+        forwarder to :attr:`provider_url`, or with no key to forward,
+        :attr:`provider_url` itself."""
+        if proxy := os.environ.get("KAROTTE_PROXY_URL"):
+            return proxy.rstrip("/")
+        if self._forwarder is not None:
+            return self._forwarder.url
+        return self.provider_url
+
+    @property
+    def model_api_key(self) -> str | None:
+        """The key the tool sends. The forwarder adds the real one, so the tool
+        gets a placeholder; a proxy that needs no key gets one too."""
+        if self._forwarder is not None:
+            return PROXY_PLACEHOLDER_KEY
+        if self._config.model_api_key is None and os.environ.get("KAROTTE_PROXY_URL"):
+            return PROXY_PLACEHOLDER_KEY
+        return self._config.model_api_key
 
     @property
     def mcp_url(self) -> str:
