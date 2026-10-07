@@ -78,7 +78,7 @@ See [Run config](run-config.md).
 
 `--keep-containers` keeps the containers after the runs instead of removing them, so you can inspect them or copy data out.
 They're named `karotte_run_<run_id>`.
-When the next run starts, Karotte removes any container with the same name left over from an earlier run.
+When the next run starts, Karotte removes leftover containers from earlier runs whose names start with `karotte_run_` followed by the longest common prefix of the new run ids.
 
 When the run ends, Karotte prints how to copy the student's workdir out, for example:
 

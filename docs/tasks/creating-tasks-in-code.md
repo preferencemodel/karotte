@@ -1,6 +1,6 @@
 # Creating tasks in code
 
-Defining each task by hand works well if you environment contains a small number of distinct tasks.
+Defining each task by hand works well if your environment contains a small number of distinct tasks.
 For dozens of variations of one task, generate the classes instead.
 Karotte has a `create_task` factory for simple cases, and the `default` template has a scaffold for task suites driven by a JSON file.
 

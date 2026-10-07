@@ -16,13 +16,15 @@ Commit your work first, so that `git diff` shows what the update changed.
 
 ## How it works
 
-1. Karotte reads `.manifest.json` (see [The manifest](templates.md#the-manifest)) to find the Karotte version and templates the environment was made with.
+1. Karotte checks the `UV_INDEX*` variables and runs each update migration's `prepare` (see [Plugins](../extending/plugins.md)).
+   Then it reads `.manifest.json` (see [The manifest](templates.md#the-manifest)) to find the Karotte version and templates the environment was made with.
 2. It looks up the newest Karotte release on the environment's package indexes.
    There is nothing to do if all of these hold: that release is the version in the manifest, no template package has a newer release, and you aren't adding a template.
 3. It renders the environment twice into a temporary directory, both times with the manifest's templates.
    The first render uses the old Karotte and is called the _baseline_.
    The second uses the new Karotte and is called the _target_.
-4. It applies the difference between the two renders to your environment, one file at a time.
+4. It runs each update migration's `migrate` on the baseline and your environment.
+   Then it applies the difference between the two renders to your environment, one file at a time.
 5. It writes the new version, templates and template packages to the manifest.
 6. It re-locks the environment and any venv whose `pyproject.toml` changed.
 
@@ -34,6 +36,7 @@ In step 4, each file is handled like this:
 | Changed binary file  | Present        | Replaced with the template's version.                                     |
 | File in both renders | Deleted by you | Recreated, unless it's under `do_not_recreate_if_deleted`.                |
 | New file             | Absent         | Added, unless it's under `do_not_recreate_if_deleted`.                    |
+| New file             | Present        | Replaced with the template's version.                                     |
 | Removed file         | Present        | Deleted.                                                                  |
 
 !!! warning

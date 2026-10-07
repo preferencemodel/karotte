@@ -103,14 +103,15 @@ A model Karotte doesn't know still runs, with a 64k output-token ceiling and no 
 
 Without `model_api_key`, Karotte reads the key from the model provider's variable in your shell when the run starts:
 
-| Model                       | Variable                                                 |
-| --------------------------- | -------------------------------------------------------- |
-| `anthropic/...`, `claude-*` | `ANTHROPIC_API_KEY`                                      |
-| `openai/...`                | `OPENAI_API_KEY`                                         |
-| `gemini/...`                | `GEMINI_API_KEY`                                         |
-| `mistral/...`               | `MISTRAL_API_KEY`                                        |
-| `together_ai/...`           | `TOGETHERAI_API_KEY`                                     |
-| other `<provider>/...`      | `<PROVIDER>_API_KEY`, e.g. `XAI_API_KEY`, with a warning |
+| Model                       | Variable                                                      |
+| --------------------------- | ------------------------------------------------------------- |
+| `anthropic/...`, `claude-*` | `ANTHROPIC_API_KEY`                                           |
+| `openai/...`                | `OPENAI_API_KEY`                                              |
+| `gemini/...`                | `GEMINI_API_KEY`                                              |
+| `mistral/...`               | `MISTRAL_API_KEY`                                             |
+| `together_ai/...`           | `TOGETHERAI_API_KEY`                                          |
+| `xai/...`                   | `XAI_API_KEY`                                                 |
+| other `<provider>/...`      | `<PROVIDER>_API_KEY`, e.g. `DEEPSEEK_API_KEY`, with a warning |
 
 To use another key, set `model_api_key` to the key itself or to a `$VAR` reference to another variable; `karotte run --model-api-key` and `create-run-config --model-api-key` set it for you.
 If the variable is unset, the run stops with an error, unless it uses the fake model or `--prepare-only`.
@@ -187,10 +188,10 @@ The agent produces the student's messages and tool calls for each step.
 Don't confuse it with the model: `model` picks which LLM answers, `agent` picks the harness that calls it.
 Whichever agent you use, Karotte still runs the task's hooks, judges and artifacts.
 
-| Agent      | What it does                                                                                                                                   |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                     |
-| `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).    |
+| Agent      | What it does                                                                                                                                    |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                      |
+| `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).     |
 | CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe` or `grok-build`. |
 
 Set `agent` in the run config:
@@ -234,11 +235,11 @@ During the image build, `karotte agents install` installs the pinned version; it
 CLI agents differ from `builtin` in a few ways:
 
 - They run as the student and call the tool server directly.
-  If they bring their own tools, such as a shell, those replace the task's tools of the same name.
+  If they bring their own tools, those replace the task's tools that do the same job; their shell replaces `bash`, for example.
 - They send their own system prompt instead of the task's.
 - `reasoning_effort` isn't applied.
 - The student's firewall only lets them reach localhost and the model proxy.
-  Without `--proxy`, Karotte listens on a local port and forwards the agent's model calls from there to the provider, adding the API key itself.
+  Without a proxy (no `--proxy` and no plugin default), Karotte listens on a local port and forwards the agent's model calls from there to the provider, adding the API key itself.
   The agent gets a placeholder key, so the real one never reaches the student.
 - `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or through that forwarder to Mistral's API when there's no proxy.
   `grok-build` does the same with the proxy; without one it only runs `xai/` models, through the forwarder to xAI's API.

@@ -117,12 +117,12 @@ The image always has two virtual environments:
   Karotte and your `src/environment/` code run here.
   Root-only.
 - **Student venv** (`/workdir/.venv`): built from `venvs/student/pyproject.toml`.
-  It is on the image's `PATH` so the student automaticall works in it.
+  It is on the image's `PATH` so the student automatically works in it.
 
 So:
 
 - Does the student need packages such as numpy or pytest to solve your task?
-  Add them to `venvs/student/pyproject.toml` and run `just lock-venvs`.
+  Add them to `venvs/student/pyproject.toml` and run `uv run just lock-venvs`.
 - Does your environment code (tools, task setup, scoring) need packages?
   Add them to the top-level `pyproject.toml` with `uv add`.
 
@@ -147,7 +147,7 @@ access = "root"
 path = "/root/venvs/scoring"  # absolute path inside the container
 ```
 
-`just lint` requires the `exclude-newer = "7 days"` setting in every `pyproject.toml` of the environment.
+`uv run just lint` requires the `exclude-newer = "7 days"` setting in every `pyproject.toml` of the environment.
 
 The access levels:
 
@@ -169,7 +169,7 @@ The student runs those with `python -m <module>` instead.
 
 Every venv directory needs a `uv.lock` to make your environment builds reproducible.
 The build installs each venv with `uv sync --frozen`, so it fails without a lockfile.
-Run `just lock-venvs` after you create a venv or change its dependencies to update the lock files.
+Run `uv run just lock-venvs` after you create a venv or change its dependencies to update the lock files.
 
 ### Using a venv at runtime
 

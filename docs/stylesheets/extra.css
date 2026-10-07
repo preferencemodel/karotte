@@ -44,3 +44,8 @@
     margin-left: 0;
   }
 }
+
+.md-typeset table:not([class]) td code {
+  word-break: normal;
+  overflow-wrap: normal;
+}

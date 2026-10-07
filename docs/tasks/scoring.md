@@ -51,7 +51,7 @@ ExecutableJudge(
 - The script must exit 0.
   A non-zero exit, a missing executable, or an output file that is missing or not valid JSON scores 0 with `continue_task=False` and the error in the scoring metadata.
 - `continue_threshold` (default `-1`): the task continues if the score is at least this.
-  With the default, any non-negative score continues the task.
+  With the default, every score of -1 or higher continues the task.
 - `cwd` sets the script's working directory.
 
 The scoring script of the `example-task` task:
@@ -162,7 +162,7 @@ Custom judges compose with `&` and `|` like the built-in ones.
 ## Student misbehavior
 
 Situations in which the student did something dubious (and potentially malicious) should score 0, not fail the run.
-Examples include submitting a symlink to a root-only file or a FIFO that blocks that blocks indefinitely on read.
+Examples include submitting a symlink to a root-only file or a FIFO that blocks indefinitely on read.
 
 Raise `StudentMisbehaviorError` anywhere during scoring:
 
@@ -229,7 +229,8 @@ class MyStep(Step):
 ```
 
 The judge must use the copy in `saved_submissions`, never the path the student wrote to.
-The scoring script reads the submission from its first argument and has to handle a path that doesn't exist.
+The scoring script reads the submission from its first argument.
+If the student never wrote the file, that path doesn't exist; a script that doesn't check for this exits non-zero, and the step scores 0.
 
 ### collect_submission
 
