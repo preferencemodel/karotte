@@ -240,19 +240,20 @@ CLI agents differ from `builtin` in a few ways:
 - They run as the student and call the tool server directly.
   If they bring their own tools, those replace the task's tools that do the same job; their shell replaces `bash`, for example.
 - They send their own system prompt instead of the task's.
-- `reasoning_effort` isn't applied, except by `grok-build` for grok models.
+- `reasoning_effort` isn't applied, except by `grok-build`.
 - The student's firewall only lets them reach localhost and the model proxy.
   Without a proxy (no `--proxy` and no plugin default), Karotte listens on a local port and forwards the agent's model calls from there to the provider, adding the API key itself.
   The agent gets a placeholder key, so the real one never reaches the student.
 - `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or through that forwarder to Mistral's API when there's no proxy.
-  `grok-build` does the same with the proxy; without one it only runs `xai/` models, through the forwarder to xAI's API.
+  `grok-build` does the same with the proxy, or goes through the forwarder to xAI's API without one.
 
 `grok-build` specifics:
 
+- It only runs grok models (`xai/`); the run config is rejected for any other model.
 - All steps of a run share one Grok session, so later steps see the earlier conversation.
 - Grok doesn't list MCP tools to the model directly. The model finds the task's tools with `search_tool` and calls them through `use_tool` (as `karotte__<tool>`), and the transcript records those calls as `use_tool`.
 - Grok's web search, image editing, feedback and ask-the-user tools are turned off, along with its telemetry and update checks.
-- For grok models it sends temperature 0.7 and `reasoning_effort` (see [Reasoning effort](#reasoning-effort)). Other models get neither.
+- It sends temperature 0.7 and `reasoning_effort` (see [Reasoning effort](#reasoning-effort)).
 
 ## Fake model
 

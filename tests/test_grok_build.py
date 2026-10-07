@@ -109,23 +109,6 @@ class TestGrokBuildAgent:
         assert config["features"]["telemetry"] == "off"  # pyright: ignore[reportIndexIssue]
         assert "url" in config["mcp_servers"]["karotte"]  # pyright: ignore[reportIndexIssue]
 
-    def test_config_routes_any_provider_through_proxy(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://proxy:4000/")
-        agent = _agent(model="anthropic/claude-sonnet-5-5")
-        config = _write_config(tmp_path, monkeypatch, agent)
-        model = config["model"]["claude-sonnet-5-5"]  # pyright: ignore[reportIndexIssue]
-        assert model["base_url"] == "http://proxy:4000/v1"
-        assert model["env_key"] == "ANTHROPIC_API_KEY"
-
-    def test_config_rejects_non_xai_model_without_proxy(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
-        with pytest.raises(ValueError, match="only reach xAI models"):
-            _write_config(tmp_path, monkeypatch, _agent(model="openai/gpt-5"))
-
     @pytest.mark.asyncio
     async def test_start_without_proxy_forwards_and_withholds_the_key(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -190,19 +173,6 @@ class TestGrokBuildSampling:
         table = self._model_table(tmp_path, monkeypatch, reasoning_effort=requested)
         defaults = [o["value"] for o in table["reasoning_efforts"] if o.get("default")]
         assert defaults == [sent]
-
-    @pytest.mark.parametrize("effort", [None, "max"])
-    def test_leaves_other_models_alone(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, effort: str | None
-    ):
-        table = self._model_table(
-            tmp_path,
-            monkeypatch,
-            model="anthropic/claude-sonnet-5-5",
-            reasoning_effort=effort,
-        )
-        assert "temperature" not in table
-        assert "reasoning_efforts" not in table
 
 
 class TestParseStream:
