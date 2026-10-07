@@ -26,7 +26,7 @@ from karotte.agents.cli_agent import (
     kill_process_tree,
     register_cli_agent,
 )
-from karotte.agents.grok_build.adapter import parse_stream
+from karotte.agents.grok_build.adapter import parse_line
 from karotte.agents.models import resolve_model
 from karotte.save_artifact import save_artifact
 from karotte.schemas.chat import Message
@@ -45,6 +45,10 @@ _SHA256: dict[str, str] = {
 
 # Grok tools that need xAI's backend or a human, which a task run has neither of.
 _DISALLOWED_TOOLS = ("send_feedback", "image_edit", "ask_user_question")
+
+# Grok's stdout is read in chunks this size and split into lines as they come.
+_READ_CHUNK_BYTES = 1 << 16
+_DRAIN_AFTER_KILL_SECONDS = 10.0
 
 
 @final
@@ -212,13 +216,14 @@ class GrokBuildAgent(CliAgent):
         context_window_limit: int | None = None,
         on_context_window_limit: Literal["error", "score"] = "error",
     ) -> AsyncGenerator[Event]:
-        """Run one Grok invocation, enforcing `time_limit_seconds` by killing the
-        process (and its children) if it overruns.
+        """Run one Grok invocation, yielding transcript events as Grok writes
+        each line, so a running step shows its turns and token usage live.
 
-        `error` re-raises after emitting whatever partial output was captured,
-        `score` keeps that partial output and lets the step be scored.
+        `time_limit_seconds` is enforced by killing the process (and its
+        children) if it overruns: `error` re-raises after emitting whatever
+        output was captured, `score` keeps it and lets the step be scored.
         `context_window_limit` is accepted for protocol compatibility but not
-        enforced: usage is only read back after the step finishes.
+        enforced: Grok runs the whole step in one process.
         """
         yield MessageAddedEvent(message=Message(role="user", content=instructions))
 
@@ -239,24 +244,56 @@ class GrokBuildAgent(CliAgent):
         )
         assert proc.stdout is not None
         assert proc.stderr is not None
-        # Drain both pipes concurrently so a chatty child can't deadlock on a
-        # full pipe while we wait, and so we keep whatever it wrote before a kill.
-        stdout_task = asyncio.ensure_future(proc.stdout.read())
+        # Drain stderr concurrently so a chatty child can't deadlock on a full
+        # pipe while we read stdout.
         stderr_task = asyncio.ensure_future(proc.stderr.read())
 
+        loop = asyncio.get_running_loop()
+        deadline = (
+            None if time_limit_seconds is None else loop.time() + time_limit_seconds
+        )
         timed_out = False
+        line_index = 0
+        pending = b""
         try:
-            await asyncio.wait_for(proc.wait(), time_limit_seconds)
-        except TimeoutError:
-            timed_out = True
-            kill_process_tree(proc)
+            with log_path.open("wb") as log:
+                while True:
+                    remaining = (
+                        None if deadline is None else max(0.0, deadline - loop.time())
+                    )
+                    try:
+                        # Read chunks rather than lines: one Grok line can hold a
+                        # whole file's contents, past StreamReader's line limit.
+                        chunk = await asyncio.wait_for(
+                            proc.stdout.read(_READ_CHUNK_BYTES), remaining
+                        )
+                    except TimeoutError:
+                        timed_out = True
+                        kill_process_tree(proc)
+                        chunk = await _read_rest(proc.stdout)
+                    log.write(chunk)
+                    log.flush()
+                    pending += chunk
+                    *lines, pending = pending.split(b"\n")
+                    if timed_out or not chunk:
+                        # No more output: a last line without a newline is complete.
+                        lines.append(pending)
+                    for line in lines:
+                        for event in parse_line(
+                            line.decode("utf-8", errors="replace"), line_index
+                        ):
+                            yield event
+                        line_index += 1
+                    if timed_out or not chunk:
+                        break
             await proc.wait()
-
-        stdout = (await stdout_task).decode("utf-8", errors="replace")
-        stderr_b = await stderr_task
-
-        log_path.write_text(stdout)
-        save_artifact(self._config, log_path)
+        finally:
+            # Also reached when the consumer stops early (e.g. the run is cancelled).
+            if proc.returncode is None:
+                kill_process_tree(proc)
+                await proc.wait()
+            stderr_b = await stderr_task
+            save_artifact(self._config, log_path)
 
         if timed_out:
             logger.warning(
@@ -270,12 +307,18 @@ class GrokBuildAgent(CliAgent):
                 stderr_b.decode("utf-8", errors="replace")[-2000:],
             )
 
-        for event in parse_stream(stdout.splitlines()):
-            yield event
-
         if timed_out and on_time_limit == "error":
             msg = f"Time limit of {time_limit_seconds}s reached."
             raise StepTimeLimitReachedError(msg)
+
+
+async def _read_rest(stream: asyncio.StreamReader) -> bytes:
+    """What a killed process left in its stdout pipe. Bounded, in case a
+    grandchild that escaped the kill still holds the pipe open."""
+    try:
+        return await asyncio.wait_for(stream.read(), _DRAIN_AFTER_KILL_SECONDS)
+    except TimeoutError:
+        return b""
 
 
 def _toml(value: str) -> str:

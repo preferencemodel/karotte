@@ -3,7 +3,9 @@ and the `--output-format streaming-messages-json` -> transcript-event adapter,
 driven by a `grok -p` log recorded against a scripted model
 (tests/resources/grok_build/)."""
 
+import asyncio
 import json
+import sys
 import tomllib
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -11,12 +13,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from karotte.agents import cli_agent_types
+from karotte.agents.agent import StepTimeLimitReachedError
 from karotte.agents.cli_agent import AGENTS_BIN_DIR
 from karotte.agents.grok_build import GrokBuildAgent
 from karotte.agents.grok_build.adapter import parse_stream
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import (
+    Event,
     MessageAddedEvent,
     TokenUsageEvent,
     ToolCallCompletedEvent,
@@ -238,3 +242,134 @@ class TestParseStream:
             }
         )
         assert list(parse_stream(["not json", "[]", subagent, ""])) == []
+
+
+_FAKE_GROK = """
+import pathlib, sys, time
+lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
+gate = pathlib.Path(sys.argv[2])
+for i, line in enumerate(lines):
+    print(line, flush=True)
+    if i == 1:
+        # Hold the process open until the test has seen the first turn.
+        while not gate.exists():
+            time.sleep(0.01)
+time.sleep(float(sys.argv[3]))
+"""
+
+
+class TestGrokBuildRunStep:
+    """run_step against a stand-in `grok` that replays the recorded stream."""
+
+    def _agent(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        stream: Path = _FIXTURE,
+        linger_seconds: float = 0.0,
+    ) -> GrokBuildAgent:
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        monkeypatch.setattr(
+            "karotte.agents.grok_build.agent.make_preexec",
+            lambda *_fds: None,  # pyright: ignore[reportUnknownLambdaType]
+        )
+        agent = _agent(save_artifacts=False)
+        agent._grok_home = tmp_path / ".grok_home"  # pyright: ignore[reportPrivateUsage]
+        agent._grok_home.mkdir()  # pyright: ignore[reportPrivateUsage]
+        script = tmp_path / "fake_grok.py"
+        script.write_text(_FAKE_GROK)
+        argv = [
+            sys.executable,
+            str(script),
+            str(stream),
+            str(tmp_path / "gate"),
+            str(linger_seconds),
+        ]
+        monkeypatch.setattr(agent, "_argv", lambda _instructions: argv)  # pyright: ignore[reportUnknownLambdaType]
+        return agent
+
+    @pytest.mark.asyncio
+    async def test_yields_each_turn_before_grok_exits(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        events = agent.run_step("do the thing")
+        assert isinstance(await anext(events), MessageAddedEvent)  # instructions
+        # The first assistant turn arrives while the stand-in is still blocked
+        # on the gate, i.e. before the process has exited.
+        first_turn = await asyncio.wait_for(anext(events), 10)
+        assert isinstance(first_turn, MessageAddedEvent)
+        assert first_turn.message.role == "assistant"
+        assert not (tmp_path / "gate").exists()
+
+        (tmp_path / "gate").touch()
+        rest = [event async for event in events]
+        assert (
+            len(rest) == len(list(parse_stream(_FIXTURE.read_text().splitlines()))) - 1
+        )
+        log = tmp_path / ".grok_home" / "step_0.ndjson"
+        assert log.read_text().splitlines() == _FIXTURE.read_text().splitlines()
+
+    @pytest.mark.asyncio
+    async def test_time_limit_keeps_output_so_far(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        (tmp_path / "gate").touch()
+        agent = self._agent(tmp_path, monkeypatch, linger_seconds=30)
+
+        events = [
+            event
+            async for event in agent.run_step(
+                "do the thing", time_limit_seconds=2, on_time_limit="score"
+            )
+        ]
+
+        expected = list(parse_stream(_FIXTURE.read_text().splitlines()))
+        assert len(events) == 1 + len(expected)
+
+    @pytest.mark.asyncio
+    async def test_time_limit_error_raises_after_yielding(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        (tmp_path / "gate").touch()
+        agent = self._agent(tmp_path, monkeypatch, linger_seconds=30)
+
+        seen: list[Event] = []
+        with pytest.raises(StepTimeLimitReachedError):
+            async for event in agent.run_step(
+                "do the thing", time_limit_seconds=2, on_time_limit="error"
+            ):
+                seen.append(event)
+        assert any(
+            isinstance(e, MessageAddedEvent) and e.message.content == "All done."
+            for e in seen
+        )
+
+    @pytest.mark.asyncio
+    async def test_parses_lines_longer_than_a_read_chunk(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        (tmp_path / "gate").touch()
+        big = "x" * 300_000
+        stream = tmp_path / "big.ndjson"
+        stream.write_text(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "parent_tool_use_id": None,
+                    "message": {"content": [{"type": "text", "text": big}]},
+                }
+            )
+            + "\n"
+        )
+        agent = self._agent(tmp_path, monkeypatch, stream=stream)
+
+        events = [event async for event in agent.run_step("do the thing")]
+
+        answers = [
+            e.message.content
+            for e in events
+            if isinstance(e, MessageAddedEvent) and e.message.role == "assistant"
+        ]
+        assert answers == [big]
