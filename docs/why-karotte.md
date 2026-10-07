@@ -83,8 +83,6 @@ See [Data and dependencies](tasks/data-and-dependencies.md).
 
 The student's firewall only lets through localhost and the sandbox's own addresses.
 Before the first step, Karotte checks that the student can't reach the internet.
-A CLI agent, which runs as the student, reaches its model through a forwarder on localhost that Karotte runs as root.
-The forwarder adds the API key, so the student never sees it.
 
 ## Give the student safe tools
 

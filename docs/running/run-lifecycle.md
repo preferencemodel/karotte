@@ -45,7 +45,6 @@ uv run karotte run --config run_config.json
 4. **Create the agent and set up the student's firewall.** The student can reach localhost and the sandbox's own addresses (see `KAROTTE_STUDENT_NETWORK` in [Runtimes](runtimes.md#environment-variables)).
    It can never reach the websocket port.
    It can only reach the tool server and the model proxy when a CLI agent needs them.
-   Without a proxy, a CLI agent reaches its model through a forwarder on localhost (step 6).
    If the firewall rules were applied, Karotte then tries to reach a few outside addresses as the student, and refuses to run if any of them answers.
    With `use_fake_model`, the fake model takes the agent's place here.
 5. **Start the event streams**: the terminal output, the websocket, and the backend if `backend_uri` is set.
@@ -59,7 +58,6 @@ uv run karotte run --config run_config.json
        Whatever it returns goes into the transcript as the metadata of a `TaskPreHookCompletedEvent`.
     6. Karotte adds the system message from `task.system_prompt`.
        It skips this when the property returns `None`, and for CLI agents, which send their own.
-    7. Karotte starts the agent. Without a model proxy, a CLI agent's model calls go through a forwarder on a local port, which adds the API key and sends them on to the provider.
 7. **Run the steps.** For each step:
     1. Karotte records a `StepStartedEvent`.
     2. The step's instructions go to the agent as a user message, with any `extra_config` changes applied; see [Extra config](run-config.md#extra-config).

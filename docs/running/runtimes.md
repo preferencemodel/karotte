@@ -145,13 +145,13 @@ It undoes each of these afterwards.
 
 Variables a launcher or task can set inside the sandbox:
 
-| Variable                       | Effect                                                                                                                                                                                                                                                                               |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `KAROTTE_SANDBOX`              | `runc`, `gvisor` or `vm`. Tells Karotte what kind of sandbox it's in when it can't detect that itself. Karotte's own launchers set it.                                                                                                                                               |
-| `KAROTTE_STUDENT_NETWORK`      | Unset or `strict`: the student can reach localhost, the sandbox's own addresses and the model proxy. `internal`: it can also reach link-local and private ranges. A CLI agent without a proxy reaches its model through Karotte's forwarder on localhost. Forwarded from your shell. |
-| `KAROTTE_DISK_BUDGET_BYTES`    | Cap on the student's disk quota. Set by whoever knows the host's free space; VM launchers set it.                                                                                                                                                                                    |
-| `KAROTTE_SANDBOX_MEMORY_BYTES` | How much memory the sandbox has for the student, when no plugin says. VM launchers set it.                                                                                                                                                                                           |
-| `KAROTTE_VM_LAUNCHER`          | Set by Karotte's VM runtimes. `karotte check confinement` then fails if the VM doesn't have 1 GiB more than the sandbox's memory. In a VM sized by another launcher, it only warns.                                                                                                  |
+| Variable                       | Effect                                                                                                                                                                                       |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KAROTTE_SANDBOX`              | `runc`, `gvisor` or `vm`. Tells Karotte what kind of sandbox it's in when it can't detect that itself. Karotte's own launchers set it.                                                       |
+| `KAROTTE_STUDENT_NETWORK`      | Unset or `strict`: the student can reach localhost, the sandbox's own addresses and the model proxy. `internal`: it can also reach link-local and private ranges. Forwarded from your shell. |
+| `KAROTTE_DISK_BUDGET_BYTES`    | Cap on the student's disk quota. Set by whoever knows the host's free space; VM launchers set it.                                                                                            |
+| `KAROTTE_SANDBOX_MEMORY_BYTES` | How much memory the sandbox has for the student, when no plugin says. VM launchers set it.                                                                                                   |
+| `KAROTTE_VM_LAUNCHER`          | Set by Karotte's VM runtimes. `karotte check confinement` then fails if the VM doesn't have 1 GiB more than the sandbox's memory. In a VM sized by another launcher, it only warns.          |
 
 Variables for the host:
 
