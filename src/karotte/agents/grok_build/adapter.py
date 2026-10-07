@@ -34,35 +34,45 @@ from karotte.schemas.transcript import (
 def parse_stream(lines: Iterable[str]) -> Iterator[Event]:
     """Convert Grok NDJSON lines into normalized transcript events.
 
-    Yields, per ``assistant`` line: a `MessageAddedEvent`, a `TokenUsageEvent`
-    and one `ToolCallStartedEvent` per tool call. Per ``tool_result`` block of
-    a ``user`` line: a `ToolCallCompletedEvent` and the tool `MessageAddedEvent`.
-    ``system`` and ``result`` lines carry only metadata and yield nothing.
+    Lines are independent, so a caller reading Grok's stdout as it arrives can
+    feed each one to :func:`parse_line` instead.
     """
     for i, line in enumerate(lines):
-        record = _parse_line(line, i)
-        if record is None:
-            continue
-        if record.get("parent_tool_use_id") is not None:
-            continue
+        yield from parse_line(line, i)
 
-        kind = record.get("type")
-        message = record.get("message")
-        if kind not in ("assistant", "user"):
-            continue
-        if not isinstance(message, dict):
-            logger.warning("Skipping grok {} line {} without a message.", kind, i)
-            continue
-        blocks = message.get("content")
-        if isinstance(blocks, str):
-            blocks = [{"type": "text", "text": blocks}]
-        if not isinstance(blocks, list):
-            blocks = []
 
-        if kind == "assistant":
-            yield from _assistant_events(blocks, message.get("usage"), i)
-        else:
-            yield from _user_events(blocks)
+def parse_line(line: str, i: int) -> Iterator[Event]:
+    """Events for line ``i`` of Grok's NDJSON output.
+
+    An ``assistant`` line yields a `MessageAddedEvent`, a `TokenUsageEvent`
+    and one `ToolCallStartedEvent` per tool call. Each ``tool_result`` block of
+    a ``user`` line yields a `ToolCallCompletedEvent` and the tool
+    `MessageAddedEvent`. ``system`` and ``result`` lines carry only metadata
+    and yield nothing.
+    """
+    record = _parse_line(line, i)
+    if record is None:
+        return
+    if record.get("parent_tool_use_id") is not None:
+        return
+
+    kind = record.get("type")
+    message = record.get("message")
+    if kind not in ("assistant", "user"):
+        return
+    if not isinstance(message, dict):
+        logger.warning("Skipping grok {} line {} without a message.", kind, i)
+        return
+    blocks = message.get("content")
+    if isinstance(blocks, str):
+        blocks = [{"type": "text", "text": blocks}]
+    if not isinstance(blocks, list):
+        blocks = []
+
+    if kind == "assistant":
+        yield from _assistant_events(blocks, message.get("usage"), i)
+    else:
+        yield from _user_events(blocks)
 
 
 def _assistant_events(blocks: list[Any], usage: Any, i: int) -> Iterator[Event]:
