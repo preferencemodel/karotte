@@ -191,13 +191,18 @@ class TestGrokBuildSampling:
         defaults = [o["value"] for o in table["reasoning_efforts"] if o.get("default")]
         assert defaults == [sent]
 
-    def test_no_temperature_for_models_that_reject_it(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize("effort", [None, "max"])
+    def test_leaves_other_models_alone(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, effort: str | None
     ):
         table = self._model_table(
-            tmp_path, monkeypatch, model="anthropic/claude-opus-4-8"
+            tmp_path,
+            monkeypatch,
+            model="anthropic/claude-sonnet-5-5",
+            reasoning_effort=effort,
         )
         assert "temperature" not in table
+        assert "reasoning_efforts" not in table
 
 
 class TestParseStream:

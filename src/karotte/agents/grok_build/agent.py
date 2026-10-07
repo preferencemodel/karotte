@@ -44,9 +44,6 @@ _SHA256: dict[str, str] = {
     "aarch64": "45b0943e736f00a249b9cf02af2be9e0749d97c09a6f55cfcf3029a1a836f23e",
 }
 
-# Sampling temperature sent with every Grok request.
-TEMPERATURE = 0.7
-
 # Grok tools that need xAI's backend or a human, which a task run has neither of.
 _DISALLOWED_TOOLS = ("send_feedback", "image_edit", "ask_user_question")
 
@@ -155,16 +152,16 @@ class GrokBuildAgent(CliAgent):
                 os.chown(p, uid, uid)
 
     def _sampling_config(self) -> str:
-        """Temperature and reasoning-effort lines for the model's config table.
+        """Temperature and reasoning-effort lines for the model's config table,
+        set for grok models only.
 
         Grok sends a model's ``temperature`` and the default entry of its
         ``reasoning_efforts`` menu with every request (its ``--reasoning-effort``
-        flag is ignored for a model without a menu). Temperature is left out
-        for models that reject sampling params."""
+        flag is ignored for a model without a menu)."""
         spec = spec_for(self._config.model)
         lines: list[str] = []
-        if spec.supports_sampling_params:
-            lines.append(f"temperature = {TEMPERATURE}")
+        if spec.temperature is not None:
+            lines.append(f"temperature = {spec.temperature}")
         effort = self._config.applied_reasoning_effort
         if effort is not None:
             options = [

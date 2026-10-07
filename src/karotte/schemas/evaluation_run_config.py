@@ -218,19 +218,21 @@ class EvaluationRunConfig(BaseModel):
     def applied_reasoning_effort(self) -> str | None:
         """The effort this run actually sends, under the provider's own name.
 
-        None where nothing is sent: the external agent and most CLI agents drive
-        their own inference, a fake-model run reaches no provider, and plenty of
-        models take no effort parameter at all. grok-build passes it to Grok,
-        defaulting to ``high`` like Grok's own model settings do."""
+        The run config's level, else the model's default (``high`` for grok
+        models). Sent by the builtin agent, and by grok-build for grok models.
+        None where nothing is sent: the external agent and other CLI agents
+        drive their own inference, a fake-model run reaches no provider, and
+        plenty of models take no effort parameter at all."""
         if self.use_fake_model:
             return None
         spec = spec_for(self.model)
-        if self.resolved_agent == "grok-build":
-            if self.reasoning_effort is None:
-                return "high" if "high" in spec.reasoning_effort_levels else None
-            return spec.reasoning_effort_value(self.reasoning_effort)
-        if self.resolved_agent != "builtin":
+        agent = self.resolved_agent
+        if agent != "builtin" and not (
+            agent == "grok-build" and spec.provider == "xai"
+        ):
             return None
+        if self.reasoning_effort is None:
+            return spec.default_reasoning_effort
         return spec.reasoning_effort_value(self.reasoning_effort)
 
     @model_validator(mode="after")
