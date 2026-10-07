@@ -7,6 +7,7 @@ import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import psutil
 import pytest
@@ -61,10 +62,22 @@ async def test_check_access_times_out_and_leaves_no_child(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setattr("karotte.demoted.TEST_PATH", "/bin/sh")
-    before = _children()
+    spawned: list[asyncio.subprocess.Process] = []
+    create_subprocess_exec = asyncio.create_subprocess_exec
+
+    async def recording_create_subprocess_exec(*args: Any, **kwargs: Any):
+        proc = await create_subprocess_exec(*args, **kwargs)
+        spawned.append(proc)
+        return proc
+
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", recording_create_subprocess_exec
+    )
     with pytest.raises(TimeoutError):
         await check_access("-c", "sleep 30", timeout_s=0.2)
-    assert _children() - before == set()
+    [proc] = spawned
+    assert proc.returncode == -signal.SIGKILL
+    assert proc.pid not in _children()
 
 
 @pytest.mark.asyncio
