@@ -35,6 +35,12 @@
     "env": {},
     "key_env": null
   },
+  "claude-haiku-5-5": {
+    "provider": "",
+    "model": "claude-haiku-5-5",
+    "env": {},
+    "key_env": null
+  },
   "claude-opus-4-8": {
     "provider": "",
     "model": "claude-opus-4-8",

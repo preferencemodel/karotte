@@ -209,6 +209,41 @@
       }
     }
   },
+  "claude-haiku-5-5": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      }
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        },
+        "output_config": {
+          "effort": "low"
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        },
+        "output_config": {
+          "effort": "max"
+        }
+      }
+    }
+  },
   "claude-opus-4-8": {
     "None": {
       "sent_by_karotte": null,

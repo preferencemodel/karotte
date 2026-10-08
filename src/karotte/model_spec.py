@@ -135,6 +135,7 @@ def is_special_training_model(model: str) -> bool:
 # on the thinking parameter, so it stays out.
 _CLAUDE_ADAPTIVE_PREFIXES = (
     "claude-fable",
+    "claude-haiku-5",
     "claude-opus-5",
     "claude-sonnet-5",
     "claude-opus-4-8",
@@ -239,6 +240,7 @@ _NO_SAMPLING_PARAMS_PREFIXES = (
     "claude-opus-4-8",
     "claude-opus-5",
     "claude-sonnet-5",
+    "claude-haiku-5",
 )
 
 

@@ -53,6 +53,15 @@
       "the criterion is met"
     ]
   },
+  "claude-haiku-5-5": {
+    "model": "anthropic/claude-haiku-5-5",
+    "max_tokens": 32000,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
   "claude-opus-4-8": {
     "model": "anthropic/claude-opus-4-8",
     "max_tokens": 32000,
