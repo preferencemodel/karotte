@@ -4048,3 +4048,19 @@ class TestReasoningEffortIsRecorded:
         )
         warnings = await _warnings_during(_task_started(config, mcp_server))
         assert not any("reasoning_effort" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_hints", [True, False])
+async def test_task_started_records_use_hints(
+    sample_config: EvaluationRunConfig, mcp_server: HttpMcpServer, use_hints: bool
+):
+    config = sample_config.model_copy(update={"use_hints": use_hints})
+    assert (await _task_started(config, mcp_server)).use_hints is use_hints
+
+
+def test_task_started_without_use_hints_reads_as_unknown():
+    event = TaskStartedEvent.model_validate(
+        {"run_id": "r", "task_id": "t", "n_steps": 1}
+    )
+    assert event.use_hints is None

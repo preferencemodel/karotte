@@ -5,7 +5,8 @@
     "task_id": "characterization-single-step-task",
     "model": "test_model",
     "n_steps": 1,
-    "reasoning_effort": null
+    "reasoning_effort": null,
+    "use_hints": true
   },
   {
     "metadata": {},
