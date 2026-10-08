@@ -1,3 +1,4 @@
+- This is a public package. Do not mention information or names internal to Preference Model (internal services, repos, clusters, customers, or internal reasons for a change) in any code, docs, comments, tests, commit messages, or PR descriptions. Explain the reason in general terms instead.
 - Use `from loguru import logger` for logging.
 - Fix formatting and lint issues and then run linting: `just fix && just lint`
 
