@@ -280,6 +280,10 @@ class BuiltinSource:
             assert isinstance(choice, Choices)
 
             message = Message(**choice.message.model_dump())
+            # stream_chunk_builder drops the reasoning items litellm's Responses
+            # bridge puts on the final chunk; without them every call reasons
+            # from scratch.
+            message.reasoning_items = _reasoning_items(chunks)
 
             for name in self._spec.tool_call_repairs:
                 message.tool_calls = repair_tool_calls(
@@ -365,3 +369,14 @@ class BuiltinSource:
     def _serialize_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Serializes transcript messages to dicts."""
         return [message.model_dump() for message in messages]
+
+
+def _reasoning_items(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] | None:
+    """The Responses API reasoning items carried on ``chunks``, if any."""
+    items: list[dict[str, Any]] = []
+    for chunk in chunks:
+        if chunk.choices:
+            found = getattr(chunk.choices[0].delta, "reasoning_items", None)
+            if isinstance(found, list):
+                items.extend(dict(item) for item in found)
+    return items or None

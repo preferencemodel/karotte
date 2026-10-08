@@ -439,3 +439,43 @@ def test_golden_run_config_model_policy(assert_matches_golden: Golden):
             for model in MODELS
         },
     )
+
+
+_REASONING_ITEM = {
+    "id": "rs_1",
+    "type": "reasoning",
+    "encrypted_content": "gAAAA-opaque",
+    "summary": [{"type": "summary_text", "text": "Add them."}],
+}
+
+
+@pytest.mark.asyncio
+async def test_responses_reasoning_items_are_sent_back(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """litellm's Responses bridge puts the turn's reasoning items on the final
+    chunk, and stream_chunk_builder drops them. Karotte keeps them on the
+    message and sends them back, so the model doesn't reason from scratch on
+    every call."""
+    model = "openai/gpt-5.6-luna"
+    chunks = _dirty_tool_call_chunks(model)
+    chunks[-1].choices[0].delta.reasoning_items = [_REASONING_ITEM]  # pyright: ignore[reportAttributeAccessIssue]
+
+    async def scripted_acompletion(**_kwargs: Any) -> _ScriptedStream:
+        return _ScriptedStream(chunks)
+
+    monkeypatch.setattr("litellm.acompletion", scripted_acompletion)
+    source = BuiltinSource(_config(model))
+    user = Message(role="user", content="Go.")
+    added = [
+        event.message
+        async for event in source.collect([user], [])
+        if isinstance(event, MessageAddedEvent)
+    ]
+    assert added[0].reasoning_items == [_REASONING_ITEM]
+
+    sent = source.get_completion_params([user, added[0]], [])["messages"]
+    assert sent[1]["reasoning_items"] == [_REASONING_ITEM]
+    # Messages without reasoning items don't grow a key other providers might
+    # reject.
+    assert "reasoning_items" not in sent[0]
