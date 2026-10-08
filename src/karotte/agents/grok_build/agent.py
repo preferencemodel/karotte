@@ -195,9 +195,10 @@ class GrokBuildAgent(CliAgent):
             env[_KEY_ENV] = api_key
         return env
 
-    def _argv(self, instructions: str) -> list[str]:
-        # Passed to exec (no shell), so the instruction is a single safe argv
-        # element.
+    def _argv(self, prompt_file: Path) -> list[str]:
+        # The prompt goes in a file, not argv: argv is visible to the student's
+        # processes, so e.g. `pkill -f blender` would match a prompt that
+        # mentions blender and kill the agent itself.
         resolved = resolve_model(self._config.model, None)
         session = (
             ["--session-id", self._session_id]
@@ -206,8 +207,8 @@ class GrokBuildAgent(CliAgent):
         )
         argv = [
             _GROK_BIN,
-            "-p",
-            instructions,
+            "--prompt-file",
+            str(prompt_file),
             "-m",
             resolved.model,
             *session,
@@ -242,7 +243,11 @@ class GrokBuildAgent(CliAgent):
         yield MessageAddedEvent(message=Message(role="user", content=instructions))
 
         step = self._step_index
-        argv = self._argv(instructions)
+        prompt_path = self._grok_home / f"step_{step}.prompt"
+        prompt_path.write_text(instructions)
+        if (uid := demoted_uid_gid()) is not None:
+            os.chown(prompt_path, uid, uid)
+        argv = self._argv(prompt_path)
         self._step_index += 1
         log_path = self._grok_home / f"step_{step}.ndjson"
 

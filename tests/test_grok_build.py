@@ -65,21 +65,22 @@ class TestGrokBuildAgent:
 
     def test_argv_creates_then_resumes_one_session(self):
         agent = _agent(turn_limit=7)
-        first = agent._argv("do the thing")  # pyright: ignore[reportPrivateUsage]
+        first = agent._argv(Path("step_0.prompt"))  # pyright: ignore[reportPrivateUsage]
         assert first[0] == f"{AGENTS_BIN_DIR}/grok"
-        assert first[first.index("-p") + 1] == "do the thing"
+        assert first[first.index("--prompt-file") + 1] == "step_0.prompt"
+        assert "-p" not in first
         assert first[first.index("-m") + 1] == "grok-4.7"
         assert first[first.index("--max-turns") + 1] == "7"
         assert "--always-approve" in first
         session_id = first[first.index("--session-id") + 1]
 
         agent._step_index = 1  # pyright: ignore[reportPrivateUsage]
-        second = agent._argv("next")  # pyright: ignore[reportPrivateUsage]
+        second = agent._argv(Path("step_1.prompt"))  # pyright: ignore[reportPrivateUsage]
         assert "--session-id" not in second
         assert second[second.index("--resume") + 1] == session_id
 
     def test_argv_omits_turn_limit_when_unset(self):
-        assert "--max-turns" not in _agent()._argv("x")  # pyright: ignore[reportPrivateUsage]
+        assert "--max-turns" not in _agent()._argv(Path("x"))  # pyright: ignore[reportPrivateUsage]
 
     def test_env_sets_credentials_and_grok_home(self):
         env = _agent()._env()  # pyright: ignore[reportPrivateUsage]
@@ -335,6 +336,8 @@ class TestGrokBuildRunStep:
         )
         log = tmp_path / ".grok_home" / "step_0.ndjson"
         assert log.read_text().splitlines() == _FIXTURE.read_text().splitlines()
+        prompt = tmp_path / ".grok_home" / "step_0.prompt"
+        assert prompt.read_text() == "do the thing"
 
     @pytest.mark.asyncio
     async def test_time_limit_keeps_output_so_far(
