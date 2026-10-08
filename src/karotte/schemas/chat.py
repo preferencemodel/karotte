@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 type Role = Literal["assistant", "user", "system", "tool", "function"]
 
@@ -37,4 +37,12 @@ class Message(BaseModel):
     tool_calls: list[ChatCompletionMessageToolCall] | None = None
     reasoning_content: str | None = None
     tool_call_id: str | None = None
+    # The model's reasoning, sent back to it on the next turn so it is not lost.
+    # thinking_blocks come from Claude, reasoning_items from OpenAI's Responses API.
+    thinking_blocks: list[dict[str, Any]] | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
+    reasoning_items: list[dict[str, Any]] | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
     # add fields as necessary from litellm.Message

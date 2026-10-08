@@ -280,6 +280,13 @@ class BuiltinSource:
             assert isinstance(choice, Choices)
 
             message = Message(**choice.message.model_dump())
+            # stream_chunk_builder drops the Responses API's reasoning items.
+            message.reasoning_items = [
+                item
+                for chunk in chunks
+                for item in chunk.choices[0].delta.model_dump().get("reasoning_items")
+                or []
+            ] or None
 
             for name in self._spec.tool_call_repairs:
                 message.tool_calls = repair_tool_calls(

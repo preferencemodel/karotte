@@ -17,6 +17,10 @@ from typing import Any, final, override
 import litellm
 import pytest
 from litellm import CustomStreamWrapper
+from litellm.types.llms.openai import (
+    ChatCompletionReasoningItem,
+    ChatCompletionThinkingBlock,
+)
 from litellm.types.utils import (
     ChatCompletionDeltaToolCall,
     ModelResponseStream,
@@ -351,6 +355,47 @@ async def _repaired_arguments(model: str, monkeypatch: pytest.MonkeyPatch) -> st
     tool_calls = added[0].message.tool_calls
     assert tool_calls is not None
     return tool_calls[0].function.arguments
+
+
+@pytest.mark.asyncio
+async def test_reasoning_is_replayed_on_the_next_turn(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Anthropic's signed thinking and the Responses API's reasoning items go
+    back on the next request; stream_chunk_builder alone drops the items."""
+    thinking: list[ChatCompletionThinkingBlock] = [
+        {"type": "thinking", "thinking": "17*23", "signature": "sig"}
+    ]
+    item: ChatCompletionReasoningItem = {
+        "type": "reasoning",
+        "id": "rs_1",
+        "encrypted_content": "enc",
+    }
+    chunks = _dirty_tool_call_chunks("openai/gpt-6-luna")
+    chunks[0].choices[0].delta = LiteLlmDelta(
+        content="", thinking_blocks=list(thinking)
+    )
+    chunks[-1].choices[0].delta = LiteLlmDelta(reasoning_items=[item])
+
+    async def scripted_acompletion(**_kwargs: Any) -> _ScriptedStream:
+        return _ScriptedStream(chunks)
+
+    monkeypatch.setattr("litellm.acompletion", scripted_acompletion)
+    source = BuiltinSource(_config("openai/gpt-6-luna"))
+    user = Message(role="user", content="Go.")
+    [added] = [
+        event
+        async for event in source.collect([user], [])
+        if isinstance(event, MessageAddedEvent)
+    ]
+
+    sent_user, sent_assistant = source.get_completion_params([user, added.message], [])[
+        "messages"
+    ]
+    assert sent_assistant["thinking_blocks"] == thinking
+    assert sent_assistant["reasoning_items"] == [item]
+    assert "thinking_blocks" not in sent_user
+    assert "reasoning_items" not in sent_user
 
 
 @pytest.mark.asyncio
