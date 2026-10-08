@@ -1,4 +1,6 @@
 import importlib.util
+import stat
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -247,35 +249,32 @@ class TestApplyPermissions:
         mock_run.assert_any_call(
             ["chown", "-R", "root:root", "/workdir/venvs/tools"], check=True
         )
-        mock_run.assert_any_call(
-            [
-                "find",
-                "/workdir/venvs/tools",
-                "-type",
-                "d",
-                "-exec",
-                "chmod",
-                "555",
-                "{}",
-                ";",
-            ],
-            check=True,
-        )
-        mock_run.assert_any_call(
-            [
-                "find",
-                "/workdir/venvs/tools",
-                "-type",
-                "f",
-                "-exec",
-                "chmod",
-                "444",
-                "{}",
-                ";",
-            ],
-            check=True,
-        )
-        mock_run.assert_any_call(["chmod", "1755", "/workdir/venvs/tools"], check=True)
+
+    def test_student_read_only_keeps_executables(self, tmp_path: Path):
+        """Packages run bundled binaries (e.g. ptxas), so read-only must not strip the executable bit."""
+        venv = tmp_path / "tools"
+        (venv / "bin").mkdir(parents=True)
+        (venv / "lib").mkdir()
+        tool = venv / "bin" / "ptxas"
+        tool.write_text("")
+        tool.chmod(0o755)
+        module = venv / "lib" / "mod.py"
+        module.write_text("")
+        module.chmod(0o644)
+
+        real_run = subprocess.run
+
+        def run_without_chown(cmd, **kwargs):
+            if cmd[0] != "chown":
+                real_run(cmd, **kwargs)
+
+        with patch("build_venvs.subprocess.run", side_effect=run_without_chown):
+            _apply_permissions(_make_spec("student:r", str(venv)))
+
+        assert stat.S_IMODE(venv.stat().st_mode) == 0o1755
+        assert stat.S_IMODE((venv / "bin").stat().st_mode) == 0o555
+        assert stat.S_IMODE(tool.stat().st_mode) == 0o555
+        assert stat.S_IMODE(module.stat().st_mode) == 0o444
 
     @patch("build_venvs.subprocess.run")
     def test_student_read_write(self, mock_run):
