@@ -144,15 +144,8 @@ def _apply_permissions(spec: VenvSpec) -> None:
 
     elif spec.access == "student:r":
         subprocess.run(["chown", "-R", "root:root", str(spec.path)], check=True)
-        # Sticky bit on dirs, read-only on files (matches shared_data pattern)
-        subprocess.run(
-            ["find", str(spec.path), "-type", "d", "-exec", "chmod", "555", "{}", ";"],
-            check=True,
-        )
-        subprocess.run(
-            ["find", str(spec.path), "-type", "f", "-exec", "chmod", "444", "{}", ";"],
-            check=True,
-        )
+        # Read-only, keeping the executable bit on files that had one
+        subprocess.run(["chmod", "-R", "a=rX", str(spec.path)], check=True)
         subprocess.run(["chmod", "1755", str(spec.path)], check=True)
 
     elif spec.access == "student:rw":

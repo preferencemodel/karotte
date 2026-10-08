@@ -161,8 +161,7 @@ Put `root` venvs under `/root/` so the student can't even see that they exist.
 A visible but unreadable `/workdir/venvs/scoring/` could already leak information.
 
 Use `student:r` for tooling the student should run but not change.
-Its files are made read-only, which also removes the executable bit from console scripts in its `bin/`.
-The student runs those with `python -m <module>` instead.
+Its files are made read-only but keep their executable bit.
 `student:rw` is what the student venv uses; you rarely need it for another venv.
 
 ### Lockfiles
