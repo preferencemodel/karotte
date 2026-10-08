@@ -7,6 +7,7 @@
     "claude-opus-5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-sonnet-5-5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-sonnet-5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
+    "claude-haiku-5-5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-opus-4-8": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-opus-4-7": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-opus-4-6": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",

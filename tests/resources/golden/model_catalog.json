@@ -163,6 +163,33 @@
       "extra_allowed_openai_params": []
     },
     {
+      "model": "claude-haiku-5-5",
+      "model_display_name": "Haiku 5.5",
+      "provider": "anthropic",
+      "provider_display_name": "Anthropic",
+      "litellm_model": "anthropic/claude-haiku-5-5",
+      "max_output_tokens": 128000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "reasoning_request": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
+      "supports_sampling_params": false,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
       "model": "claude-opus-4-8",
       "model_display_name": "Opus 4.8",
       "provider": "anthropic",
