@@ -35,6 +35,7 @@ class TaskStartedEvent(BaseEvent):
     model: str | None = None
     n_steps: int
     reasoning_effort: str | None = None
+    use_hints: bool | None = None
 
 
 class TaskPreHookCompletedEvent(MetadataEvent):

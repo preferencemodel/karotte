@@ -5,7 +5,8 @@
     "task_id": "characterization-task",
     "model": "test_model",
     "n_steps": 2,
-    "reasoning_effort": null
+    "reasoning_effort": null,
+    "use_hints": true
   },
   {
     "metadata": {},
