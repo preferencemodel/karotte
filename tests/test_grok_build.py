@@ -12,6 +12,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from mcp.types import ImageContent, TextContent
 
 from karotte.agents import cli_agent_types
 from karotte.agents.agent import StepTimeLimitReachedError
@@ -268,6 +269,69 @@ class TestParseStream:
             }
         )
         assert list(parse_stream(["not json", "[]", subagent, ""])) == []
+
+    def test_read_file_image_becomes_an_image(self):
+        line = json.dumps(
+            {
+                "type": "user",
+                "parent_tool_use_id": None,
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "call_img",
+                            "content": json.dumps(
+                                {
+                                    "type": "ReadFile",
+                                    "ImageContent": {
+                                        "data": "/9j/4AAQ",
+                                        "mime_type": "image/jpeg",
+                                    },
+                                }
+                            ),
+                            "is_error": False,
+                        }
+                    ]
+                },
+            }
+        )
+
+        completed, message = list(parse_stream([line]))
+
+        assert isinstance(completed, ToolCallCompletedEvent)
+        assert completed.tool_call_id == "call_img"
+        assert completed.result.content == [
+            ImageContent(type="image", data="", mimeType="image/jpeg")
+        ]
+        assert isinstance(message, MessageAddedEvent)
+        assert message.message.role == "tool"
+        assert message.message.content == [
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQ"},
+            }
+        ]
+
+    def test_other_read_file_results_stay_text(self):
+        text = json.dumps({"type": "ReadFile", "FileContent": "hello"})
+        line = json.dumps(
+            {
+                "type": "user",
+                "parent_tool_use_id": None,
+                "message": {
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": "c", "content": text}
+                    ]
+                },
+            }
+        )
+
+        completed, message = list(parse_stream([line]))
+
+        assert isinstance(completed, ToolCallCompletedEvent)
+        assert completed.result.content == [TextContent(type="text", text=text)]
+        assert isinstance(message, MessageAddedEvent)
+        assert message.message.content == text
 
 
 _FAKE_GROK = """

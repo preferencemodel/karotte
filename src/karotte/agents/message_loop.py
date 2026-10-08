@@ -1,13 +1,13 @@
 import json
 import time
 from collections.abc import AsyncGenerator, Sequence
-from typing import Any, ClassVar, Literal
+from typing import ClassVar, Literal
 
 from fastmcp import Client
 from fastmcp.client import StreamableHttpTransport
 from litellm.types.utils import Message as LiteLlmMessage
 from loguru import logger
-from mcp.types import CallToolResult, ContentBlock, ImageContent, TextContent
+from mcp.types import CallToolResult, TextContent
 
 from karotte.agents.agent import (
     EmptyTurnLimitReachedError,
@@ -17,12 +17,12 @@ from karotte.agents.agent import (
     TurnLimitReachedError,
 )
 from karotte.agents.message_source import MessageSource
+from karotte.agents.tool_results import tool_result_events
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Message
 from karotte.schemas.transcript import (
     Event,
     MessageAddedEvent,
     TokenUsageEvent,
-    ToolCallCompletedEvent,
     ToolCallStartedEvent,
 )
 
@@ -254,47 +254,9 @@ async def _execute_tool_calls(
                 is_error=True,
             )
 
-        yield ToolCallCompletedEvent(
-            tool_call_id=tool_call.id,
-            result=result,
-        )
-
-        result_dict = {}
-        result_dict["role"] = "tool"
-        result_dict["tool_call_id"] = tool_call.id
-
-        if len(result.content) == 0:
-            result_dict["content"] = []
-        else:
-            result_dict["content"] = [_to_chat_content_part(result.content[0])]
-
-        yield MessageAddedEvent(message=Message(**result_dict))
-
-
-def _to_chat_content_part(block: ContentBlock) -> dict[str, Any]:
-    """Project an MCP content block onto a chat-completions content part.
-
-    MCP blocks carry protocol-level fields (`annotations`, `_meta`) that are
-    addressed to the host, not the model. Strict OpenAI-compatible endpoints
-    (e.g. Fireworks) forbid unknown keys in content parts and reject the whole
-    request, so this whitelists the fields a provider understands rather than
-    dumping the model.
-    """
-    if isinstance(block, ImageContent):
-        return {
-            "type": "image_url",
-            "image_url": {"url": f"data:{block.mimeType};base64,{block.data}"},
-        }
-
-    if isinstance(block, TextContent):
-        return {"type": "text", "text": block.text}
-
-    # Audio, resource links and embedded resources have no chat equivalent;
-    # hand the model the block's own JSON instead of dropping it.
-    return {
-        "type": "text",
-        "text": block.model_dump_json(by_alias=True, exclude_none=True),
-    }
+        completed, message = tool_result_events(tool_call.id, result)
+        yield completed
+        yield message
 
 
 def _build_call_tool_result(result: str, is_error: bool) -> CallToolResult:

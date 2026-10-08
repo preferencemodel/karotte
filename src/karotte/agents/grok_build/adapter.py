@@ -19,8 +19,9 @@ from collections.abc import Iterable, Iterator
 from typing import Any
 
 from loguru import logger
-from mcp.types import CallToolResult, TextContent
+from mcp.types import CallToolResult, ImageContent, TextContent
 
+from karotte.agents.tool_results import tool_result_events
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
     Event,
@@ -127,11 +128,17 @@ def _user_events(blocks: list[Any]) -> Iterator[Event]:
             continue
         tool_call_id = block.get("tool_use_id") or ""
         text = _result_text(block.get("content"))
+        is_error = bool(block.get("is_error"))
+        if (image := _read_file_image(text)) is not None:
+            yield from tool_result_events(
+                tool_call_id, CallToolResult(content=[image], isError=is_error)
+            )
+            continue
         yield ToolCallCompletedEvent(
             tool_call_id=tool_call_id,
             result=CallToolResult(
                 content=[TextContent(type="text", text=text)],
-                isError=bool(block.get("is_error")),
+                isError=is_error,
             ),
         )
         yield MessageAddedEvent(
@@ -152,6 +159,25 @@ def _usage_event(usage: dict[str, Any]) -> TokenUsageEvent:
         cache_read_tokens=cache_read,
         cache_write_tokens=cache_write,
     )
+
+
+def _read_file_image(text: str) -> ImageContent | None:
+    """The image in Grok's JSON-encoded ``read_file`` result, if it read one."""
+    if not text.startswith("{"):
+        return None
+    try:
+        record = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(record, dict) or record.get("type") != "ReadFile":
+        return None
+    image = record.get("ImageContent")
+    if not isinstance(image, dict):
+        return None
+    data, mime_type = image.get("data"), image.get("mime_type")
+    if not isinstance(data, str) or not isinstance(mime_type, str):
+        return None
+    return ImageContent(type="image", data=data, mimeType=mime_type)
 
 
 def _result_text(content: Any) -> str:

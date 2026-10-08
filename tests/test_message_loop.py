@@ -17,6 +17,8 @@ from karotte.agents.message_loop import (
     EMPTY_TURN_NUDGE,
     MAX_CONSECUTIVE_EMPTY_TURNS,
     MessageLoopAgent,
+)
+from karotte.agents.tool_results import (
     _to_chat_content_part,  # pyright: ignore[reportPrivateUsage]
 )
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
