@@ -10,6 +10,7 @@ messages.
 
 from karotte.agents.agent import (
     Agent,
+    CliAgentExitedError,
     EmptyTurnLimitReachedError,
     RunContext,
     TurnLimitReachedError,
@@ -39,6 +40,7 @@ __all__ = [
     "BuiltinAgent",
     "BuiltinSource",
     "CliAgent",
+    "CliAgentExitedError",
     "EmptyTurnLimitReachedError",
     "ExternalAgent",
     "FakeSource",
