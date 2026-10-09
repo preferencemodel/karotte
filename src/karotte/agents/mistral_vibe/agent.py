@@ -16,7 +16,11 @@ from typing import ClassVar, Literal, final
 
 from loguru import logger
 
-from karotte.agents.agent import RunContext, StepTimeLimitReachedError
+from karotte.agents.agent import (
+    CliAgentExitedError,
+    RunContext,
+    StepTimeLimitReachedError,
+)
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     AGENTS_DIR,
@@ -225,13 +229,6 @@ class MistralVibeAgent(CliAgent):
                 time_limit_seconds,
                 self._step_index - 1,
             )
-        elif proc.returncode != 0:
-            logger.warning(
-                "vibe exited {} on step {}: {}",
-                proc.returncode,
-                self._step_index - 1,
-                stderr_b.decode("utf-8", errors="replace")[-2000:],
-            )
 
         for event in _transcript_events(lines, instructions, self._config.model):
             yield event
@@ -239,6 +236,10 @@ class MistralVibeAgent(CliAgent):
         if timed_out and on_time_limit == "error":
             msg = f"Time limit of {time_limit_seconds}s reached."
             raise StepTimeLimitReachedError(msg)
+        if not timed_out and proc.returncode != 0:
+            stderr = stderr_b.decode("utf-8", errors="replace")[-2000:]
+            msg = f"vibe exited {proc.returncode} on step {self._step_index - 1}: {stderr}"
+            raise CliAgentExitedError(msg)
 
 
 def _transcript_events(

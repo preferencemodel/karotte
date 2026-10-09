@@ -18,6 +18,11 @@ class StepTimeLimitReachedError(Exception):
     """Raised when a step exceeds its configured wall-clock time limit."""
 
 
+class CliAgentExitedError(Exception):
+    """Raised when a CLI agent's process exits non-zero, so the step ends as an
+    error instead of being scored on whatever the agent left behind."""
+
+
 class StepContextWindowLimitReachedError(Exception):
     """Raised when a step exceeds its configured context-window token limit."""
 

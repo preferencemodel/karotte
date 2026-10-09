@@ -15,7 +15,7 @@ import pytest
 from mcp.types import ImageContent, TextContent
 
 from karotte.agents import cli_agent_types
-from karotte.agents.agent import StepTimeLimitReachedError
+from karotte.agents.agent import CliAgentExitedError, StepTimeLimitReachedError
 from karotte.agents.cli_agent import AGENTS_BIN_DIR
 from karotte.agents.grok_build import GrokBuildAgent
 from karotte.agents.grok_build.adapter import parse_stream
@@ -345,6 +345,9 @@ for i, line in enumerate(lines):
         while not gate.exists():
             time.sleep(0.01)
 time.sleep(float(sys.argv[3]))
+if int(sys.argv[4]):
+    print("boom", file=sys.stderr)
+sys.exit(int(sys.argv[4]))
 """
 
 
@@ -358,6 +361,7 @@ class TestGrokBuildRunStep:
         *,
         stream: Path = _FIXTURE,
         linger_seconds: float = 0.0,
+        exit_code: int = 0,
     ) -> GrokBuildAgent:
         monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
         monkeypatch.setattr(
@@ -375,6 +379,7 @@ class TestGrokBuildRunStep:
             str(stream),
             str(tmp_path / "gate"),
             str(linger_seconds),
+            str(exit_code),
         ]
         monkeypatch.setattr(agent, "_argv", lambda _instructions: argv)  # pyright: ignore[reportUnknownLambdaType]
         return agent
@@ -437,6 +442,22 @@ class TestGrokBuildRunStep:
             isinstance(e, MessageAddedEvent) and e.message.content == "All done."
             for e in seen
         )
+
+    @pytest.mark.asyncio
+    async def test_nonzero_exit_raises_after_yielding(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        (tmp_path / "gate").touch()
+        agent = self._agent(tmp_path, monkeypatch, exit_code=134)
+
+        seen: list[Event] = []
+        with pytest.raises(
+            CliAgentExitedError, match="grok exited 134 on step 0: boom"
+        ):
+            async for event in agent.run_step("do the thing"):
+                seen.append(event)
+        expected = list(parse_stream(_FIXTURE.read_text().splitlines()))
+        assert len(seen) == 1 + len(expected)
 
     @pytest.mark.asyncio
     async def test_parses_lines_longer_than_a_read_chunk(

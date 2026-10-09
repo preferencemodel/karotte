@@ -19,7 +19,11 @@ from typing import ClassVar, Literal, final
 
 from loguru import logger
 
-from karotte.agents.agent import RunContext, StepTimeLimitReachedError
+from karotte.agents.agent import (
+    CliAgentExitedError,
+    RunContext,
+    StepTimeLimitReachedError,
+)
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     CliAgent,
@@ -318,17 +322,13 @@ class GrokBuildAgent(CliAgent):
             logger.warning(
                 "grok hit the {}s time limit on step {}", time_limit_seconds, step
             )
+            if on_time_limit == "error":
+                msg = f"Time limit of {time_limit_seconds}s reached."
+                raise StepTimeLimitReachedError(msg)
         elif proc.returncode != 0:
-            logger.warning(
-                "grok exited {} on step {}: {}",
-                proc.returncode,
-                step,
-                stderr_b.decode("utf-8", errors="replace")[-2000:],
-            )
-
-        if timed_out and on_time_limit == "error":
-            msg = f"Time limit of {time_limit_seconds}s reached."
-            raise StepTimeLimitReachedError(msg)
+            stderr = stderr_b.decode("utf-8", errors="replace")[-2000:]
+            msg = f"grok exited {proc.returncode} on step {step}: {stderr}"
+            raise CliAgentExitedError(msg)
 
 
 async def _read_rest(stream: asyncio.StreamReader) -> bytes:
