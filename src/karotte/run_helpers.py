@@ -19,7 +19,6 @@ from karotte import Runtime
 from karotte.check_paths import split_loader_path
 from karotte.confinement import (
     Confinement,
-    Sandbox,
     current_sandbox,
     firewall_canaries,
     prepare_vm_guest,
@@ -466,7 +465,7 @@ def _set_up_runner(run_config: EvaluationRunConfig, task: Task) -> "EvaluationRu
 
     # Before anything builds a confinement: it decides between cgroups and the
     # watchdog once.
-    if current_sandbox() is Sandbox.VM:
+    if current_sandbox().is_vm:
         _ = prepare_vm_guest()
     runner = EvaluationRunner(run_config, task)
 

@@ -87,6 +87,92 @@ class Sandbox(StrEnum):
             return cls.VM
         return None
 
+    # What differs between sandboxes, each answered from _SANDBOX_TRAITS, so a
+    # sandbox's behaviour is one record there rather than checks spread across
+    # modules.
+
+    @property
+    def uses_host_kernel(self) -> bool:
+        """Whether the kernel is the host's (runc), not the sandbox's own."""
+        return _SANDBOX_TRAITS[self].uses_host_kernel
+
+    @property
+    def is_vm(self) -> bool:
+        """Whether this is a VM guest, whose kernel root inside may reconfigure."""
+        return _SANDBOX_TRAITS[self].is_vm
+
+    @property
+    def has_real_cgroups(self) -> bool:
+        """Whether cgroup writes are enforced and cgroup numbers are real."""
+        return _SANDBOX_TRAITS[self].has_real_cgroups
+
+    @property
+    def enforces_iptables(self) -> bool:
+        """Whether iptables rules that are accepted are also enforced."""
+        return _SANDBOX_TRAITS[self].enforces_iptables
+
+    @property
+    def firewall_commands(self) -> tuple[str, str, str]:
+        """The iptables and ip6tables commands, and the refusal target."""
+        return _SANDBOX_TRAITS[self].firewall_commands
+
+    @property
+    def maps_user_ids(self) -> bool:
+        """Whether a new user namespace can map the outer uid (procfs takes
+        uid_map writes)."""
+        return _SANDBOX_TRAITS[self].maps_user_ids
+
+    @property
+    def label(self) -> str:
+        """How the confinement log line names it."""
+        return _SANDBOX_TRAITS[self].label
+
+
+@dataclass(frozen=True)
+class _SandboxTraits:
+    uses_host_kernel: bool
+    is_vm: bool
+    has_real_cgroups: bool
+    enforces_iptables: bool
+    firewall_commands: tuple[str, str, str]
+    maps_user_ids: bool
+    label: str
+
+
+_SANDBOX_TRAITS = {
+    Sandbox.RUNC: _SandboxTraits(
+        uses_host_kernel=True,
+        is_vm=False,
+        has_real_cgroups=True,
+        enforces_iptables=True,
+        firewall_commands=("iptables", "ip6tables", "REJECT"),
+        maps_user_ids=True,
+        label="gVisor off",
+    ),
+    # gVisor implements its own kernel in userspace. It accepts cgroup writes
+    # and iptables rules without enforcing them, serves cgroup v1 numbers that
+    # mean nothing, has no nftables (so iptables-legacy) and no ICMP or TCP RST
+    # to refuse with (so DROP), and its procfs takes no uid_map writes.
+    Sandbox.GVISOR: _SandboxTraits(
+        uses_host_kernel=False,
+        is_vm=False,
+        has_real_cgroups=False,
+        enforces_iptables=False,
+        firewall_commands=("iptables-legacy", "ip6tables-legacy", "DROP"),
+        maps_user_ids=False,
+        label="gVisor on",
+    ),
+    Sandbox.VM: _SandboxTraits(
+        uses_host_kernel=False,
+        is_vm=True,
+        has_real_cgroups=True,
+        enforces_iptables=True,
+        firewall_commands=("iptables", "ip6tables", "REJECT"),
+        maps_user_ids=True,
+        label="VM",
+    ),
+}
+
 
 @dataclass(frozen=True)
 class FileLimit:
@@ -141,9 +227,9 @@ def current_sandbox() -> Sandbox:
 
 
 def network_needs_namespace() -> bool:
-    """gVisor's iptables silently no-op on GKE, so student sessions get a
+    """Where iptables rules aren't enforced (gVisor), student sessions get a
     network namespace instead of trusting the firewall."""
-    return current_sandbox() is Sandbox.GVISOR
+    return not current_sandbox().enforces_iptables
 
 
 _WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
@@ -378,7 +464,7 @@ class Confinement:
         ]
 
         took = self._apply_firewall_rules(firewall_rules + firewall_rules_v6)
-        return took and self.sandbox is not Sandbox.GVISOR
+        return took and self.sandbox.enforces_iptables
 
     def deny_all_network(self, uid: int | str) -> bool:
         """Cut a uid off the network completely. Returns whether the rules
@@ -397,7 +483,7 @@ class Confinement:
                 f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -j {reject}",
             ]
         )
-        return took and self.sandbox is not Sandbox.GVISOR
+        return took and self.sandbox.enforces_iptables
 
     def lift_network_rules(self, uid: int) -> bool:
         """Delete every OUTPUT rule matching ``uid``, as the two methods above
@@ -427,15 +513,8 @@ class Confinement:
         return clean
 
     def _firewall_commands(self) -> tuple[str, str, str]:
-        """The iptables/ip6tables commands and refusal target for this sandbox.
-
-        gVisor has no nftables, so it gets iptables-legacy; it has no
-        ICMP/TCP-RST either, so refusal is a silent DROP rather than a REJECT.
-        Everything else uses the real thing.
-        """
-        if self.sandbox is Sandbox.GVISOR:
-            return "iptables-legacy", "ip6tables-legacy", "DROP"
-        return "iptables", "ip6tables", "REJECT"
+        """The iptables/ip6tables commands and refusal target for this sandbox."""
+        return self.sandbox.firewall_commands
 
     def _apply_firewall_rules(self, rules: list[str]) -> bool:
         """Apply rules in order, reporting whether they all took."""
@@ -447,9 +526,9 @@ class Confinement:
                 text=True,
             )
             if result.returncode != 0:
-                if self.sandbox is Sandbox.GVISOR:
+                if not self.sandbox.enforces_iptables:
                     logger.warning(
-                        "iptables doesn't work when gVisor is enabled, you'll need to use additional controls for "
+                        f"iptables doesn't work in this sandbox ({self.sandbox}), you'll need to use additional controls for "
                         + "disabling networking when spawning child processes, e.g. `disable_networking` on the "
                         + "bash tool."
                     )
@@ -508,11 +587,7 @@ def prepare_vm_guest(dev: Path | None = None) -> list[str]:
     and a step that fails leaves the weaker fallback in place. Returns what it
     changed.
     """
-    if (
-        current_sandbox() is not Sandbox.VM
-        or os.geteuid() != 0
-        or not is_containerized()
-    ):
+    if not current_sandbox().is_vm or os.geteuid() != 0 or not is_containerized():
         return []
     changed: list[str] = []
     for mount in read_mounts():
@@ -752,8 +827,10 @@ def build_confinement(
     sandbox = current_sandbox() if sandbox is None else sandbox
     uid = _student_uid() if uid is None else uid
 
-    if sandbox is Sandbox.GVISOR:
-        logger.debug("gVisor: cgroup limits are accepted but not enforced; skipping")
+    if not sandbox.has_real_cgroups:
+        logger.debug(
+            f"{sandbox}: cgroup limits are accepted but not enforced; skipping"
+        )
     else:
         confinement = _cgroup_confinement(sandbox, uid)
         if confinement is not None:
@@ -971,11 +1048,7 @@ def describe_confinement(
     if network_firewall is not None:
         parts.append(f"network firewall {'on' if network_firewall else 'off'}")
     parts.append(f"IPC namespace {'on' if ipc_namespace else 'off'}")
-    parts.append(
-        "VM"
-        if sandbox is Sandbox.VM
-        else f"gVisor {'on' if sandbox is Sandbox.GVISOR else 'off'}"
-    )
+    parts.append(sandbox.label)
     degraded = (
         any(c is not Contract.PREVENTED for c in (memory, processes, files))
         or network_firewall is False
