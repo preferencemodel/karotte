@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import ipaddress
 import os
+import pwd
 import shlex
 import shutil
 import socket
@@ -155,6 +156,14 @@ instead of aborting the run. Set by images run under an external harness
 whose container has no NET_ADMIN and whose network isolation is the harness's
 job; callers of ``deny_all_network``/``restrict_network`` already
 handle the "rules did not take" result."""
+
+FIREWALL_BACKEND_ENV_VAR = "KAROTTE_FIREWALL_BACKEND"
+"""``nft`` writes the student firewall as nftables ``meta skuid`` rules
+instead of iptables ``-m owner`` rules. Set by a launcher whose guest kernel
+has nftables but not the iptables owner match (Modal's VMs)."""
+
+NFT_TABLE = "karotte"
+"""The ``inet`` table the nftables firewall keeps one chain per uid in."""
 
 HARDEN_EXEMPT_ENV_VAR = "KAROTTE_HARDEN_EXEMPT"
 """Extra mount points hardening leaves writable, ``os.pathsep``-separated. Set
@@ -377,7 +386,9 @@ class Confinement:
             f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -j {reject}",
         ]
 
-        took = self._apply_firewall_rules(firewall_rules + firewall_rules_v6)
+        took = self._apply_firewall_rules(
+            self._for_backend(uid, firewall_rules + firewall_rules_v6)
+        )
         return took and self.sandbox is not Sandbox.GVISOR
 
     def deny_all_network(self, uid: int | str) -> bool:
@@ -392,16 +403,21 @@ class Confinement:
         owner = shlex.quote(str(uid))
 
         took = self._apply_firewall_rules(
-            [
-                f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -j {reject}",
-                f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -j {reject}",
-            ]
+            self._for_backend(
+                uid,
+                [
+                    f"{iptables} -A OUTPUT -m owner --uid-owner {owner} -j {reject}",
+                    f"{ip6tables} -A OUTPUT -m owner --uid-owner {owner} -j {reject}",
+                ],
+            )
         )
         return took and self.sandbox is not Sandbox.GVISOR
 
     def lift_network_rules(self, uid: int) -> bool:
         """Delete every OUTPUT rule matching ``uid``, as the two methods above
         add them. Returns whether none are left."""
+        if _uses_nft():
+            return _lift_nft_chain(uid)
         iptables, ip6tables, _ = self._firewall_commands()
         clean = True
         for command in (iptables, ip6tables):
@@ -437,6 +453,10 @@ class Confinement:
             return "iptables-legacy", "ip6tables-legacy", "DROP"
         return "iptables", "ip6tables", "REJECT"
 
+    def _for_backend(self, uid: int | str, rules: list[str]) -> list[str]:
+        """``rules`` as written, or as nftables rules on the nft backend."""
+        return _nft_commands(_numeric_uid(uid), rules) if _uses_nft() else rules
+
     def _apply_firewall_rules(self, rules: list[str]) -> bool:
         """Apply rules in order, reporting whether they all took."""
         for rule in rules:
@@ -471,6 +491,76 @@ class Confinement:
                         + f"| stdout: {result.stdout} | stderr: {result.stderr}"
                     )
         return True
+
+
+def _uses_nft() -> bool:
+    return os.environ.get(FIREWALL_BACKEND_ENV_VAR) == "nft"
+
+
+def _numeric_uid(uid: int | str) -> int:
+    return int(uid) if str(uid).isdigit() else pwd.getpwnam(str(uid)).pw_uid
+
+
+def _nft_chain(uid: int) -> str:
+    return f"uid_{uid}"
+
+
+def _nft_commands(uid: int, iptables_rules: Sequence[str]) -> list[str]:
+    """The same rules for nftables, in a base chain of the uid's own on the
+    OUTPUT hook. A packet passes only if every base chain accepts it, so one
+    uid's accepts can't let another uid's packets through."""
+    chain = _nft_chain(uid)
+    spec = "{ type filter hook output priority 0 ; policy accept ; }"
+    commands = [
+        f"nft add table inet {NFT_TABLE}",
+        f"nft add chain inet {NFT_TABLE} {chain} {shlex.quote(spec)}",
+    ]
+    for rule in iptables_rules:
+        words = shlex.split(rule)
+        args = dict(zip(words, words[1:]))
+        flags = {w for w in words if w.startswith("-")}
+        if (
+            flags - {"-A", "-m", "--uid-owner", "-p", "--dport", "-d", "-j"}
+            or args.get("-p", "tcp") != "tcp"
+        ):
+            raise ValueError(f"No nftables translation for {rule!r}")
+        family = "ipv6" if words[0].startswith("ip6tables") else "ipv4"
+        match = [f"meta skuid {uid}"]
+        if "-d" in args:
+            match.append(f"{'ip6' if family == 'ipv6' else 'ip'} daddr {args['-d']}")
+        else:
+            match.append(f"meta nfproto {family}")
+        if "--dport" in args:
+            match.append(f"tcp dport {args['--dport']}")
+        commands.append(
+            f"nft add rule inet {NFT_TABLE} {chain} {' '.join(match)} {args['-j'].lower()}"
+        )
+    return commands
+
+
+def _lift_nft_chain(uid: int) -> bool:
+    """Delete the uid's chain and its rules; whether none are left."""
+    chain = _nft_chain(uid)
+    try:
+        nft = trusted_binary("nft")
+    except FileNotFoundError:
+        return True
+    listing = subprocess.run(
+        [nft, "list", "chain", "inet", NFT_TABLE, chain], capture_output=True, text=True
+    )
+    if listing.returncode != 0:
+        # Nothing was added.
+        return True
+    for command in (["flush", "chain"], ["delete", "chain"]):
+        result = subprocess.run(
+            [nft, *command, "inet", NFT_TABLE, chain], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            logger.warning(
+                f"Could not {command[0]} nft chain {chain}: {result.stderr.strip()}"
+            )
+            return False
+    return True
 
 
 def rules_owned_by(listing: str, uid: int) -> list[list[str]]:

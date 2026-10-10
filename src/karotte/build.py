@@ -15,6 +15,14 @@ from karotte.runtime import Runtime, get_engine
 
 def require_runtime(runtime: Runtime) -> None:
     """Exit with a one-line error if the runtime's binary isn't on PATH."""
+    if runtime == "modal":
+        from karotte.modal_sandbox import ModalError, import_modal
+
+        try:
+            _ = import_modal()
+        except ModalError as e:
+            _exit_with_error(str(e))
+        return
     engine = get_engine(runtime)
     if which(engine) is None:
         alternative = "docker" if engine != "docker" else "podman"
@@ -27,8 +35,10 @@ def require_builder(runtime: Runtime) -> None:
     """Exit with a one-line error if the engine can't build the image.
 
     docker needs buildx for `RUN --mount`; nerdctl builds through BuildKit's
-    `buildctl`.
+    `buildctl`. Modal builds on its own servers.
     """
+    if runtime == "modal":
+        return
     engine = get_engine(runtime)
     if engine == "docker" and not _buildx_available():
         _exit_with_error(
@@ -51,6 +61,15 @@ def build_container(
     build_secrets: Sequence[str] = (),
 ) -> None:
     """Build the container image."""
+    if runtime == "modal":
+        from karotte.modal_sandbox import ModalError, build_image
+
+        try:
+            build_image(build_context, build_secrets)
+        except ModalError as e:
+            _exit_with_error(str(e))
+        return
+
     build_command = get_container_build_command(
         runtime,
         build_context,

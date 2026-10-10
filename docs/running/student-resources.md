@@ -59,11 +59,11 @@ It reads them from whatever enforces each limit, and uses `None` where there's n
 Karotte uses the strongest method the sandbox supports.
 By default, each runtime gives:
 
-| Limit     | `apple-container`, `firecracker` | `docker`/`podman`/`nerdctl` (runc)                                                              | `docker:gvisor`       |
-| --------- | -------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------- |
-| Memory    | `prevented`                      | `detected_and_reaped` if a plugin or `KAROTTE_SANDBOX_MEMORY_BYTES` sets a size, otherwise none | same as runc          |
-| Processes | `prevented`                      | `detected_and_reaped`                                                                           | `detected_and_reaped` |
-| Files     | `prevented`                      | `detected_and_reaped`                                                                           | `detected_and_reaped` |
+| Limit     | `apple-container`, `firecracker`, `modal` | `docker`/`podman`/`nerdctl` (runc)                                                              | `docker:gvisor`       |
+| --------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------- |
+| Memory    | `prevented`                               | `detected_and_reaped` if a plugin or `KAROTTE_SANDBOX_MEMORY_BYTES` sets a size, otherwise none | same as runc          |
+| Processes | `prevented`                               | `detected_and_reaped`                                                                           | `detected_and_reaped` |
+| Files     | `prevented`                               | `detected_and_reaped`                                                                           | `detected_and_reaped` |
 
 [Runtimes](runtimes.md#what-each-runtime-gives-the-student) covers the network and process isolation each runtime adds.
 `karotte check confinement` shows what your sandbox actually enforces.
