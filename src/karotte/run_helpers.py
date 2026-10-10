@@ -222,6 +222,19 @@ def run_containerized(
         )
         return
 
+    if runtime == "modal":
+        from karotte.modal_sandbox import run_modal
+
+        run_modal(
+            run_config,
+            dev=dev,
+            log_file=log_file,
+            build_context=build_context,
+            mounts=mounts,
+            proxy_url=proxy_url,
+        )
+        return
+
     run_command, _ = get_container_run_command(
         run_config,
         runtime,
@@ -697,6 +710,12 @@ def stop_containers(runtime: Runtime, run_ids: list[str]) -> None:
         stop_vms(run_ids)
         return
 
+    if runtime == "modal":
+        from karotte.modal_sandbox import stop_sandboxes
+
+        stop_sandboxes(run_ids)
+        return
+
     names = [f"karotte_run_{run_id}" for run_id in run_ids]
     result = subprocess.run(
         [*_engine_command(runtime), "stop", *names], capture_output=True, text=True
@@ -732,6 +751,12 @@ def clean_up_old_containers(runtime: Runtime, run_ids: list[str]) -> None:
         from karotte.firecracker.vm import clean_up_vms
 
         clean_up_vms(prefix)
+        return
+
+    if runtime == "modal":
+        from karotte.modal_sandbox import clean_up_sandboxes
+
+        clean_up_sandboxes(prefix)
         return
 
     engine = _engine_command(runtime)

@@ -10,6 +10,7 @@ Pick one with `--runtime` on `karotte run` and `karotte build`:
 | `firecracker`                 | A [Firecracker](https://firecracker-microvm.github.io/) microVM per run. The image is built with docker. |
 | `docker`, `podman`, `nerdctl` | A container on the host kernel, under the engine's default OCI runtime (usually runc).                   |
 | `docker:gvisor`               | A docker container under [gVisor](https://gvisor.dev/), which runs its own kernel in user space.         |
+| `modal`                       | A [Modal](https://modal.com/) sandbox with its own kernel per run, in the cloud. Modal builds the image. |
 
 ## The default
 
@@ -25,6 +26,7 @@ If you don't pass `--runtime`, Karotte uses your platform's VM, so the student g
 If your machine can run the VM but it isn't set up yet, Karotte stops before the run and tells you what's missing and how to fix it.
 It never switches to a container on its own.
 Pass `--runtime docker` (or `podman`) if you want one.
+It never picks `modal` either, which runs your environment on Modal's servers and bills your Modal account.
 
 Tasks that need devices passed through, such as a GPU, run under docker.
 A [plugin](../extending/plugins.md) marks that hardware `passthrough` in `karotte.hardware_limits` and adds the device flags through `karotte.container_run_args`.
@@ -96,6 +98,32 @@ Karotte checks for `buildctl` but not for `buildkitd`.
 
 On a machine with `/dev/kvm`, the default runtime is `firecracker`, so pass `--runtime` to use one of these.
 
+### modal
+
+Install the extra and log in to Modal:
+
+```sh
+uv pip install 'karotte[modal]'
+modal token new
+```
+
+Or set `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`.
+
+`karotte build --runtime modal` builds the image on Modal from the `Containerfile`; `--tag`, `--cache-from` and `--cache-to` are ignored.
+`karotte run` builds the same way first, and with `--dev` reuses the last build.
+A `--build-secret name=path` file is read as a dotenv file whose variables the build sees.
+
+The `default` template's `KAROTTE_IMAGE_BUILDER` lines let Modal build the image: they skip file capabilities, which Modal's builder can't set, and add `nftables` for the student firewall.
+An environment created before them needs them copied in (see [Updating](../environments/updating.md)); Karotte refuses to build it on Modal until then.
+
+Each run gets its own sandbox under the Modal app `karotte`, sized like a VM (see [VM size](#vm-size)).
+`--mount` paths are copied in when the run starts, and read-write ones and the transcript are copied back when it ends, as on `apple-container`.
+The sandbox is stopped when the run ends, fails or is interrupted, and by Modal after 30 idle minutes if Karotte itself dies.
+Cleanup only stops sandboxes your user started on the same machine.
+
+A sandbox can't reach a model proxy on your machine, only one with a public address.
+`--prepare-only`, `--keep-containers` and tasks on `passthrough` hardware, such as a GPU, aren't supported on `modal` yet.
+
 ### docker:gvisor
 
 Install [gVisor](https://gvisor.dev/docs/user_guide/install/) and register `runsc` as a docker runtime in `/etc/docker/daemon.json` with these `runtimeArgs`:
@@ -140,6 +168,10 @@ See [Student resources](student-resources.md) for how these limits are enforced.
 
 "Watchdog" means nothing stops the student from going over the limit, but Karotte notices and kills all of the student's processes.
 
+`modal` gets the VM column: Modal's sandbox has its own kernel.
+That kernel has no iptables owner match, so Karotte writes the student firewall as nftables rules there.
+Modal's network around the sandbox isn't filtered the way `firecracker`'s is.
+
 The `docker`/`podman`/`nerdctl` column is what you get in the usual case.
 Karotte tries a writable cgroup first, so if the container has one, the kernel enforces the memory and process limits as it does in a VM.
 
@@ -171,6 +203,7 @@ Variables a launcher or task can set inside the sandbox:
 | `KAROTTE_DISK_BUDGET_BYTES`    | Cap on the student's disk quota. Set by whoever knows the host's free space; VM launchers set it.                                                                                                                                                                                     |
 | `KAROTTE_SANDBOX_MEMORY_BYTES` | The sandbox's total memory, when no plugin says. The student gets this minus 1 GiB, so a value of 1 GiB or less is ignored. VM launchers set it.                                                                                                                                      |
 | `KAROTTE_VM_LAUNCHER`          | Set by Karotte's VM runtimes. `karotte check confinement` always fails if the VM has less memory than the sandbox's. With this variable set, it also fails if the VM lacks the extra 1 GiB for the guest kernel; without it, that only warns.                                         |
+| `KAROTTE_FIREWALL_BACKEND`     | `nft` writes the student firewall as nftables rules instead of iptables ones. The `modal` runtime sets it, since Modal's kernel has no iptables owner match.                                                                                                                          |
 
 Variables for the host:
 
