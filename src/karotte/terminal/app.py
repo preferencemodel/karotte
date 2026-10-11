@@ -331,6 +331,22 @@ class KarotteApp(App[None]):
         output_callback: Callable[[str], None] | None = None,
     ):
         """Build the container image."""
+        if runtime == "modal":
+            from karotte.modal_sandbox import build_image
+
+            if output_callback:
+                output_callback("Building the image on Modal...\n")
+            try:
+                build_image(build_context, self.build_secrets, show_output=False)
+            except Exception as e:
+                error_msg = f"Failed to build the image on Modal: {e}\n"
+                if output_callback:
+                    output_callback(error_msg)
+                raise RuntimeError(error_msg) from e
+            if output_callback:
+                output_callback("Environment container image built successfully.\n")
+            return
+
         build_command = get_container_build_command(
             runtime,
             build_context,
@@ -925,7 +941,7 @@ def _run_containerized_worker(
     """Run a single containerized evaluation run. Must be a module-level function for pickling."""
     # Write output to log file that can be tailed
     log_file = Path(f"/tmp/karotte_run_{run_config.run_id}.log")
-    if runtime == "firecracker":
+    if runtime in ("firecracker", "modal"):
         run_containerized(
             run_config,
             runtime,
