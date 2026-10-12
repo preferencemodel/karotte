@@ -151,6 +151,7 @@ _DEFAULT_MAX_OUTPUT_TOKENS = 64000
 # budget on adaptive-thinking models.
 _MAX_OUTPUT_TOKENS: dict[str, int] = {
     "muse-spark-1.3": 128000,
+    "muse-wonder-1.0": 128000,
     "Qwen3.8-2.4T-A95B": 128000,
 }
 
@@ -179,6 +180,7 @@ _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
     "gemini-3.7-flash": ("low", "medium", "high"),
     "grok-4.7": ("low", "medium", "high", "xhigh"),
     "grok-4.6": ("low", "medium", "high", "xhigh"),
+    "muse-wonder-1.0": ("minimal", "low", "medium", "high", "xhigh", "max"),
     "muse-spark-1.2": ("minimal", "low", "medium", "high", "xhigh"),
     "muse-spark-1.3": ("minimal", "low", "medium", "high", "xhigh", "max"),
     "DeepSeek-V4-Pro-0813": ("high", "max"),
@@ -197,6 +199,7 @@ _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
 # effort onto thinkingLevel itself.
 _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
     (
+        "muse-wonder-1.0",
         "muse-spark-1.3",
         "muse-spark-1.2",
         "gemini-3.8-flash",
@@ -322,7 +325,7 @@ def _litellm_model(model: str) -> str:
         return f"anthropic/{model}"
     # Meta only returns reasoning summaries on the Responses API, which litellm
     # reaches through its "responses/" infix.
-    if model.startswith("meta/muse-spark"):
+    if model.startswith(("meta/muse-spark", "meta/muse-wonder")):
         return model.replace("meta/", "meta/responses/", 1)
     # Same for GPT-6, which litellm's own Responses bridge misses because that
     # bridge only matches "gpt-5." names. Chat Completions would also take
@@ -343,7 +346,7 @@ def _reasoning_request(name: str) -> dict[str, Any]:
     # reasoning object at all: without it litellm drops reasoning_effort on the
     # floor for a Responses-routed model instead of folding it into
     # reasoning.effort. Its string path has no "max" branch, hence gpt-5.6 too.
-    if name.startswith(("muse-spark", "gpt-6", "gpt-5.6")):
+    if name.startswith(("muse-spark", "muse-wonder", "gpt-6", "gpt-5.6")):
         return {"extra_body": {"reasoning_summary": "detailed"}}
     return {}
 

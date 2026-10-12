@@ -78,6 +78,7 @@ class TestLitellmModel:
             ("openai/gpt-6-sol", "openai/responses/gpt-6-sol"),
             ("openai/gpt-6-luna", "openai/responses/gpt-6-luna"),
             # Muse Spark only returns reasoning summaries on the Responses API.
+            ("meta/muse-wonder-1.0", "meta/responses/muse-wonder-1.0"),
             ("meta/muse-spark-1.3", "meta/responses/muse-spark-1.3"),
             ("meta/muse-spark-1.2", "meta/responses/muse-spark-1.2"),
             (
@@ -94,6 +95,7 @@ class TestExtraAllowedOpenAIParams:
     @pytest.mark.parametrize(
         ("model", "expected"),
         [
+            ("meta/muse-wonder-1.0", ("reasoning_effort",)),
             ("meta/muse-spark-1.3", ("reasoning_effort",)),
             # litellm's cost map has no responses/gpt-6-* bridge names.
             ("openai/gpt-6-astra", ("reasoning_effort",)),
@@ -241,6 +243,7 @@ class TestReasoningEffort:
             ("xai/grok-4.3", (None, None)),
             # max shipped for 1.3 only.
             ("meta/muse-spark-1.2", ("minimal", "xhigh")),
+            ("meta/muse-wonder-1.0", ("minimal", "max")),
             ("meta/muse-spark-1.3", ("minimal", "max")),
             ("mistral/mistral-medium-3.5", (None, None)),
             ("some-unknown-model", (None, None)),
@@ -280,6 +283,10 @@ class TestReasoningEffort:
             ("meta/muse-spark-1.2", ("minimal", "low", "medium", "high", "xhigh")),
             (
                 "meta/muse-spark-1.3",
+                ("minimal", "low", "medium", "high", "xhigh", "max"),
+            ),
+            (
+                "meta/muse-wonder-1.0",
                 ("minimal", "low", "medium", "high", "xhigh", "max"),
             ),
             ("together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", ("high", "max")),
@@ -490,6 +497,7 @@ class TestDisplayNames:
             ("xai/grok-4.7", "Grok 4.7"),
             ("xai/grok-4.6", "Grok 4.6"),
             ("meta/muse-spark-1.3", "Muse Spark 1.3"),
+            ("meta/muse-wonder-1.0", "Muse Wonder 1.0"),
             ("__karotte_special__/training", "Training"),
             ("pt/checkpoint-7", "Checkpoint 7"),
             ("some-unknown-model", "Some Unknown Model"),
@@ -511,6 +519,7 @@ class TestDisplayNames:
             ("xai/grok-4.6", "xAI"),
             ("minimax/MiniMax-M3", "MiniMax"),
             ("meta/muse-spark-1.3", "Meta"),
+            ("meta/muse-wonder-1.0", "Meta"),
             ("mistral/mistral-medium-3.5", "Mistral"),
             ("__karotte_special__/training", "Training"),
             ("pt/checkpoint-7", "Training"),
@@ -529,6 +538,7 @@ class TestReasoningRequest:
         ("model", "expected"),
         [
             ("meta/muse-spark-1.3", {"extra_body": {"reasoning_summary": "detailed"}}),
+            ("meta/muse-wonder-1.0", {"extra_body": {"reasoning_summary": "detailed"}}),
             ("openai/gpt-6-astra", {"extra_body": {"reasoning_summary": "detailed"}}),
             ("openai/gpt-6-sol", {"extra_body": {"reasoning_summary": "detailed"}}),
             ("openai/gpt-6-luna", {"extra_body": {"reasoning_summary": "detailed"}}),

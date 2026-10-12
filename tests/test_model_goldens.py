@@ -205,7 +205,7 @@ def test_grok_4_7_effort_gets_past_litellms_cost_map_check():
 def test_muse_spark_asks_for_reasoning_summaries():
     """Meta hides reasoning on chat completions and only returns summaries on the
     Responses API, so Muse Spark goes through litellm's Responses bridge."""
-    for model in ("meta/muse-spark-1.3", "meta/muse-spark-1.2"):
+    for model in ("meta/muse-wonder-1.0", "meta/muse-spark-1.3", "meta/muse-spark-1.2"):
         params = _completion_params(model)
         assert params["model"] == model.replace("meta/", "meta/responses/")
         assert params["extra_body"] == {"reasoning_summary": "detailed"}
@@ -216,6 +216,7 @@ def test_muse_spark_effort_gets_past_litellms_unknown_model_check():
     finds nothing, so without an explicit allowed_openai_params entry the
     effort would abort the run."""
     for model, top in (
+        ("meta/muse-wonder-1.0", "max"),
         ("meta/muse-spark-1.3", "max"),
         ("meta/muse-spark-1.2", "xhigh"),
     ):
