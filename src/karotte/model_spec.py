@@ -184,7 +184,7 @@ _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
     "muse-spark-1.2": ("minimal", "low", "medium", "high", "xhigh"),
     "muse-spark-1.3": ("minimal", "low", "medium", "high", "xhigh", "max"),
     "DeepSeek-V4-Pro-0813": ("high", "max"),
-    "GLM-5.3": ("low", "high", "max"),
+    "GLM-5.3": ("low", "medium", "high", "max"),
     # The same checkpoint under Fireworks' spelling of the id.
     "glm-5p3": ("low", "high", "max"),
     "glm-5p3-flash": ("low", "high", "max"),

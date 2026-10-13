@@ -187,6 +187,10 @@ class TogetherAiProvider(Provider):
         # forwards extra_body and remaps the returned `reasoning` field.
         if spec.model.startswith("together_ai/moonshotai/Kimi-K"):
             merge_extra_body(params, {"reasoning": {"enabled": True}})
+        # litellm rewrites a level its model map does not list for the model, so
+        # GLM-5.3's max would go out as high; extra_body is sent unchanged.
+        if effort is not None:
+            merge_extra_body(params, {"reasoning_effort": effort})
 
 
 class FireworksProvider(Provider):
