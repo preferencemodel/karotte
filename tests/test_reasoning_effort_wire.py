@@ -90,6 +90,7 @@ def _capture_request_body(model: str, effort: str) -> dict[str, Any]:
         ("openai/gpt-6-astra", "max"),
         ("openai/gpt-6-sol", "max"),
         ("openai/gpt-6-luna", "max"),
+        ("openai/gpt-6.1-sol", "max"),
         ("meta/muse-spark-1.3", "max"),
         ("meta/muse-wonder-1.0", "max"),
     ],

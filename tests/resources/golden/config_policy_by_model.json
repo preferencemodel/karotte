@@ -169,6 +169,11 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "openai/gpt-6.1-sol": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
   "openai/gpt-5.6": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,

@@ -1081,6 +1081,36 @@
       "reasoning_summary": "detailed"
     }
   },
+  "openai/gpt-6.1-sol": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "openai/responses/gpt-6.1-sol",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "prompt_cache_key": "golden-run",
+      "reasoning_summary": "detailed"
+    }
+  },
   "openai/gpt-5.6": {
     "stream": true,
     "stream_options": {

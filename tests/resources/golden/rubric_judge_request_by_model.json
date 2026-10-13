@@ -305,6 +305,15 @@
       "the criterion is met"
     ]
   },
+  "openai/gpt-6.1-sol": {
+    "model": "openai/responses/gpt-6.1-sol",
+    "max_tokens": 32000,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
   "openai/gpt-5.6": {
     "model": "openai/gpt-5.6",
     "max_tokens": 32000,

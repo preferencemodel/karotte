@@ -207,6 +207,7 @@ _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
         "gpt-6-astra",
         "gpt-6-sol",
         "gpt-6-luna",
+        "gpt-6.1-sol",
         "DeepSeek-V4-Pro-0813",
         "GLM-5.3",
         "glm-5p3",

@@ -230,7 +230,12 @@ def test_gpt_6_goes_through_the_responses_bridge():
     """litellm's built-in OpenAI Responses bridge only matches "gpt-5." names, so
     GPT-6 is routed there explicitly; Chat Completions would send max_tokens,
     which OpenAI reasoning models answer 400 to."""
-    for model in ("openai/gpt-6-astra", "openai/gpt-6-sol", "openai/gpt-6-luna"):
+    for model in (
+        "openai/gpt-6-astra",
+        "openai/gpt-6-sol",
+        "openai/gpt-6-luna",
+        "openai/gpt-6.1-sol",
+    ):
         params = _completion_params(model)
         assert params["model"] == model.replace("openai/", "openai/responses/")
         # Without reasoning_summary litellm builds no reasoning object and

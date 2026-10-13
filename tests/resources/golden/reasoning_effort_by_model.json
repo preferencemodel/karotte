@@ -766,6 +766,24 @@
       }
     }
   },
+  "openai/gpt-6.1-sol": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "max"
+      }
+    }
+  },
   "openai/gpt-5.6": {
     "None": {
       "sent_by_karotte": null,
