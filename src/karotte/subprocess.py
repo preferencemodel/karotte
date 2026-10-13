@@ -17,7 +17,7 @@ from importlib.metadata import entry_points
 
 from loguru import logger
 
-from karotte.confinement import Sandbox, current_sandbox
+from karotte.confinement import current_sandbox
 from karotte.container import demoted_uid_gid as demoted_uid_gid
 from karotte.trusted_bin import trusted_binary as trusted_binary
 
@@ -415,7 +415,7 @@ def wrap_to_disable_networking(argv: list[str]) -> list[str]:
     must compensate (e.g. set ``HOME``/``USER`` explicitly).
     """
     unshare = trusted_binary("unshare")
-    if current_sandbox() is Sandbox.GVISOR:
+    if not current_sandbox().maps_user_ids:
         return [unshare, "--user", "--net", "--", *argv]
     return [unshare, "--user", "--net", "--map-current-user", "--", *argv]
 
@@ -470,7 +470,7 @@ def _pid_namespace_available(uid_gid: int) -> bool:
     if _pidns_probed:
         return _pidns_available
     _pidns_probed = True
-    if not _kernel_is_not_the_hosts():
+    if current_sandbox().uses_host_kernel:
         return False
     try:
         result = subprocess.run(
@@ -496,10 +496,6 @@ def _pid_namespace_available(uid_gid: int) -> bool:
             f"Could not create a PID namespace for student processes (unshare exited {result.returncode}) — is CAP_SYS_ADMIN missing? Falling back to best-effort sweep reaping, which cannot see a fork-and-die chain."
         )
     return _pidns_available
-
-
-def _kernel_is_not_the_hosts() -> bool:
-    return current_sandbox() in (Sandbox.GVISOR, Sandbox.VM)
 
 
 def _confinement_preexec() -> Callable[[], None] | None:

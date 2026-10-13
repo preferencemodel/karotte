@@ -437,7 +437,7 @@ def gather(hardware: str | None) -> Observations:
     _probe_quota(obs)
     _probe_firewall(obs, sandbox, probe_uid)
     if student_uid is not None:
-        obs.pidns_allowed = student_subprocess._kernel_is_not_the_hosts()  # pyright: ignore[reportPrivateUsage]
+        obs.pidns_allowed = not sandbox.uses_host_kernel
         obs.pidns_available = student_subprocess._pid_namespace_available(  # pyright: ignore[reportPrivateUsage]
             student_uid
         )
