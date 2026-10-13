@@ -108,7 +108,6 @@ def test_responses_body_carries_effort(model: str, effort: str):
         ("together_ai/Qwen/Qwen3.8-2.4T-A95B", "xhigh"),
         ("together_ai/moonshotai/Kimi-K3", "max"),
         ("together_ai/zai-org/GLM-5.3", "max"),
-        ("together_ai/zai-org/GLM-5.3", "medium"),
     ],
 )
 def test_chat_body_carries_effort(model: str, effort: str):

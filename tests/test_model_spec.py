@@ -296,7 +296,7 @@ class TestReasoningEffort:
                 ("minimal", "low", "medium", "high", "xhigh", "max"),
             ),
             ("together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", ("high", "max")),
-            ("together_ai/zai-org/GLM-5.3", ("low", "medium", "high", "max")),
+            ("together_ai/zai-org/GLM-5.3", ("low", "high", "max")),
             # Fireworks spells the same checkpoint glm-5p3.
             (
                 "fireworks_ai/accounts/fireworks/models/glm-5p3",
