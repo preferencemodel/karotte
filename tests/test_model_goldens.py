@@ -258,7 +258,7 @@ def test_together_effort_gets_past_litellms_param_check():
         "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", "min"
     ) == {"reasoning_effort": "high"}
     assert _litellm_reasoning_params("together_ai/zai-org/GLM-5.3", "max") == {
-        "reasoning_effort": "max"
+        "reasoning_effort": "high"
     }
     assert _litellm_reasoning_params("together_ai/Qwen/Qwen3.8-2.4T-A95B", "max") == {
         "reasoning_effort": "xhigh"

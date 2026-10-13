@@ -2945,14 +2945,14 @@ async def test_retry_recovers_from_cloudflare_520():
     """A Cloudflare 520 from api.anthropic.com is retried.
 
     litellm has no mapping branch for 520, so it falls through to a generic
-    APIConnectionError rather than InternalServerError.
+    APIError rather than InternalServerError.
     """
     runner = _create_runner_with_tools_and_transcript()
     error = _map_anthropic_status(
         520,
         '{"type":"error","error":{"type":"api_error"},"retryable":true,"retry_after":60}',
     )
-    assert isinstance(error, litellm.exceptions.APIConnectionError)
+    assert isinstance(error, litellm.exceptions.APIError)
 
     call_count = 0
 
