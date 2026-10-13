@@ -72,7 +72,21 @@ _INVALID_URL_ERRORS = (
     aiohttp.NonHttpUrlClientError,
 )
 
+IMAGE_OMITTED_TEXT = "[image omitted: this model cannot take image input]"
+
 _RETRY_AFTER_BODY_RE = re.compile(r'"retry_after"\s*:\s*(\d+(?:\.\d+)?)')
+
+# How Together and Fireworks (and litellm on Fireworks' behalf) word a 400 for
+# an image sent to a text-only model.
+_IMAGES_REJECTED_RE = re.compile(
+    r"multimodal not supported|does not support image inputs", re.IGNORECASE
+)
+
+
+def _rejects_images(exc: Exception) -> bool:
+    return isinstance(exc, litellm.exceptions.BadRequestError) and bool(
+        _IMAGES_REJECTED_RE.search(str(exc))
+    )
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -213,6 +227,8 @@ class BuiltinSource:
         # replica, and with it the prompt cache.
         self._escalated = False
         self._service_tier: str | None = None
+        # Sticky for the run, so later turns don't pay for another 400.
+        self._omit_images = False
 
     async def collect(
         self,
@@ -239,6 +255,18 @@ class BuiltinSource:
                     )
 
             except Exception as e:
+                if (
+                    not self._omit_images
+                    and _rejects_images(e)
+                    and attempt < LLM_RETRY_MAX_ATTEMPTS
+                ):
+                    logger.warning(
+                        "{model} does not take image input; replacing images with a note for the rest of the run",
+                        model=self.config.model,
+                    )
+                    self._omit_images = True
+                    yield MessageChunkResetEvent()
+                    continue
                 if (
                     not self._escalated
                     and service_tier_mode() == "auto"
@@ -319,6 +347,8 @@ class BuiltinSource:
     ) -> dict[str, Any]:
         serialized_messages = self._serialize_messages(messages)
         spec = self._spec
+        if self._omit_images:
+            serialized_messages = [_without_images(m) for m in serialized_messages]
 
         completion_params: dict[str, Any] = {
             "stream": True,
@@ -365,3 +395,21 @@ class BuiltinSource:
     def _serialize_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Serializes transcript messages to dicts."""
         return [message.model_dump() for message in messages]
+
+
+def _without_images(message: dict[str, Any]) -> dict[str, Any]:
+    """``message`` with each image part swapped for a text note."""
+    content = message.get("content")
+    if not isinstance(content, list) or not any(
+        isinstance(part, dict) and part.get("type") == "image_url" for part in content
+    ):
+        return message
+    return {
+        **message,
+        "content": [
+            {"type": "text", "text": IMAGE_OMITTED_TEXT}
+            if isinstance(part, dict) and part.get("type") == "image_url"
+            else part
+            for part in content
+        ],
+    }
