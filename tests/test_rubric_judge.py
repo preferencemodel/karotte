@@ -148,6 +148,29 @@ def test_judge_is_routed_like_the_student(
     assert mock_completion.call_args.kwargs.get("api_base") == api_base
 
 
+@pytest.mark.parametrize(
+    ("model", "extra_body"),
+    [
+        ("openai/gpt-6.1-sol", {"store": False}),
+        ("xai/grok-4.7", {"store": False}),
+        ("meta/muse-spark-1.3", {"store": False}),
+        ("claude-sonnet-5", None),
+    ],
+)
+def test_judge_asks_the_provider_not_to_store_the_conversation(
+    transcript: Transcript,
+    mock_completion: MagicMock,
+    model: str,
+    extra_body: dict[str, Any] | None,
+) -> None:
+    judge = RubricJudge(rubric=[{"criterion": "c", "weight": 1.0}], model=model)
+
+    transcript.events.append(AnswersSubmittedEvent(answers={"response": "Hello"}))
+    judge.evaluate(transcript)
+
+    assert mock_completion.call_args.kwargs.get("extra_body") == extra_body
+
+
 def test_judge_has_no_api_base_without_a_proxy(
     transcript: Transcript, mock_completion: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:

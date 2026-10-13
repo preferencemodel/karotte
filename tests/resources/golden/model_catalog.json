@@ -699,7 +699,10 @@
       "reasoning_request": {
         "extra_body": {
           "reasoning_summary": "detailed"
-        }
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
       },
       "supports_sampling_params": false,
       "tool_call_repairs": [],
@@ -727,7 +730,10 @@
       "reasoning_request": {
         "extra_body": {
           "reasoning_summary": "detailed"
-        }
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
       },
       "supports_sampling_params": false,
       "tool_call_repairs": [],
@@ -755,7 +761,10 @@
       "reasoning_request": {
         "extra_body": {
           "reasoning_summary": "detailed"
-        }
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
       },
       "supports_sampling_params": false,
       "tool_call_repairs": [],
@@ -783,7 +792,10 @@
       "reasoning_request": {
         "extra_body": {
           "reasoning_summary": "detailed"
-        }
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
       },
       "supports_sampling_params": false,
       "tool_call_repairs": [],
@@ -1007,7 +1019,7 @@
       "model_display_name": "Grok 4.7",
       "provider": "xai",
       "provider_display_name": "xAI",
-      "litellm_model": "xai/grok-4.7",
+      "litellm_model": "xai/responses/grok-4.7",
       "max_output_tokens": 64000,
       "min_reasoning_effort": "low",
       "max_reasoning_effort": "xhigh",
@@ -1017,7 +1029,14 @@
         "high",
         "xhigh"
       ],
-      "reasoning_request": {},
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
+      },
       "supports_sampling_params": true,
       "tool_call_repairs": [
         "xai"
@@ -1032,7 +1051,7 @@
       "model_display_name": "Grok 4.6",
       "provider": "xai",
       "provider_display_name": "xAI",
-      "litellm_model": "xai/grok-4.6",
+      "litellm_model": "xai/responses/grok-4.6",
       "max_output_tokens": 64000,
       "min_reasoning_effort": "low",
       "max_reasoning_effort": "xhigh",
@@ -1042,25 +1061,41 @@
         "high",
         "xhigh"
       ],
-      "reasoning_request": {},
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
+      },
       "supports_sampling_params": true,
       "tool_call_repairs": [
         "xai"
       ],
       "requires_api_key": true,
-      "extra_allowed_openai_params": []
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
     },
     {
       "model": "xai/grok-4.3",
       "model_display_name": "Grok 4.3",
       "provider": "xai",
       "provider_display_name": "xAI",
-      "litellm_model": "xai/grok-4.3",
+      "litellm_model": "xai/responses/grok-4.3",
       "max_output_tokens": 64000,
       "min_reasoning_effort": null,
       "max_reasoning_effort": null,
       "reasoning_effort_levels": [],
-      "reasoning_request": {},
+      "reasoning_request": {
+        "extra_body": {
+          "reasoning_summary": "detailed"
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
+      },
       "supports_sampling_params": true,
       "tool_call_repairs": [
         "xai"
@@ -1088,7 +1123,10 @@
       "reasoning_request": {
         "extra_body": {
           "reasoning_summary": "detailed"
-        }
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
       },
       "supports_sampling_params": true,
       "tool_call_repairs": [],
@@ -1117,7 +1155,10 @@
       "reasoning_request": {
         "extra_body": {
           "reasoning_summary": "detailed"
-        }
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
       },
       "supports_sampling_params": true,
       "tool_call_repairs": [],
@@ -1145,7 +1186,10 @@
       "reasoning_request": {
         "extra_body": {
           "reasoning_summary": "detailed"
-        }
+        },
+        "include": [
+          "reasoning.encrypted_content"
+        ]
       },
       "supports_sampling_params": true,
       "tool_call_repairs": [],

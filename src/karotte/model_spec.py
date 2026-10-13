@@ -193,8 +193,8 @@ _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
 }
 
 # litellm validates effort against its cost map, which lacks the bridge name
-# responses/<model> for any Muse Spark or GPT-6, lacks Gemini 3.8 Flash and
-# Grok 4.7 outright, and carries no reasoning_effort at all in its together_ai
+# responses/<model> for any Muse Spark, GPT-6 or Grok, lacks Gemini 3.8 Flash
+# outright, and carries no reasoning_effort at all in its together_ai
 # or fireworks_ai param lists. Once allowed through, litellm still maps Gemini's
 # effort onto thinkingLevel itself.
 _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
@@ -204,6 +204,7 @@ _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
         "muse-spark-1.2",
         "gemini-3.8-flash",
         "grok-4.7",
+        "grok-4.6",
         "gpt-6-astra",
         "gpt-6-sol",
         "gpt-6-luna",
@@ -333,6 +334,9 @@ def _litellm_model(model: str) -> str:
     # max_tokens, which every OpenAI reasoning model answers 400 to.
     if model.startswith("openai/gpt-6"):
         return model.replace("openai/", "openai/responses/", 1)
+    # xAI carries reasoning over to the next turn on the Responses API only.
+    if model.startswith("xai/grok"):
+        return model.replace("xai/", "xai/responses/", 1)
     return model
 
 
@@ -347,8 +351,12 @@ def _reasoning_request(name: str) -> dict[str, Any]:
     # reasoning object at all: without it litellm drops reasoning_effort on the
     # floor for a Responses-routed model instead of folding it into
     # reasoning.effort. Its string path has no "max" branch, hence gpt-5.6 too.
-    if name.startswith(("muse-spark", "muse-wonder", "gpt-6", "gpt-5.6")):
-        return {"extra_body": {"reasoning_summary": "detailed"}}
+    summaries = {"extra_body": {"reasoning_summary": "detailed"}}
+    if name.startswith(("muse-spark", "muse-wonder", "grok", "gpt-6")):
+        return {**summaries, "include": ["reasoning.encrypted_content"]}
+    # Without an effort gpt-5.6 stays on Chat Completions, which rejects `include`.
+    if name.startswith("gpt-5.6"):
+        return summaries
     return {}
 
 

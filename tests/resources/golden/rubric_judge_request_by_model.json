@@ -396,7 +396,7 @@
     ]
   },
   "xai/grok-4.7": {
-    "model": "xai/grok-4.7",
+    "model": "xai/responses/grok-4.7",
     "max_tokens": 32000,
     "temperature": 0.3,
     "parsed": [
@@ -405,7 +405,7 @@
     ]
   },
   "xai/grok-4.6": {
-    "model": "xai/grok-4.6",
+    "model": "xai/responses/grok-4.6",
     "max_tokens": 32000,
     "temperature": 0.3,
     "parsed": [
@@ -414,7 +414,7 @@
     ]
   },
   "xai/grok-4.3": {
-    "model": "xai/grok-4.3",
+    "model": "xai/responses/grok-4.3",
     "max_tokens": 32000,
     "temperature": 0.3,
     "parsed": [

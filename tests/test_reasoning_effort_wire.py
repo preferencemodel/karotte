@@ -93,6 +93,8 @@ def _capture_request_body(model: str, effort: str) -> dict[str, Any]:
         ("openai/gpt-6.1-sol", "max"),
         ("meta/muse-spark-1.3", "max"),
         ("meta/muse-wonder-1.0", "max"),
+        ("xai/grok-4.7", "xhigh"),
+        ("xai/grok-4.6", "xhigh"),
     ],
 )
 def test_responses_body_carries_effort(model: str, effort: str):
@@ -103,8 +105,6 @@ def test_responses_body_carries_effort(model: str, effort: str):
 @pytest.mark.parametrize(
     ("model", "effort"),
     [
-        ("xai/grok-4.7", "xhigh"),
-        ("xai/grok-4.6", "xhigh"),
         ("together_ai/Qwen/Qwen3.8-2.4T-A95B", "xhigh"),
         ("together_ai/moonshotai/Kimi-K3", "max"),
         ("together_ai/zai-org/GLM-5.3", "max"),

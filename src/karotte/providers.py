@@ -56,9 +56,28 @@ class Provider:
     proxied: bool = True
     """Whether KAROTTE_PROXY_URL routing applies."""
 
+    replays_thinking_blocks: bool = False
+    """Whether assistant turns are sent back with their signed thinking blocks."""
+
+    replays_reasoning_items: bool = False
+    """Whether assistant turns are sent back with their Responses API reasoning items."""
+
+    stores_conversations: bool = False
+    """Whether the API keeps conversations unless told not to."""
+
     def request_params(self, _spec: ModelSpec, auth: ProviderAuth) -> dict[str, Any]:
         """Provider-specific params, chiefly how the call authenticates."""
         return {"api_key": auth.api_key}
+
+    def adapt_messages(self, _spec: ModelSpec, _messages: list[dict[str, Any]]) -> None:
+        """Reshape serialized messages for the provider's API."""
+        return None
+
+    def disable_storage(self, params: dict[str, Any]) -> None:
+        """Ask the API not to keep the conversation."""
+        if self.stores_conversations:
+            # litellm refuses a top-level `store` for xAI.
+            merge_extra_body(params, {"store": False})
 
     def apply_prompt_caching(
         self,
@@ -101,6 +120,7 @@ class Provider:
 
 class AnthropicProvider(Provider):
     proxied: bool = False
+    replays_thinking_blocks: bool = True
 
     @override
     def apply_prompt_caching(
@@ -113,6 +133,9 @@ class AnthropicProvider(Provider):
 
 
 class OpenAIProvider(Provider):
+    replays_reasoning_items: bool = True
+    stores_conversations: bool = True
+
     @override
     def apply_prompt_caching(
         self,
@@ -128,6 +151,19 @@ class OpenAIProvider(Provider):
 
 
 class XaiProvider(Provider):
+    replays_reasoning_items: bool = True
+    stores_conversations: bool = True
+
+    @override
+    def adapt_messages(self, spec: ModelSpec, messages: list[dict[str, Any]]) -> None:
+        # litellm turns a string system prompt into `instructions`, which it
+        # refuses for xAI's Responses API; a list stays an input message.
+        if not spec.litellm_model.startswith("xai/responses/"):
+            return
+        for message in messages:
+            if message["role"] == "system" and isinstance(message["content"], str):
+                message["content"] = [{"type": "text", "text": message["content"]}]
+
     @override
     def apply_prompt_caching(
         self,
@@ -136,6 +172,11 @@ class XaiProvider(Provider):
         params: dict[str, Any],
     ) -> None:
         merge_extra_headers(params, {"x-grok-conv-id": cache_key})
+
+
+class MetaProvider(Provider):
+    replays_reasoning_items: bool = True
+    stores_conversations: bool = True
 
 
 def _is_vertex_gemini(spec: ModelSpec) -> bool:
@@ -226,6 +267,7 @@ _PROVIDERS: Final[dict[str, Provider]] = {
     "anthropic": AnthropicProvider(),
     "openai": OpenAIProvider(),
     "xai": XaiProvider(),
+    "meta": MetaProvider(),
     "vertex_ai": VertexProvider(),
     "together_ai": TogetherAiProvider(),
     "fireworks_ai": FireworksProvider(),

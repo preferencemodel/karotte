@@ -540,22 +540,30 @@ class TestDisplayNames:
         assert spec_for(model).provider_display_name == expected
 
 
+_SUMMARIES_AND_ENCRYPTED_REASONING = {
+    "extra_body": {"reasoning_summary": "detailed"},
+    "include": ["reasoning.encrypted_content"],
+}
+
+
 class TestReasoningRequest:
     @pytest.mark.parametrize(
         ("model", "expected"),
         [
-            ("meta/muse-spark-1.3", {"extra_body": {"reasoning_summary": "detailed"}}),
-            ("meta/muse-wonder-1.0", {"extra_body": {"reasoning_summary": "detailed"}}),
-            ("openai/gpt-6-astra", {"extra_body": {"reasoning_summary": "detailed"}}),
-            ("openai/gpt-6-sol", {"extra_body": {"reasoning_summary": "detailed"}}),
-            ("openai/gpt-6-luna", {"extra_body": {"reasoning_summary": "detailed"}}),
-            ("openai/gpt-6.1-sol", {"extra_body": {"reasoning_summary": "detailed"}}),
+            ("meta/muse-spark-1.3", _SUMMARIES_AND_ENCRYPTED_REASONING),
+            ("meta/muse-wonder-1.0", _SUMMARIES_AND_ENCRYPTED_REASONING),
+            ("openai/gpt-6-astra", _SUMMARIES_AND_ENCRYPTED_REASONING),
+            ("openai/gpt-6-sol", _SUMMARIES_AND_ENCRYPTED_REASONING),
+            ("openai/gpt-6-luna", _SUMMARIES_AND_ENCRYPTED_REASONING),
+            ("openai/gpt-6.1-sol", _SUMMARIES_AND_ENCRYPTED_REASONING),
             # litellm's string-to-Reasoning fold has no "max" branch, so every
             # model with a max level needs the summary to take the dict path.
             ("openai/gpt-5.6", {"extra_body": {"reasoning_summary": "detailed"}}),
             ("openai/gpt-5.6-sol", {"extra_body": {"reasoning_summary": "detailed"}}),
             ("openai/gpt-5.5", {}),
-            ("xai/grok-4.6", {}),
+            ("xai/grok-4.7", _SUMMARIES_AND_ENCRYPTED_REASONING),
+            ("xai/grok-4.6", _SUMMARIES_AND_ENCRYPTED_REASONING),
+            ("xai/grok-4.3", _SUMMARIES_AND_ENCRYPTED_REASONING),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", {}),
         ],
     )
