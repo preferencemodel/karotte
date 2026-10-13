@@ -49,3 +49,38 @@ def test_empty_result():
 
     assert completed.result == result
     assert message.message.content == []
+
+
+def test_mixed_image_text_image_preserves_all_model_content_and_redacts_all_images():
+    image = ImageContent(type="image", data="Ym9ndXM=", mimeType="image/png")
+    text = TextContent(type="text", text='{"receipt_id":"opaque-receipt"}')
+    result = CallToolResult(content=[image, text, image], isError=False)
+    completed, message = tool_result_events("call_mixed", result)
+    assert message.message.content == [
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,Ym9ndXM="}},
+        {"type": "text", "text": text.text},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,Ym9ndXM="}},
+    ]
+    assert [
+        block.data
+        for block in completed.result.content
+        if isinstance(block, ImageContent)
+    ] == ["", ""]
+    assert result.content == [image, text, image]
+    assert image.data == "Ym9ndXM="
+
+
+def test_text_followed_by_image_preserves_order():
+    result = CallToolResult(
+        content=[
+            TextContent(type="text", text="receipt"),
+            ImageContent(type="image", data="YQ==", mimeType="image/png"),
+        ]
+    )
+    completed, message = tool_result_events("call_text_first", result)
+    assert message.message.content == [
+        {"type": "text", "text": "receipt"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,YQ=="}},
+    ]
+    assert isinstance(completed.result.content[1], ImageContent)
+    assert completed.result.content[1].data == ""

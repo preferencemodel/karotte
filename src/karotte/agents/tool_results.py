@@ -10,20 +10,17 @@ def tool_result_events(
     tool_call_id: str, result: CallToolResult
 ) -> tuple[ToolCallCompletedEvent, MessageAddedEvent]:
     """A tool result and the tool message the model reads; an image's bytes are kept only in the message."""
-    if not result.content:
-        content: list[dict[str, Any]] = []
-    else:
-        first = result.content[0]
-        content = [_to_chat_content_part(first)]
-        if isinstance(first, ImageContent):
-            result = result.model_copy(
-                update={
-                    "content": [
-                        first.model_copy(update={"data": ""}),
-                        *result.content[1:],
-                    ]
-                }
-            )
+    content = [_to_chat_content_part(block) for block in result.content]
+    result = result.model_copy(
+        update={
+            "content": [
+                block.model_copy(update={"data": ""})
+                if isinstance(block, ImageContent)
+                else block
+                for block in result.content
+            ]
+        }
+    )
     return (
         ToolCallCompletedEvent(tool_call_id=tool_call_id, result=result),
         MessageAddedEvent(
