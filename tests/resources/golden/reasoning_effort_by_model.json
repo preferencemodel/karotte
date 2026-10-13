@@ -884,6 +884,30 @@
       "mapped_by_litellm": {}
     }
   },
+  "vertex_ai/gemini-4-argon": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "high",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "high",
+          "includeThoughts": true
+        }
+      }
+    }
+  },
   "vertex_ai/gemini-3.1-pro-preview": {
     "None": {
       "sent_by_karotte": null,

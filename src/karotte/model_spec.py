@@ -150,6 +150,7 @@ _DEFAULT_MAX_OUTPUT_TOKENS = 64000
 # max_tokens covers thinking *and* response text, so it doubles as the thinking
 # budget on adaptive-thinking models.
 _MAX_OUTPUT_TOKENS: dict[str, int] = {
+    "gemini-4-argon": 1048576,
     "muse-spark-1.3": 128000,
     "muse-wonder-1.0": 128000,
     "Qwen3.8-2.4T-A95B": 128000,
@@ -175,6 +176,7 @@ _CLAUDE_4_6_EFFORT_LEVELS = ("low", "medium", "high", "max")
 _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
     "o1": ("low", "medium", "high"),
     "o3": ("low", "medium", "high"),
+    "gemini-4-argon": ("low", "medium", "high"),
     "gemini-3.1-pro-preview": ("low", "medium", "high"),
     "gemini-3.8-flash": ("low", "medium", "high"),
     "gemini-3.7-flash": ("low", "medium", "high"),
@@ -340,7 +342,7 @@ def _reasoning_request(name: str) -> dict[str, Any]:
     if name.startswith(_CLAUDE_ADAPTIVE_PREFIXES):
         return {"thinking": {"type": "adaptive", "display": "summarized"}}
     # Gemini 2.0 answers 400 to thinkingConfig, so only 3.x asks for summaries.
-    if name.startswith("gemini-3"):
+    if name.startswith(("gemini-3", "gemini-4")):
         return {"thinkingConfig": {"includeThoughts": True}}
     # litellm's Responses bridge turns this into reasoning.summary and maps the
     # returned summary onto reasoning_content. It is also what builds the

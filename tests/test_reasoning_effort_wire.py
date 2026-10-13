@@ -113,3 +113,12 @@ def test_responses_body_carries_effort(model: str, effort: str):
 def test_chat_body_carries_effort(model: str, effort: str):
     body = _capture_request_body(model, effort)
     assert body["reasoning_effort"] == effort
+
+
+@pytest.mark.parametrize("effort", ["low", "medium", "high"])
+def test_gemini_4_body_carries_thinking_level(effort: str):
+    body = _capture_request_body("gemini/gemini-4-argon", effort)
+    assert body["generationConfig"]["thinkingConfig"] == {
+        "includeThoughts": True,
+        "thinkingLevel": effort,
+    }

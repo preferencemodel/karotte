@@ -107,6 +107,7 @@ class TestExtraAllowedOpenAIParams:
             # litellm's cost map predates 3.8 Flash; 3.7 is in it.
             ("vertex_ai/gemini-3.8-flash", ("reasoning_effort",)),
             ("vertex_ai/gemini-3.7-flash", ()),
+            ("vertex_ai/gemini-4-argon", ()),
             # litellm's together_ai param list has no reasoning_effort.
             ("together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", ("reasoning_effort",)),
             ("together_ai/zai-org/GLM-5.3", ("reasoning_effort",)),
@@ -141,6 +142,7 @@ class TestMaxOutputTokens:
             ("claude-fable-5-1", 128000),
             ("claude-haiku-5-5", 128000),
             ("vertex_ai/gemini-3.8-flash", 64000),
+            ("vertex_ai/gemini-4-argon", 1048576),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", 128000),
             ("together_ai/zai-org/GLM-5.3", 64000),
             # Fireworks documents no output ceiling for it, so it keeps the default.
@@ -224,6 +226,7 @@ class TestReasoningEffort:
             ("vertex_ai/gemini-3.1-pro-preview", ("low", "high")),
             ("vertex_ai/gemini-3.8-flash", ("low", "high")),
             ("vertex_ai/gemini-3.7-flash", ("low", "high")),
+            ("vertex_ai/gemini-4-argon", ("low", "high")),
             ("gemini/gemini-3.8-flash", ("low", "high")),
             ("gemini/gemini-3.1-pro-preview", ("low", "high")),
             # litellm has no effort mapping for ids outside its cost map.
@@ -283,6 +286,7 @@ class TestReasoningEffort:
             ("openai/gpt-6.1-sol", ("low", "medium", "high", "xhigh", "max")),
             ("vertex_ai/gemini-3.1-pro-preview", ("low", "medium", "high")),
             ("vertex_ai/gemini-3.8-flash", ("low", "medium", "high")),
+            ("vertex_ai/gemini-4-argon", ("low", "medium", "high")),
             ("gemini/gemini-3.7-flash", ("low", "medium", "high")),
             ("xai/grok-4.7", ("low", "medium", "high", "xhigh")),
             ("xai/grok-4.6", ("low", "medium", "high", "xhigh")),
@@ -498,6 +502,7 @@ class TestDisplayNames:
             ("fireworks_ai/accounts/fireworks/models/kimi-k2p5", "Kimi K2.5"),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", "Qwen3.8 2.4T A95B"),
             ("minimax/MiniMax-M2.5", "MiniMax M2.5"),
+            ("vertex_ai/gemini-4-argon", "Gemini 4 Argon"),
             ("vertex_ai/gemini-3.8-flash", "Gemini 3.8 Flash"),
             ("vertex_ai/gemini-3.7-flash", "Gemini 3.7 Flash"),
             ("vertex_ai/gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"),
@@ -555,6 +560,7 @@ class TestReasoningRequest:
             ("openai/gpt-5.6", {"extra_body": {"reasoning_summary": "detailed"}}),
             ("openai/gpt-5.6-sol", {"extra_body": {"reasoning_summary": "detailed"}}),
             ("openai/gpt-5.5", {}),
+            ("vertex_ai/gemini-4-argon", {"thinkingConfig": {"includeThoughts": True}}),
             ("xai/grok-4.6", {}),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", {}),
         ],

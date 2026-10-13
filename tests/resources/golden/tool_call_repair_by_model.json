@@ -42,6 +42,7 @@
     "openai/gpt-5.6-luna": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "minimax/MiniMax-M3": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "minimax/MiniMax-M2.5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
+    "vertex_ai/gemini-4-argon": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "vertex_ai/gemini-3.1-pro-preview": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "vertex_ai/gemini-3.8-flash": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "vertex_ai/gemini-3.7-flash": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",

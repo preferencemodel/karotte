@@ -204,6 +204,11 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "vertex_ai/gemini-4-argon": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": false
+  },
   "vertex_ai/gemini-3.1-pro-preview": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,

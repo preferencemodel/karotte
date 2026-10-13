@@ -275,6 +275,12 @@
     "env": {},
     "key_env": null
   },
+  "vertex_ai/gemini-4-argon": {
+    "provider": "vertex_ai",
+    "model": "gemini-4-argon",
+    "env": {},
+    "key_env": null
+  },
   "vertex_ai/gemini-3.1-pro-preview": {
     "provider": "vertex_ai",
     "model": "gemini-3.1-pro-preview",

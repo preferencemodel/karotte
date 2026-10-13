@@ -1277,6 +1277,33 @@
     ],
     "api_key": "test_key"
   },
+  "vertex_ai/gemini-4-argon": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "vertex_ai/gemini-4-argon",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 1048576,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
   "vertex_ai/gemini-3.1-pro-preview": {
     "stream": true,
     "stream_options": {

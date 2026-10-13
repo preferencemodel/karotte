@@ -65,6 +65,7 @@ CATALOG_MODEL_IDS: tuple[str, ...] = (
     "openai/gpt-5.6-luna",
     "minimax/MiniMax-M3",
     "minimax/MiniMax-M2.5",
+    "vertex_ai/gemini-4-argon",
     "vertex_ai/gemini-3.1-pro-preview",
     "vertex_ai/gemini-3.8-flash",
     "vertex_ai/gemini-3.7-flash",
