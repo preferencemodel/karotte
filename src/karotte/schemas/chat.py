@@ -36,5 +36,7 @@ class Message(BaseModel):
     role: Role = "assistant"
     tool_calls: list[ChatCompletionMessageToolCall] | None = None
     reasoning_content: str | None = None
+    thinking_blocks: list[dict[str, Any]] | None = None
+    reasoning_items: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
     # add fields as necessary from litellm.Message

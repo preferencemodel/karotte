@@ -195,6 +195,31 @@ def _tap_traffic_types(stream: CustomStreamWrapper) -> list[str]:
     return seen
 
 
+def _thinking_blocks(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] | None:
+    """The response's thinking blocks, exactly as the provider signed them.
+
+    litellm's stream_chunk_builder joins each block's text twice, as the signature
+    chunk repeats the whole block.
+    """
+    blocks = [
+        dict(block)
+        for chunk in chunks
+        for block in getattr(chunk.choices[0].delta, "thinking_blocks", None) or []
+        if block.get("signature") or block.get("type") == "redacted_thinking"
+    ]
+    return blocks or None
+
+
+def _reasoning_items(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] | None:
+    """The Responses API reasoning items, which litellm's stream_chunk_builder drops."""
+    items = [
+        dict(item)
+        for chunk in chunks
+        for item in getattr(chunk.choices[0].delta, "reasoning_items", None) or []
+    ]
+    return items or None
+
+
 def _provider_auth(config: EvaluationRunConfig) -> ProviderAuth:
     return ProviderAuth(api_key=config.model_api_key)
 
@@ -280,6 +305,16 @@ class BuiltinSource:
             assert isinstance(choice, Choices)
 
             message = Message(**choice.message.model_dump())
+            message.thinking_blocks = (
+                _thinking_blocks(chunks)
+                if self._provider.replays_thinking_blocks
+                else None
+            )
+            message.reasoning_items = (
+                _reasoning_items(chunks)
+                if self._provider.replays_reasoning_items
+                else None
+            )
 
             for name in self._spec.tool_call_repairs:
                 message.tool_calls = repair_tool_calls(
@@ -319,6 +354,7 @@ class BuiltinSource:
     ) -> dict[str, Any]:
         serialized_messages = self._serialize_messages(messages)
         spec = self._spec
+        self._provider.adapt_messages(spec, serialized_messages)
 
         completion_params: dict[str, Any] = {
             "stream": True,
@@ -356,6 +392,8 @@ class BuiltinSource:
             spec, self.config.applied_reasoning_effort, completion_params
         )
 
+        self._provider.disable_storage(completion_params)
+
         self._service_tier = self._provider.apply_service_tier(
             spec, self._escalated, completion_params
         )
@@ -364,4 +402,13 @@ class BuiltinSource:
 
     def _serialize_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Serializes transcript messages to dicts."""
-        return [message.model_dump() for message in messages]
+        return [
+            message.model_dump(
+                exclude={
+                    field
+                    for field in ("thinking_blocks", "reasoning_items")
+                    if getattr(message, field) is None
+                }
+            )
+            for message in messages
+        ]

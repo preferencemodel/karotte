@@ -191,10 +191,9 @@ def test_gemini_3_8_flash_effort_gets_past_litellms_cost_map_check():
         }, model
 
 
-def test_grok_4_7_effort_gets_past_litellms_cost_map_check():
-    """litellm 1.94 predates Grok 4.7 and raises UnsupportedParamsError for
-    reasoning_effort on any xai id outside its cost map, so 4.7 needs an
-    explicit allowed_openai_params entry where 4.6 does not."""
+def test_grok_effort_gets_past_litellms_cost_map_check():
+    """litellm 1.94 raises UnsupportedParamsError for reasoning_effort on any xai
+    id outside its cost map, which has no responses/<model> name for any Grok."""
     for model in ("xai/grok-4.7", "xai/grok-4.6"):
         for level, effort in (("min", "low"), ("max", "xhigh")):
             assert _litellm_reasoning_params(model, level) == {
@@ -208,7 +207,7 @@ def test_muse_spark_asks_for_reasoning_summaries():
     for model in ("meta/muse-wonder-1.0", "meta/muse-spark-1.3", "meta/muse-spark-1.2"):
         params = _completion_params(model)
         assert params["model"] == model.replace("meta/", "meta/responses/")
-        assert params["extra_body"] == {"reasoning_summary": "detailed"}
+        assert params["extra_body"] == {"reasoning_summary": "detailed", "store": False}
 
 
 def test_muse_spark_effort_gets_past_litellms_unknown_model_check():
@@ -244,6 +243,7 @@ def test_gpt_6_goes_through_the_responses_bridge():
         assert params["extra_body"] == {
             "reasoning_summary": "detailed",
             "prompt_cache_key": "golden-run",
+            "store": False,
         }
         assert "temperature" not in params
         assert _litellm_reasoning_params(model, "max") == {"reasoning_effort": "max"}

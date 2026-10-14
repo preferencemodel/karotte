@@ -831,7 +831,8 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "prompt_cache_key": "golden-run"
+      "prompt_cache_key": "golden-run",
+      "store": false
     }
   },
   "openai/o3": {
@@ -860,7 +861,8 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "prompt_cache_key": "golden-run"
+      "prompt_cache_key": "golden-run",
+      "store": false
     }
   },
   "openai/gpt-5": {
@@ -889,7 +891,8 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "prompt_cache_key": "golden-run"
+      "prompt_cache_key": "golden-run",
+      "store": false
     }
   },
   "openai/gpt-5.1": {
@@ -918,7 +921,8 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "prompt_cache_key": "golden-run"
+      "prompt_cache_key": "golden-run",
+      "store": false
     }
   },
   "openai/gpt-5.2": {
@@ -947,7 +951,8 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "prompt_cache_key": "golden-run"
+      "prompt_cache_key": "golden-run",
+      "store": false
     }
   },
   "openai/gpt-5.4": {
@@ -976,7 +981,8 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "prompt_cache_key": "golden-run"
+      "prompt_cache_key": "golden-run",
+      "store": false
     }
   },
   "openai/gpt-5.5": {
@@ -1005,7 +1011,8 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "prompt_cache_key": "golden-run"
+      "prompt_cache_key": "golden-run",
+      "store": false
     }
   },
   "openai/gpt-6-astra": {
@@ -1036,8 +1043,12 @@
     "api_base": "https://proxy.example/v1",
     "extra_body": {
       "prompt_cache_key": "golden-run",
-      "reasoning_summary": "detailed"
-    }
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ]
   },
   "openai/gpt-6-sol": {
     "stream": true,
@@ -1067,8 +1078,12 @@
     "api_base": "https://proxy.example/v1",
     "extra_body": {
       "prompt_cache_key": "golden-run",
-      "reasoning_summary": "detailed"
-    }
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ]
   },
   "openai/gpt-6-luna": {
     "stream": true,
@@ -1098,8 +1113,12 @@
     "api_base": "https://proxy.example/v1",
     "extra_body": {
       "prompt_cache_key": "golden-run",
-      "reasoning_summary": "detailed"
-    }
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ]
   },
   "openai/gpt-6.1-sol": {
     "stream": true,
@@ -1129,8 +1148,12 @@
     "api_base": "https://proxy.example/v1",
     "extra_body": {
       "prompt_cache_key": "golden-run",
-      "reasoning_summary": "detailed"
-    }
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ]
   },
   "openai/gpt-5.6": {
     "stream": true,
@@ -1159,7 +1182,8 @@
     "api_base": "https://proxy.example/v1",
     "extra_body": {
       "prompt_cache_key": "golden-run",
-      "reasoning_summary": "detailed"
+      "reasoning_summary": "detailed",
+      "store": false
     }
   },
   "openai/gpt-5.6-sol": {
@@ -1189,7 +1213,8 @@
     "api_base": "https://proxy.example/v1",
     "extra_body": {
       "prompt_cache_key": "golden-run",
-      "reasoning_summary": "detailed"
+      "reasoning_summary": "detailed",
+      "store": false
     }
   },
   "openai/gpt-5.6-terra": {
@@ -1219,7 +1244,8 @@
     "api_base": "https://proxy.example/v1",
     "extra_body": {
       "prompt_cache_key": "golden-run",
-      "reasoning_summary": "detailed"
+      "reasoning_summary": "detailed",
+      "store": false
     }
   },
   "openai/gpt-5.6-luna": {
@@ -1249,7 +1275,8 @@
     "api_base": "https://proxy.example/v1",
     "extra_body": {
       "prompt_cache_key": "golden-run",
-      "reasoning_summary": "detailed"
+      "reasoning_summary": "detailed",
+      "store": false
     }
   },
   "minimax/MiniMax-M3": {
@@ -1418,7 +1445,7 @@
     "stream_options": {
       "include_usage": true
     },
-    "model": "xai/grok-4.7",
+    "model": "xai/responses/grok-4.7",
     "messages": [
       {
         "content": "Go.",
@@ -1443,6 +1470,13 @@
     "extra_headers": {
       "x-grok-conv-id": "golden-run"
     },
+    "extra_body": {
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ],
     "reasoning_effort": "high"
   },
   "xai/grok-4.6": {
@@ -1450,7 +1484,7 @@
     "stream_options": {
       "include_usage": true
     },
-    "model": "xai/grok-4.6",
+    "model": "xai/responses/grok-4.6",
     "messages": [
       {
         "content": "Go.",
@@ -1466,7 +1500,8 @@
     "timeout": 300.0,
     "allowed_openai_params": [
       "tools",
-      "tool_choice"
+      "tool_choice",
+      "reasoning_effort"
     ],
     "temperature": 0.7,
     "api_key": "test_key",
@@ -1474,6 +1509,13 @@
     "extra_headers": {
       "x-grok-conv-id": "golden-run"
     },
+    "extra_body": {
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ],
     "reasoning_effort": "high"
   },
   "xai/grok-4.3": {
@@ -1481,7 +1523,7 @@
     "stream_options": {
       "include_usage": true
     },
-    "model": "xai/grok-4.3",
+    "model": "xai/responses/grok-4.3",
     "messages": [
       {
         "content": "Go.",
@@ -1504,7 +1546,14 @@
     "api_base": "https://proxy.example/v1",
     "extra_headers": {
       "x-grok-conv-id": "golden-run"
-    }
+    },
+    "extra_body": {
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ]
   },
   "meta/muse-wonder-1.0": {
     "stream": true,
@@ -1533,8 +1582,12 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "reasoning_summary": "detailed"
-    }
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ]
   },
   "meta/muse-spark-1.3": {
     "stream": true,
@@ -1563,8 +1616,12 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "reasoning_summary": "detailed"
-    }
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ]
   },
   "meta/muse-spark-1.2": {
     "stream": true,
@@ -1593,8 +1650,12 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "reasoning_summary": "detailed"
-    }
+      "reasoning_summary": "detailed",
+      "store": false
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ]
   },
   "__karotte_special__/training": {
     "stream": true,
@@ -1686,7 +1747,8 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1",
     "extra_body": {
-      "prompt_cache_key": "golden-run"
+      "prompt_cache_key": "golden-run",
+      "store": false
     }
   },
   "openai/gpt-5.6-2026-04-01": {
@@ -1716,7 +1778,8 @@
     "api_base": "https://proxy.example/v1",
     "extra_body": {
       "prompt_cache_key": "golden-run",
-      "reasoning_summary": "detailed"
+      "reasoning_summary": "detailed",
+      "store": false
     }
   },
   "fireworks_ai/accounts/fireworks/models/kimi-k2p5": {

@@ -19,6 +19,8 @@
       "role": "system",
       "tool_calls": null,
       "reasoning_content": null,
+      "thinking_blocks": null,
+      "reasoning_items": null,
       "tool_call_id": null
     },
     "finish_reason": null,
@@ -35,6 +37,8 @@
       "role": "user",
       "tool_calls": null,
       "reasoning_content": null,
+      "thinking_blocks": null,
+      "reasoning_items": null,
       "tool_call_id": null
     },
     "finish_reason": null,
@@ -121,6 +125,8 @@
         }
       ],
       "reasoning_content": null,
+      "thinking_blocks": null,
+      "reasoning_items": null,
       "tool_call_id": null
     },
     "finish_reason": "tool_calls",
@@ -177,6 +183,8 @@
       "role": "tool",
       "tool_calls": null,
       "reasoning_content": null,
+      "thinking_blocks": null,
+      "reasoning_items": null,
       "tool_call_id": "call_echo"
     },
     "finish_reason": null,
@@ -244,6 +252,8 @@
         }
       ],
       "reasoning_content": null,
+      "thinking_blocks": null,
+      "reasoning_items": null,
       "tool_call_id": null
     },
     "finish_reason": "tool_calls",
@@ -301,6 +311,8 @@
       "role": "tool",
       "tool_calls": null,
       "reasoning_content": null,
+      "thinking_blocks": null,
+      "reasoning_items": null,
       "tool_call_id": "call_image"
     },
     "finish_reason": null,
@@ -340,6 +352,8 @@
       "role": "assistant",
       "tool_calls": null,
       "reasoning_content": null,
+      "thinking_blocks": null,
+      "reasoning_items": null,
       "tool_call_id": null
     },
     "finish_reason": "stop",

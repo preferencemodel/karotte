@@ -123,6 +123,38 @@ def _set_mode(monkeypatch: pytest.MonkeyPatch, mode: str | None) -> None:
         monkeypatch.setenv(SERVICE_TIER_ENV, mode)
 
 
+class TestStorage:
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "openai/gpt-6.1-sol",
+            "openai/gpt-5.5",
+            "xai/grok-4.7",
+            "meta/muse-spark-1.3",
+        ],
+    )
+    def test_stateful_apis_are_told_not_to_store(self, model: str):
+        params: dict[str, Any] = {"extra_body": {"reasoning_summary": "detailed"}}
+        provider_for(spec_for(model)).disable_storage(params)
+        assert params == {
+            "extra_body": {"reasoning_summary": "detailed", "store": False}
+        }
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "claude-sonnet-5-5",
+            "vertex_ai/gemini-3.8-flash",
+            "together_ai/moonshotai/Kimi-K3",
+            "fireworks_ai/accounts/fireworks/models/glm-5p3",
+        ],
+    )
+    def test_stateless_apis_get_nothing(self, model: str):
+        params: dict[str, Any] = {}
+        provider_for(spec_for(model)).disable_storage(params)
+        assert params == {}
+
+
 class TestServiceTier:
     @pytest.mark.parametrize(
         ("mode", "expected"),

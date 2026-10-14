@@ -148,8 +148,10 @@ class RubricJudge(Judge):
             "max_tokens": _MAX_TOKENS,
             "api_key": self._api_key(spec),
         }
-        if api_base := proxy_api_base(provider_for(spec)):
+        provider = provider_for(spec)
+        if api_base := proxy_api_base(provider):
             params["api_base"] = api_base
+        provider.disable_storage(params)
         if spec.supports_sampling_params:
             params["temperature"] = self.temperature
 
