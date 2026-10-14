@@ -102,6 +102,26 @@ Their output is joined with blank lines:
 
 Subclass `RubricContext` and implement `render(transcript) -> str` for your own provider.
 
+### RegexJudge
+
+`RegexJudge` checks whether the student's assistant messages match every supplied
+regular expression using `re.search`.
+It joins the text with blank lines, including text blocks in multipart messages.
+System messages, task instructions, tool results, reasoning, tool-call arguments,
+and non-text blocks are excluded.
+
+```python
+import re
+
+from karotte.judges import RegexJudge
+
+RegexJudge([re.compile(r"answer: 42")])
+```
+
+Every pattern must match for a score of 1 and `continue_task=True`; otherwise the
+score is 0 and the metadata lists the patterns that did not match.
+Matching includes assistant text from earlier steps in the same task.
+
 ### AlwaysPassJudge
 
 `AlwaysPassJudge()` scores 1 and continues.
