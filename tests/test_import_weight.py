@@ -1,11 +1,11 @@
-"""Importing the CLI or karotte's schemas must not load an LLM client or an MCP server."""
+"""Importing the CLI or karotte's schemas must not load an LLM client, an MCP server or the Modal SDK."""
 
 import subprocess
 import sys
 
 import pytest
 
-HEAVY_MODULES = ["litellm", "anthropic", "openai", "mcp.server"]
+HEAVY_MODULES = ["litellm", "anthropic", "openai", "mcp.server", "modal"]
 
 
 @pytest.mark.parametrize(

@@ -30,6 +30,7 @@ Repository = "https://github.com/preferencemodel/karotte"
 dev = [
   "karotte[test]",
   "karotte[gcs]",
+  "karotte[modal]",
   "ruff",
   "rust-just>=1.40",
   "textual-dev>=1.8.0",
@@ -47,6 +48,9 @@ test = [
 
 gcs = [
   "google-cloud-storage>=3.9.0",
+]
+modal = [
+    "modal>=1.6,<2",
 ]
 
 [project.scripts]

@@ -352,6 +352,18 @@ def run(
         from karotte.firecracker.preflight import validate_firecracker_runtime
 
         validate_firecracker_runtime(load_task(run_config).required_hardware, mount)
+    if runtime == "modal" and containerized and not is_containerized():
+        from karotte.modal_sandbox import modal_problems
+
+        if problems := modal_problems(
+            load_task(run_config).required_hardware,
+            proxy_url,
+            prepare_only,
+            keep_containers,
+        ):
+            _print_and_abort(
+                "Cannot use the modal runtime:\n  - " + "\n  - ".join(problems)
+            )
 
     if run_config.resolved_rubric_judge_model is not None:
         RubricJudge.default_model = run_config.resolved_rubric_judge_model
@@ -503,12 +515,13 @@ def _run_without_ui(
     # containers. Stopping is also the right response to interrupting a real run.
     def exit_code(config: EvaluationRunConfig) -> int:
         from karotte.firecracker import FirecrackerError
+        from karotte.modal_sandbox import ModalError
 
         try:
             run_fn(config)
         except subprocess.CalledProcessError as e:
             return e.returncode
-        except FirecrackerError as e:
+        except (FirecrackerError, ModalError) as e:
             # One VM that can't start fails its run, not every run in the
             # invocation.
             logger.error(f"Run {config.run_id}: {e}")

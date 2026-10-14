@@ -22,7 +22,13 @@ ENV KAROTTE_CONTAINERIZED=1 \
 # that dir that take precedence over the real ones, thus gaining arbitrary code execution.
 ENV PYTHONSAFEPATH=1
 
+# `modal` when Modal builds the image (`karotte build --runtime modal`). Modal's
+# builder can't set file capabilities, so rpm is told to skip them, and Modal's
+# kernel has no iptables owner match, so the student firewall needs nftables.
+ARG KAROTTE_IMAGE_BUILDER
+
 RUN \
+  if [ "$KAROTTE_IMAGE_BUILDER" = modal ]; then echo 'tsflags=nocaps' >> /etc/dnf/dnf.conf; fi && \
   dnf update -y && \
   dnf install -y \
   # Provides `groupadd` and `useradd`
@@ -60,6 +66,7 @@ RUN \
 # Restore iptables alternative to nf_tables (iptables-legacy switches it)
 && alternatives --set iptables /usr/sbin/iptables-nft \
   && (alternatives --set ip6tables /usr/sbin/ip6tables-nft 2>/dev/null; ln -sf iptables-nft /usr/sbin/ip6tables) \
+  && if [ "$KAROTTE_IMAGE_BUILDER" = modal ]; then dnf install -y nftables; fi \
   \
   # Install uv
   && dnf install -y curl-minimal tar gzip \

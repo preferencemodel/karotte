@@ -1,7 +1,13 @@
 from typing import Literal
 
 Runtime = Literal[
-    "podman", "docker", "docker:gvisor", "nerdctl", "apple-container", "firecracker"
+    "podman",
+    "docker",
+    "docker:gvisor",
+    "nerdctl",
+    "apple-container",
+    "firecracker",
+    "modal",
 ]
 Engine = Literal["podman", "docker", "nerdctl", "container"]
 

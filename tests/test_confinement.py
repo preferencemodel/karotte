@@ -18,6 +18,7 @@ from karotte.cgroups import V2Cgroup, student_cgroup
 from karotte.confinement import (
     _FREE_DISK_FRACTION,  # pyright: ignore[reportPrivateUsage]
     DISK_BUDGET_ENV_VAR,
+    FIREWALL_BACKEND_ENV_VAR,
     FIREWALL_TOLERATE_ENV_VAR,
     GIB,
     HARNESS_RESERVE_BYTES,
@@ -954,6 +955,94 @@ def iptables(monkeypatch: pytest.MonkeyPatch) -> FakeIptables:
         confinement, "_own_addresses", lambda: (["10.1.2.3"], ["2001:db8::5"])
     )
     return fake
+
+
+class TestNftFirewall:
+    """A guest kernel without the iptables owner match (Modal's VMs) gets the
+    same rules as nftables ``meta skuid`` rules in a chain of the uid's own."""
+
+    @pytest.fixture(autouse=True)
+    def _nft(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(FIREWALL_BACKEND_ENV_VAR, "nft")
+        monkeypatch.delenv("KAROTTE_STUDENT_NETWORK", raising=False)
+
+    def test_deny_all(self, iptables: FakeIptables) -> None:
+        assert Confinement(Sandbox.VM).deny_all_network(900)
+
+        assert iptables.rules == [
+            "nft add table inet karotte",
+            "nft add chain inet karotte uid_900 '{ type filter hook output priority 0 ; policy accept ; }'",
+            "nft add rule inet karotte uid_900 meta skuid 900 meta nfproto ipv4 reject",
+            "nft add rule inet karotte uid_900 meta skuid 900 meta nfproto ipv6 reject",
+        ]
+
+    def test_restrict_keeps_the_iptables_order(
+        self, iptables: FakeIptables, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def getpwnam(name: str) -> SimpleNamespace:
+            assert name == "student"
+            return SimpleNamespace(pw_uid=1000)
+
+        monkeypatch.setattr("pwd.getpwnam", getpwnam)
+        assert Confinement(Sandbox.VM).restrict_to_internal_network(
+            "student", blocked_ports=[8001], allowed_ips=["1.2.3.4"]
+        )
+
+        assert iptables.rules[2:] == [
+            "nft add rule inet karotte uid_1000 meta skuid 1000 meta nfproto ipv4 tcp dport 8001 drop",
+            "nft add rule inet karotte uid_1000 meta skuid 1000 ip daddr 127.0.0.0/8 accept",
+            "nft add rule inet karotte uid_1000 meta skuid 1000 ip daddr 10.1.2.3 accept",
+            "nft add rule inet karotte uid_1000 meta skuid 1000 ip daddr 1.2.3.4 accept",
+            "nft add rule inet karotte uid_1000 meta skuid 1000 meta nfproto ipv4 reject",
+            "nft add rule inet karotte uid_1000 meta skuid 1000 meta nfproto ipv6 tcp dport 8001 drop",
+            "nft add rule inet karotte uid_1000 meta skuid 1000 ip6 daddr ::1 accept",
+            "nft add rule inet karotte uid_1000 meta skuid 1000 ip6 daddr 2001:db8::5 accept",
+            "nft add rule inet karotte uid_1000 meta skuid 1000 meta nfproto ipv6 reject",
+        ]
+
+    def test_an_unknown_name_never_reaches_the_shell(
+        self, iptables: FakeIptables
+    ) -> None:
+        with pytest.raises(KeyError):
+            _ = Confinement(Sandbox.VM).deny_all_network("x; touch /pwned")
+
+        assert iptables.rules == []
+
+    @pytest.mark.parametrize(
+        "rule",
+        [
+            "-A OUTPUT -m owner --uid-owner 900 -s 10.0.0.1 -j ACCEPT",
+            "-A OUTPUT -m owner --uid-owner 900 ! -d 10.0.0.0/8 -j ACCEPT",
+            "-A INPUT -m owner --uid-owner 900 -j ACCEPT",
+            "-A OUTPUT -m owner --uid-owner 900 -p tcp -j ACCEPT",
+            "-A OUTPUT -m owner --uid-owner 900 --dport 22 -j DROP",
+        ],
+    )
+    def test_a_rule_it_cannot_translate_is_refused(self, rule: str) -> None:
+        with pytest.raises(ValueError, match="No nftables translation"):
+            _ = confinement._nft_commands(900, [f"iptables {rule}"])  # pyright: ignore[reportPrivateUsage]
+
+    @pytest.mark.parametrize("listed", [0, 1])
+    def test_lift_deletes_the_uid_chain_if_there_is_one(
+        self, monkeypatch: pytest.MonkeyPatch, listed: int
+    ) -> None:
+        calls: list[list[str]] = []
+
+        def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+            _ = kwargs
+            calls.append(argv[1:3])
+            return SimpleNamespace(
+                returncode=listed if argv[1] == "list" else 0, stderr=""
+            )
+
+        monkeypatch.setattr(confinement, "trusted_binary", str)
+        monkeypatch.setattr(subprocess, "run", run)
+        assert Confinement(Sandbox.VM).lift_network_rules(900)
+
+        chain = [["list", "chain"]] + (
+            [] if listed else [["flush", "chain"], ["delete", "chain"]]
+        )
+        assert calls == chain
 
 
 class TestDenyAllNetwork:
