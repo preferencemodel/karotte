@@ -72,8 +72,9 @@ class CliAgent(abc.ABC):
     home_env: ClassVar[str]
     """Env var that points the tool at :attr:`home_dir`."""
 
-    uses_prompt_file: ClassVar[bool] = False
-    """Whether :meth:`_argv` reads the step's instructions from a file."""
+    prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "argv"
+    """How the tool gets each step's instructions: in :meth:`_argv`, from the
+    file :meth:`_argv` is given, or on stdin."""
 
     def __init__(self, config: EvaluationRunConfig) -> None:
         self._config: EvaluationRunConfig = config
@@ -104,7 +105,7 @@ class CliAgent(abc.ABC):
     @abc.abstractmethod
     def _argv(self, instructions: str, prompt_file: Path | None) -> list[str]:
         """The command for one step; ``prompt_file`` holds ``instructions``
-        when :attr:`uses_prompt_file` is set."""
+        unless :attr:`prompt_input` is ``argv``."""
 
     @abc.abstractmethod
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
@@ -213,7 +214,7 @@ class CliAgent(abc.ABC):
         tool = Path(self.binary).name
         steps = self._step_files()
         prompt_path = None
-        if self.uses_prompt_file:
+        if self.prompt_input != "argv":
             prompt_path = steps / f"step_{step}.prompt"
             prompt_path.write_text(instructions)
             prompt_path.chmod(0o644)
@@ -222,16 +223,26 @@ class CliAgent(abc.ABC):
         self._step_index += 1
         log_path = steps / f"step_{step}.ndjson"
 
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=self._env(),
-            cwd=os.environ.get("KAROTTE_WORKDIR"),
-            # The two pipes opened just above are handed to the demoted agent
-            # along with the privilege drop, so it can reopen them by path.
-            preexec_fn=make_preexec(1, 2),
+        stdin = (
+            prompt_path.open("rb")
+            if prompt_path is not None and self.prompt_input == "stdin"
+            else None
         )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                stdin=stdin,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=self._env(),
+                cwd=os.environ.get("KAROTTE_WORKDIR"),
+                # The two pipes opened just above are handed to the demoted agent
+                # along with the privilege drop, so it can reopen them by path.
+                preexec_fn=make_preexec(1, 2),
+            )
+        finally:
+            if stdin is not None:
+                stdin.close()
         assert proc.stdout is not None
         assert proc.stderr is not None
         stderr_task = asyncio.ensure_future(proc.stderr.read())

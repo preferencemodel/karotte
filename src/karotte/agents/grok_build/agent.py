@@ -13,7 +13,7 @@ import json
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import ClassVar, final
+from typing import ClassVar, Literal, final
 
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
@@ -51,7 +51,7 @@ class GrokBuildAgent(CliAgent):
     home_env: ClassVar[str] = "GROK_HOME"
     supports_temperature: ClassVar[bool] = True
     applies_reasoning_effort: ClassVar[bool] = True
-    uses_prompt_file: ClassVar[bool] = True
+    prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "file"
     # Grok ships its own shell and file read/edit tools (run_terminal_command,
     # read_file, search_replace); use those rather than karotte's over MCP.
     native_tool_names: ClassVar[frozenset[str]] = frozenset(

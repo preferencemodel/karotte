@@ -22,11 +22,11 @@ from loguru import logger
 from mcp.types import CallToolResult, ImageContent, TextContent
 
 from karotte.agents.tool_results import tool_result_events
+from karotte.agents.usage import messages_usage_event
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
     Event,
     MessageAddedEvent,
-    TokenUsageEvent,
     ToolCallCompletedEvent,
     ToolCallStartedEvent,
 )
@@ -111,7 +111,7 @@ def _assistant_events(blocks: list[Any], usage: Any, i: int) -> Iterator[Event]:
         )
     )
     if isinstance(usage, dict):
-        yield _usage_event(usage)
+        yield messages_usage_event(usage)
     for tool_call in tool_calls:
         yield ToolCallStartedEvent(tool_call=tool_call)
 
@@ -148,19 +148,6 @@ def _user_events(blocks: list[Any]) -> Iterator[Event]:
         yield MessageAddedEvent(message=Message(role="user", content="".join(texts)))
 
 
-def _usage_event(usage: dict[str, Any]) -> TokenUsageEvent:
-    """Messages-API usage keeps uncached input, cache reads and cache writes in
-    disjoint buckets; the transcript's ``input_tokens`` is the full prompt."""
-    cache_read = _int(usage.get("cache_read_input_tokens"))
-    cache_write = _int(usage.get("cache_creation_input_tokens"))
-    return TokenUsageEvent(
-        input_tokens=_int(usage.get("input_tokens")) + cache_read + cache_write,
-        output_tokens=_int(usage.get("output_tokens")),
-        cache_read_tokens=cache_read,
-        cache_write_tokens=cache_write,
-    )
-
-
 def _read_file_image(text: str) -> ImageContent | None:
     """The image in Grok's JSON-encoded ``read_file`` result, if it read one."""
     if not text.startswith("{"):
@@ -190,10 +177,6 @@ def _result_text(content: Any) -> str:
             if isinstance(block, dict) and block.get("type") == "text"
         )
     return ""
-
-
-def _int(value: Any) -> int:
-    return value if isinstance(value, int) else 0
 
 
 def _parse_line(line: str, i: int) -> dict[str, Any] | None:

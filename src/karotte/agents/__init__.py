@@ -18,6 +18,7 @@ from karotte.agents.agent import (
 from karotte.agents.backend_source import EXTERNAL_MESSAGE_TIMEOUT_S, BackendSource
 from karotte.agents.builtin import BuiltinAgent
 from karotte.agents.builtin_source import BuiltinSource
+from karotte.agents.claude_code import ClaudeCodeAgent
 from karotte.agents.cli_agent import (
     CliAgent,
     cli_agent_types,
@@ -26,8 +27,6 @@ from karotte.agents.cli_agent import (
 )
 from karotte.agents.external import ExternalAgent
 from karotte.agents.fake_source import FakeSource
-
-# Import agent modules for their `register_cli_agent` side effects.
 from karotte.agents.grok_build import GrokBuildAgent
 from karotte.agents.message_loop import MessageLoopAgent
 from karotte.agents.message_source import MessageSource
@@ -39,6 +38,7 @@ __all__ = [
     "BackendSource",
     "BuiltinAgent",
     "BuiltinSource",
+    "ClaudeCodeAgent",
     "CliAgent",
     "CliAgentExitedError",
     "EmptyTurnLimitReachedError",

@@ -199,7 +199,7 @@ Whichever agent you use, Karotte still runs the task's hooks, judges and artifac
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                      |
 | `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).     |
-| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe` or `grok-build`. |
+| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe`, `grok-build` or `claude-code`. |
 
 Set `agent` in the run config:
 
@@ -244,12 +244,13 @@ CLI agents differ from `builtin` in a few ways:
 - They run as the student and call the tool server directly.
   If they bring their own tools, those replace the task's tools that do the same job; their shell replaces `bash`, for example.
 - They send their own system prompt instead of the task's.
-- `reasoning_effort` isn't applied, except by `grok-build`.
+- `reasoning_effort` isn't applied, except by `grok-build` and `claude-code`.
 - The student's firewall only lets them reach localhost and the model proxy.
   Without a proxy (no `--proxy` and no plugin default), Karotte listens on a local port and forwards the agent's model calls from there to the provider, adding the API key itself.
   The agent gets a placeholder key, so the real one never reaches the student.
 - `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or through that forwarder to Mistral's API when there's no proxy.
   `grok-build` does the same with the proxy, or goes through the forwarder to xAI's API without one.
+  `claude-code` sends Anthropic-style calls to `<proxy>/v1/messages`, or through the forwarder to Anthropic's API.
 
 `grok-build` specifics:
 
@@ -257,6 +258,15 @@ CLI agents differ from `builtin` in a few ways:
 - Grok doesn't list MCP tools to the model directly. The model finds the task's tools with `search_tool` and calls them through `use_tool` (as `karotte__<tool>`), and the transcript records those calls as `use_tool`.
 - Grok's web search, image editing, feedback and ask-the-user tools are turned off, along with its telemetry and update checks.
 - It sends `temperature` and `reasoning_effort` when the run config sets them.
+
+`claude-code` specifics:
+
+- All steps of a run share one Claude Code session, so later steps see the earlier conversation.
+- The model sees the task's tools as `mcp__karotte__<tool>`, and the transcript records them under that name.
+- Claude Code's web search, web fetch and ask-the-user tools are turned off, along with its telemetry, error reporting and update checks.
+- It sends `reasoning_effort` when the run config sets it.
+  It can't send `temperature`, so a run config that sets it is rejected.
+- The transcript's reasoning is Anthropic's summary of the model's thinking; the raw thinking isn't available.
 
 ## Fake model
 

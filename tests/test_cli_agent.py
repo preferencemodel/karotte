@@ -7,7 +7,7 @@ import sys
 import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import ClassVar, final
+from typing import ClassVar, Literal, final
 
 import pytest
 
@@ -40,7 +40,7 @@ class _EchoAgent(CliAgent):
     binary: ClassVar[str] = f"{AGENTS_BIN_DIR}/echo"
     home_dir: ClassVar[str] = ".echo"
     home_env: ClassVar[str] = "ECHO_HOME"
-    uses_prompt_file: ClassVar[bool] = True
+    prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "file"
 
     after_output: str = ""
     exit_code: int = 0
@@ -64,7 +64,7 @@ class _EchoAgent(CliAgent):
         return [
             sys.executable,
             str(script),
-            str(prompt_file),
+            "/dev/stdin" if self.prompt_input == "stdin" else str(prompt_file),
             str(self._home / "gate"),
             self.after_output,
             str(self.exit_code),
@@ -276,11 +276,21 @@ class TestStepFiles:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
         agent = _agent(tmp_path, monkeypatch)
-        monkeypatch.setattr(agent, "uses_prompt_file", False)
+        monkeypatch.setattr(agent, "prompt_input", "argv")
         (tmp_path / ".echo" / "gate").touch()
         with pytest.raises(CliAgentExitedError):
             _ = [e async for e in agent.run_step("hi")]
         assert not (_step_dir(agent) / "step_0.prompt").exists()
+
+    @pytest.mark.asyncio
+    async def test_the_prompt_can_go_to_stdin(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(agent, "prompt_input", "stdin")
+        (tmp_path / ".echo" / "gate").touch()
+        events = [e async for e in agent.run_step("from\nstdin")]
+        assert _contents(events) == ["0:from", "1:stdin"]
 
     @pytest.mark.asyncio
     async def test_stop_removes_them(
