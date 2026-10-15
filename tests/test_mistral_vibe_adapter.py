@@ -8,12 +8,10 @@ from pathlib import Path
 import pytest
 
 from karotte.agents.mistral_vibe.adapter import parse_stream
-from karotte.agents.mistral_vibe.agent import (
-    MistralVibeAgent,
-    _transcript_events,  # pyright: ignore[reportPrivateUsage]
-)
+from karotte.agents.mistral_vibe.agent import MistralVibeAgent
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import (
+    Event,
     MessageAddedEvent,
     TokenUsageEvent,
     ToolCallCompletedEvent,
@@ -27,6 +25,14 @@ MODEL = "mistral/mistral-medium-3-5"
 
 def _fixture_lines(name: str) -> list[str]:
     return (_FIXTURE_DIR / name).read_text().splitlines()
+
+
+def _transcript_events(lines: list[str], instructions: str, model: str) -> list[Event]:
+    agent = MistralVibeAgent(
+        EvaluationRunConfig(run_id="r", task_id="t", model=model, model_api_key="k")
+    )
+    parse = agent._line_parser(instructions)  # pyright: ignore[reportPrivateUsage]
+    return [event for i, line in enumerate(lines) for event in parse(line, i)]
 
 
 class TestParseStream:

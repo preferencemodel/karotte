@@ -77,7 +77,7 @@ class TestMistralVibeAgent:
         assert any(AGENTS_BIN_DIR in c for c in cmds)
 
     def test_argv_passes_instructions_and_turn_limit(self):
-        argv = self._agent()._argv("do the thing")  # pyright: ignore[reportPrivateUsage]
+        argv = self._agent()._argv("do the thing", Path("p"))  # pyright: ignore[reportPrivateUsage]
         assert argv[0] == f"{AGENTS_BIN_DIR}/vibe"
         assert "do the thing" in argv
         assert "--max-turns" in argv and "7" in argv
@@ -87,7 +87,7 @@ class TestMistralVibeAgent:
         config = EvaluationRunConfig(
             run_id="r", task_id="t", model="mistral/m", model_api_key="k"
         )
-        argv = MistralVibeAgent(config)._argv("x")  # pyright: ignore[reportPrivateUsage]
+        argv = MistralVibeAgent(config)._argv("x", Path("p"))  # pyright: ignore[reportPrivateUsage]
         assert "--max-turns" not in argv
 
     def test_env_sets_credentials_and_vibe_home(self):
@@ -126,10 +126,8 @@ class TestMistralVibeAgent:
         temperature: float | None = None,
     ) -> str:
         agent = self._agent(temperature)
-        agent._vibe_home = tmp_path / ".vibe"  # pyright: ignore[reportPrivateUsage]
-        monkeypatch.setattr(
-            "karotte.agents.mistral_vibe.agent.demoted_uid_gid", lambda: None
-        )
+        agent._home = tmp_path / ".vibe"  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
         agent._write_config()  # pyright: ignore[reportPrivateUsage]
         return (tmp_path / ".vibe" / "config.toml").read_text()
 
@@ -176,10 +174,8 @@ class TestMistralVibeAgent:
     ):
         monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
         agent = self._agent()
-        agent._vibe_home = tmp_path / ".vibe"  # pyright: ignore[reportPrivateUsage]
-        monkeypatch.setattr(
-            "karotte.agents.mistral_vibe.agent.demoted_uid_gid", lambda: None
-        )
+        agent._home = tmp_path / ".vibe"  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
         await agent.start(MagicMock())
         try:
             assert agent.model_url.startswith("http://127.0.0.1:")
@@ -198,10 +194,8 @@ class TestMistralVibeAgent:
     ):
         monkeypatch.setenv("KAROTTE_PROXY_URL", "https://proxy.example/")
         agent = self._agent()
-        agent._vibe_home = tmp_path / ".vibe"  # pyright: ignore[reportPrivateUsage]
-        monkeypatch.setattr(
-            "karotte.agents.mistral_vibe.agent.demoted_uid_gid", lambda: None
-        )
+        agent._home = tmp_path / ".vibe"  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
         await agent.start(MagicMock())
         assert agent.model_url == "https://proxy.example"
         env = agent._env()  # pyright: ignore[reportPrivateUsage]
@@ -223,15 +217,16 @@ class _FakeReader:
         self._data = data
 
     async def read(self, _n: int = -1) -> bytes:
-        return self._data
+        data, self._data = self._data, b""
+        return data
 
 
 @final
 class _FakeProc:
     """Stands in for an asyncio subprocess in run_step tests.
 
-    `hang=True` makes wait() block forever until the process is 'killed',
-    exercising the time-limit path.
+    `hang=True` keeps it running until it is 'killed', exercising the
+    time-limit path.
     """
 
     def __init__(
@@ -242,18 +237,17 @@ class _FakeProc:
         hang: bool = False,
     ) -> None:
         self.pid = 987654
-        self.returncode: int | None = None
         self._exit_code = exit_code
         self._hang = hang
         self.killed = False
         self.stdout = _FakeReader(stdout)
         self.stderr = _FakeReader(stderr)
 
-    async def wait(self) -> int:
-        if self._hang and not self.killed:
-            await asyncio.Event().wait()  # released only once killed
-        self.returncode = -9 if self.killed else self._exit_code
-        return self.returncode
+    @property
+    def returncode(self) -> int | None:
+        if self.killed:
+            return -9
+        return None if self._hang else self._exit_code
 
     def kill(self) -> None:
         self.killed = True
@@ -325,7 +319,7 @@ class TestMistralVibeRunStep:
         self._patch_proc(monkeypatch, _FakeProc(exit_code=0))
         named: list[tuple[int, ...]] = []
         monkeypatch.setattr(
-            "karotte.agents.mistral_vibe.agent.make_preexec",
+            "karotte.agents.cli_agent.make_preexec",
             lambda *fds: named.append(fds),  # pyright: ignore[reportUnknownLambdaType]
         )
 

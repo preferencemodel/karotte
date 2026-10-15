@@ -24,6 +24,10 @@ from karotte.agents.builtin_source import (
     _retry_after,  # pyright: ignore[reportPrivateUsage]
     _retry_wait,  # pyright: ignore[reportPrivateUsage]
 )
+from karotte.agents.cli_agent import (
+    _CLI_AGENTS,  # pyright: ignore[reportPrivateUsage]
+    CliAgent,
+)
 from karotte.agents.message_loop import (
     _execute_tool_calls,  # pyright: ignore[reportPrivateUsage]
 )
@@ -4027,6 +4031,24 @@ class TestReasoningEffortIsRecorded:
         assert (await _task_started(config, mcp_server)).reasoning_effort is None
 
     @pytest.mark.asyncio
+    async def test_records_the_effort_a_cli_agent_applies(
+        self,
+        sample_config: EvaluationRunConfig,
+        mcp_server: HttpMcpServer,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        config = sample_config.model_copy(
+            update={
+                "model": "xai/grok-4.7",
+                "agent": "grok-build",
+                "reasoning_effort": "max",
+            }
+        )
+        assert (await _task_started(config, mcp_server)).reasoning_effort == "xhigh"
+
+    @pytest.mark.asyncio
     async def test_warns_when_the_requested_effort_is_dropped(
         self, sample_config: EvaluationRunConfig, mcp_server: HttpMcpServer
     ):
@@ -4048,6 +4070,50 @@ class TestReasoningEffortIsRecorded:
         )
         warnings = await _warnings_during(_task_started(config, mcp_server))
         assert not any("reasoning_effort" in w for w in warnings)
+
+
+class TestTemperatureNeedsAnAgentThatSendsIt:
+    def _config(
+        self, sample_config: EvaluationRunConfig, **update: Any
+    ) -> EvaluationRunConfig:
+        return sample_config.model_copy(update={"temperature": 0.3, **update})
+
+    @pytest.mark.parametrize(
+        ("agent", "model"),
+        [
+            ("builtin", "together_ai/moonshotai/Kimi-K2.6"),
+            ("grok-build", "xai/grok-4.7"),
+            ("mistral-vibe", "mistral/mistral-medium-3.5"),
+        ],
+    )
+    def test_accepted_by_agents_that_send_it(
+        self, sample_config: EvaluationRunConfig, agent: str, model: str
+    ):
+        config = self._config(sample_config, agent=agent, model=model)
+        _ = EvaluationRunner(config, _NoStepsTask(config))
+
+    @pytest.fixture
+    def no_temp_agent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        agent = type("NoTemp", (CliAgent,), {"name": "no-temp", "home_dir": ".x"})
+        monkeypatch.setattr(agent, "__abstractmethods__", frozenset())
+        monkeypatch.setitem(_CLI_AGENTS, "no-temp", agent)
+
+    @pytest.mark.usefixtures("no_temp_agent")
+    def test_rejected_for_a_cli_agent_that_cant_send_it(
+        self, sample_config: EvaluationRunConfig
+    ):
+        config = self._config(sample_config, agent="no-temp", model="mistral/m")
+        with pytest.raises(ValueError, match="no-temp agent"):
+            _ = EvaluationRunner(config, _NoStepsTask(config))
+
+    @pytest.mark.usefixtures("no_temp_agent")
+    def test_a_fake_model_run_ignores_the_agent(
+        self, sample_config: EvaluationRunConfig
+    ):
+        config = self._config(
+            sample_config, agent="no-temp", model="mistral/m", use_fake_model=True
+        )
+        _ = EvaluationRunner(config, _NoStepsTask(config))
 
 
 @pytest.mark.asyncio

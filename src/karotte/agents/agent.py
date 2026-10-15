@@ -72,6 +72,12 @@ class Agent(Protocol):
     MCP. Empty for agents that rely entirely on MCP tools.
     """
 
+    supports_temperature: ClassVar[bool]
+    """Whether the agent can send the run config's ``temperature``."""
+
+    applies_reasoning_effort: ClassVar[bool]
+    """Whether the agent sends the run config's ``reasoning_effort``."""
+
     async def start(self, ctx: RunContext) -> None:
         """Verify/configure the agent for the run."""
         ...

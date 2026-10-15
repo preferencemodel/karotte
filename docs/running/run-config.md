@@ -143,7 +143,7 @@ Providers don't agree on what the levels are called or how many there are, so Ka
 ## Temperature
 
 `temperature` sets the sampling temperature.
-The run config is rejected if it's set for the `external` agent or for a model that takes no temperature, such as Claude Opus 5.
+The run config is rejected if it's set for the `external` agent, for a CLI agent that can't send one, or for a model that takes no temperature, such as Claude Opus 5.
 Unset, Karotte sends none and the agent or provider picks.
 
 ## Limits

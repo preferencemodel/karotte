@@ -66,6 +66,13 @@ class EvaluationRunner:
         self.backend_client: BackendClient | None = None
         self.network_firewall: bool | None = None
         self._agent: Agent = self._make_agent()
+        if (
+            config.temperature is not None
+            and not config.use_fake_model
+            and not self._agent.supports_temperature
+        ):
+            msg = f"temperature can't be applied by the {config.resolved_agent} agent"
+            raise ValueError(msg)
 
     def _make_agent(self) -> Agent:
         match self.config.resolved_agent:
@@ -145,7 +152,11 @@ class EvaluationRunner:
 
         self.transcript = Transcript(run_id=self.config.run_id)
 
-        effort = self.config.applied_reasoning_effort
+        effort = (
+            self.config.applied_reasoning_effort
+            if self._agent.applies_reasoning_effort
+            else None
+        )
         if self.config.reasoning_effort is not None and effort is None:
             logger.warning(
                 "reasoning_effort={requested!r} is not applied for {model} on the {agent} agent; using the provider default.",

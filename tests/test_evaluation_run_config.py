@@ -342,9 +342,8 @@ class TestAppliedReasoningEffort:
         self._config(model="together_ai/moonshotai/Kimi-K2.6", reasoning_effort="min")
         self._config(model="together_ai/moonshotai/Kimi-K2.6", reasoning_effort="max")
 
-    @pytest.mark.parametrize("agent", ["mistral-vibe", "external"])
-    def test_other_agents_never_send_it(self, agent: str):
-        config = self._config(agent=agent, reasoning_effort="max")
+    def test_the_external_agent_never_sends_it(self):
+        config = self._config(agent="external", reasoning_effort="max")
         assert config.applied_reasoning_effort is None
 
     @pytest.mark.parametrize("agent", ["builtin", "grok-build"])

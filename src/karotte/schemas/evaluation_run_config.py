@@ -219,12 +219,13 @@ class EvaluationRunConfig(BaseModel):
 
     @property
     def applied_reasoning_effort(self) -> str | None:
-        """The effort this run actually sends, under the provider's own name.
+        """The effort this run sends, under the provider's own name, to an agent
+        that applies one (``Agent.applies_reasoning_effort``).
 
-        None where nothing is sent: the external agent and other CLI agents
-        drive their own inference, a fake-model run reaches no provider, and
-        plenty of models take no effort parameter at all."""
-        if self.use_fake_model or self.resolved_agent not in ("builtin", "grok-build"):
+        None where nothing is sent: the external agent drives its own inference,
+        a fake-model run reaches no provider, and plenty of models take no
+        effort parameter at all."""
+        if self.use_fake_model or self.resolved_agent == "external":
             return None
         return spec_for(self.model).reasoning_effort_value(self.reasoning_effort)
 

@@ -48,8 +48,8 @@ def _agent(model: str = "xai/grok-4.7", **kwargs: object) -> GrokBuildAgent:
 def _write_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, agent: GrokBuildAgent
 ) -> dict[str, object]:
-    agent._grok_home = tmp_path / ".grok_home"  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr("karotte.agents.grok_build.agent.demoted_uid_gid", lambda: None)
+    agent._home = tmp_path / ".grok_home"  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
     agent._write_config()  # pyright: ignore[reportPrivateUsage]
     return tomllib.loads((tmp_path / ".grok_home" / "config.toml").read_text())
 
@@ -66,7 +66,7 @@ class TestGrokBuildAgent:
 
     def test_argv_creates_then_resumes_one_session(self):
         agent = _agent(turn_limit=7)
-        first = agent._argv(Path("step_0.prompt"))  # pyright: ignore[reportPrivateUsage]
+        first = agent._argv("x", Path("step_0.prompt"))  # pyright: ignore[reportPrivateUsage]
         assert first[0] == f"{AGENTS_BIN_DIR}/grok"
         assert first[first.index("--prompt-file") + 1] == "step_0.prompt"
         assert "-p" not in first
@@ -76,12 +76,12 @@ class TestGrokBuildAgent:
         session_id = first[first.index("--session-id") + 1]
 
         agent._step_index = 1  # pyright: ignore[reportPrivateUsage]
-        second = agent._argv(Path("step_1.prompt"))  # pyright: ignore[reportPrivateUsage]
+        second = agent._argv("x", Path("step_1.prompt"))  # pyright: ignore[reportPrivateUsage]
         assert "--session-id" not in second
         assert second[second.index("--resume") + 1] == session_id
 
     def test_argv_omits_turn_limit_when_unset(self):
-        assert "--max-turns" not in _agent()._argv(Path("x"))  # pyright: ignore[reportPrivateUsage]
+        assert "--max-turns" not in _agent()._argv("x", Path("x"))  # pyright: ignore[reportPrivateUsage]
 
     def test_env_sets_credentials_and_grok_home(self):
         env = _agent()._env()  # pyright: ignore[reportPrivateUsage]
@@ -117,10 +117,8 @@ class TestGrokBuildAgent:
     ):
         monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
         agent = _agent()
-        agent._grok_home = tmp_path / ".grok_home"  # pyright: ignore[reportPrivateUsage]
-        monkeypatch.setattr(
-            "karotte.agents.grok_build.agent.demoted_uid_gid", lambda: None
-        )
+        agent._home = tmp_path / ".grok_home"  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
         await agent.start(MagicMock())
         try:
             assert agent.model_url.startswith("http://127.0.0.1:")
@@ -365,12 +363,12 @@ class TestGrokBuildRunStep:
     ) -> GrokBuildAgent:
         monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
         monkeypatch.setattr(
-            "karotte.agents.grok_build.agent.make_preexec",
+            "karotte.agents.cli_agent.make_preexec",
             lambda *_fds: None,  # pyright: ignore[reportUnknownLambdaType]
         )
         agent = _agent(save_artifacts=False)
-        agent._grok_home = tmp_path / ".grok_home"  # pyright: ignore[reportPrivateUsage]
-        agent._grok_home.mkdir()  # pyright: ignore[reportPrivateUsage]
+        agent._home = tmp_path / ".grok_home"  # pyright: ignore[reportPrivateUsage]
+        agent._home.mkdir()  # pyright: ignore[reportPrivateUsage]
         script = tmp_path / "fake_grok.py"
         script.write_text(_FAKE_GROK)
         argv = [
@@ -381,7 +379,7 @@ class TestGrokBuildRunStep:
             str(linger_seconds),
             str(exit_code),
         ]
-        monkeypatch.setattr(agent, "_argv", lambda _instructions: argv)  # pyright: ignore[reportUnknownLambdaType]
+        monkeypatch.setattr(agent, "_argv", lambda _instructions, _prompt_file: argv)  # pyright: ignore[reportUnknownLambdaType]
         return agent
 
     @pytest.mark.asyncio
@@ -403,9 +401,11 @@ class TestGrokBuildRunStep:
         assert (
             len(rest) == len(list(parse_stream(_FIXTURE.read_text().splitlines()))) - 1
         )
-        log = tmp_path / ".grok_home" / "step_0.ndjson"
+        steps = agent._step_dir  # pyright: ignore[reportPrivateUsage]
+        assert steps is not None
+        log = steps / "step_0.ndjson"
         assert log.read_text().splitlines() == _FIXTURE.read_text().splitlines()
-        prompt = tmp_path / ".grok_home" / "step_0.prompt"
+        prompt = steps / "step_0.prompt"
         assert prompt.read_text() == "do the thing"
 
     @pytest.mark.asyncio

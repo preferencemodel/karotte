@@ -52,6 +52,8 @@ class MessageLoopAgent:
 
     allows_student_mcp_access: ClassVar[bool] = False
     native_tool_names: ClassVar[frozenset[str]] = frozenset()
+    supports_temperature: ClassVar[bool] = False
+    applies_reasoning_effort: ClassVar[bool] = False
 
     def __init__(self, source: MessageSource) -> None:
         self._source: MessageSource = source

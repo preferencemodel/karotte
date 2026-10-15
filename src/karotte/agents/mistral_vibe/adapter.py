@@ -57,18 +57,28 @@ def parse_stream(lines: Iterable[str], model: str = "") -> Iterator[Event]:
     matching `ToolCallCompletedEvent`. `model` selects the tokenizer for the
     usage estimate.
     """
-    input_tokens = 0
-    synthetic_id_count = 0
-
+    parse = StreamParser(model)
     for i, line in enumerate(lines):
+        yield from parse(line, i)
+
+
+class StreamParser:
+    """:func:`parse_stream` fed one line at a time, as Vibe writes them."""
+
+    def __init__(self, model: str = "") -> None:
+        self._model: str = model
+        self._input_tokens: int = 0
+        self._synthetic_id_count: int = 0
+
+    def __call__(self, line: str, i: int) -> Iterator[Event]:
         record = _parse_line(line, i)
         if record is None:
-            continue
+            return
 
         role = record.get("role")
         if role not in _ROLES:
             logger.warning("Skipping vibe NDJSON line {} with role {!r}.", i, role)
-            continue
+            return
 
         tool_calls: list[ChatCompletionMessageToolCall] = []
         for element in record.get("tool_calls") or []:
@@ -76,8 +86,8 @@ def parse_stream(lines: Iterable[str], model: str = "") -> Iterator[Event]:
             if tool_call is None:
                 continue
             if not tool_call.id:
-                synthetic_id_count += 1
-                tool_call.id = f"vibe-tool-call-{synthetic_id_count}"
+                self._synthetic_id_count += 1
+                tool_call.id = f"vibe-tool-call-{self._synthetic_id_count}"
             tool_calls.append(tool_call)
 
         message = Message(
@@ -109,14 +119,14 @@ def parse_stream(lines: Iterable[str], model: str = "") -> Iterator[Event]:
 
         yield MessageAddedEvent(message=message, raw=raw or None)
 
-        message_tokens = _count_tokens(model, _message_text(record))
+        message_tokens = _count_tokens(self._model, _message_text(record))
         if role == "assistant":
             yield TokenUsageEvent(
-                input_tokens=input_tokens,
+                input_tokens=self._input_tokens,
                 output_tokens=message_tokens,
                 estimated=True,
             )
-        input_tokens += message_tokens
+        self._input_tokens += message_tokens
 
         for tool_call in tool_calls:
             yield ToolCallStartedEvent(tool_call=tool_call)
