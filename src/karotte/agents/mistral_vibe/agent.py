@@ -87,6 +87,11 @@ class MistralVibeAgent(CliAgent):
         key_env = self._key_env()
         provider_name = "proxy" if os.environ.get("KAROTTE_PROXY_URL") else "mistral"
         api_base = f"{self.model_url}/v1"
+        temperature = (
+            f"temperature = {self._config.temperature}\n"
+            if self._config.temperature is not None
+            else ""
+        )
 
         self._vibe_home.mkdir(parents=True, exist_ok=True)
         config = (
@@ -102,7 +107,8 @@ class MistralVibeAgent(CliAgent):
             "[[models]]\n"
             f'name = "{resolved.model}"\n'
             f'provider = "{provider_name}"\n'
-            f'alias = "{resolved.model}"\n\n'
+            f'alias = "{resolved.model}"\n'
+            f"{temperature}\n"
             "[[mcp_servers]]\n"
             'name = "karotte"\n'
             'transport = "streamable-http"\n'

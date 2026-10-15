@@ -26,6 +26,7 @@ The run gets a random `run_id`, and `transcript_file` defaults to `out/transcrip
 | `--model`            | `model`            |
 | `--model-api-key`    | `model_api_key`    |
 | `--reasoning-effort` | `reasoning_effort` |
+| `--temperature`      | `temperature`      |
 | `--transcript-file`  | `transcript_file`  |
 
 With `--config`, the flags override the config's fields, so one config can be run against several models:
@@ -139,8 +140,12 @@ For those runs, set `rubric_judge_model` or pass a model to `RubricJudge` in the
 Providers don't agree on what the levels are called or how many there are, so Karotte automatically selects the right level if you pass `min` or `max`.
 `karotte models list` shows available levels per model.
 
-Grok models (`xai/`) are also always sent temperature 0.7, by both the builtin agent and `grok-build`.
-Karotte sets no temperature for any other model.
+## Temperature
+
+`temperature` sets the sampling temperature.
+The run config is rejected if it's set for the `external` agent or for a model that takes no temperature, such as Claude Opus 5.
+
+Unset, Karotte sends none and the agent or provider picks, except for grok models (`xai/`), which get 0.7 from both the builtin agent and `grok-build`.
 
 ## Limits
 

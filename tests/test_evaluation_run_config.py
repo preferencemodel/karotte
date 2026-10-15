@@ -363,6 +363,45 @@ class TestAppliedReasoningEffort:
         assert config.applied_reasoning_effort is None
 
 
+class TestTemperature:
+    def _config(
+        self, model: str = "xai/grok-4.7", **overrides: Any
+    ) -> EvaluationRunConfig:
+        return EvaluationRunConfig(
+            run_id="r", task_id="t", model=model, model_api_key="k", **overrides
+        )
+
+    def test_unset_by_default(self):
+        assert self._config().temperature is None
+
+    @pytest.mark.parametrize(
+        ("agent", "model"),
+        [
+            ("builtin", "together_ai/moonshotai/Kimi-K2.6"),
+            ("grok-build", "xai/grok-4.7"),
+            ("mistral-vibe", "mistral/mistral-medium-3.5"),
+        ],
+    )
+    def test_accepted_by_agents_that_apply_it(self, agent: str, model: str):
+        config = self._config(model=model, agent=agent, temperature=0.3)
+        assert config.temperature == 0.3
+
+    @pytest.mark.parametrize("model", ["claude-opus-5", "openai/gpt-6-sol"])
+    def test_rejected_for_models_without_sampling_params(self, model: str):
+        with pytest.raises(ValidationError, match="takes no temperature"):
+            self._config(model=model, temperature=0.3)
+
+    def test_rejected_for_the_external_agent(self):
+        with pytest.raises(ValidationError, match="external agent"):
+            self._config(model="pt/foo", temperature=0.3)
+
+    def test_fake_model_accepts_it(self):
+        config = self._config(
+            model="claude-opus-5", use_fake_model=True, temperature=0.3
+        )
+        assert config.temperature == 0.3
+
+
 @pytest.mark.parametrize(
     "model", ["openai/gpt-5.5", "anthropic/claude-sonnet-5-5", "claude-opus-5"]
 )

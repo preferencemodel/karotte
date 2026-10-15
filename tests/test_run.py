@@ -588,6 +588,15 @@ class TestConfigFromFlags:
         assert run_config.reasoning_effort == "max"
         assert run_config.transcript_file == "elsewhere/t.json"
 
+    def test_the_temperature_flag_is_applied(self):
+        run_config = self._run(
+            task="example-task",
+            model="claude-haiku-4-5-20251001",
+            temperature=0.3,
+        )
+
+        assert run_config.temperature == 0.3
+
     def test_the_key_can_come_from_a_file(self, tmp_path: Path):
         key_file = tmp_path / "key"
         key_file.write_text("sk-from-file")

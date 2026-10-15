@@ -151,6 +151,12 @@ class TestGrokBuildSampling:
     ):
         assert self._model_table(tmp_path, monkeypatch)["temperature"] == 0.7
 
+    def test_sends_the_run_configs_temperature(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        table = self._model_table(tmp_path, monkeypatch, temperature=0.3)
+        assert table["temperature"] == 0.3
+
     def test_effort_defaults_to_high(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):

@@ -63,7 +63,7 @@ def _read_config(config: str) -> Any:
             return None
 
 
-def _config_with_flags(config: str | None, flags: dict[str, str | None]) -> str:
+def _config_with_flags(config: str | None, flags: dict[str, str | float | None]) -> str:
     """``config`` with the set ``flags`` on top, or a new config from them."""
     set_flags = {field: value for field, value in flags.items() if value is not None}
     if config is None:
@@ -145,6 +145,10 @@ def run(
         typer.Option(
             help="`min`, `max`, or one of the model's own levels. Overrides the config's reasoning_effort."
         ),
+    ] = None,
+    temperature: Annotated[
+        float | None,
+        typer.Option(help="Sampling temperature. Overrides the config's temperature."),
     ] = None,
     transcript_file: Annotated[
         str | None,
@@ -284,6 +288,7 @@ def run(
             "model": model,
             "model_api_key": model_api_key,
             "reasoning_effort": reasoning_effort,
+            "temperature": temperature,
             "transcript_file": transcript_file,
         },
     )

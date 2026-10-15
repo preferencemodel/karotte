@@ -250,6 +250,13 @@ def test_gpt_6_goes_through_the_responses_bridge():
         assert _litellm_reasoning_params(model, "min") == {"reasoning_effort": "low"}
 
 
+@pytest.mark.parametrize("model", ["together_ai/moonshotai/Kimi-K2.6", "xai/grok-4.7"])
+def test_builtin_sends_the_run_configs_temperature(model: str):
+    source = BuiltinSource(_config(model, temperature=0.3))
+    params = source.get_completion_params([Message(role="user", content="Go.")], [])
+    assert params["temperature"] == 0.3
+
+
 def test_together_effort_gets_past_litellms_param_check():
     """litellm carries no reasoning_effort in its together_ai param list and
     raises UnsupportedParamsError rather than forwarding it, so the Together

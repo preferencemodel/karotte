@@ -157,8 +157,11 @@ class GrokBuildAgent(CliAgent):
         flag is ignored for a model without a menu)."""
         spec = spec_for(self._config.model)
         lines: list[str] = []
-        if spec.temperature is not None:
-            lines.append(f"temperature = {spec.temperature}")
+        temperature = self._config.temperature
+        if temperature is None:
+            temperature = spec.temperature
+        if temperature is not None:
+            lines.append(f"temperature = {temperature}")
         effort = self._config.applied_reasoning_effort
         if effort is not None:
             options = [

@@ -3,6 +3,7 @@
 
 import asyncio
 import os
+import tomllib
 from pathlib import Path
 from typing import final
 from unittest.mock import MagicMock
@@ -53,13 +54,14 @@ class TestRegistry:
 
 
 class TestMistralVibeAgent:
-    def _agent(self) -> MistralVibeAgent:
+    def _agent(self, temperature: float | None = None) -> MistralVibeAgent:
         config = EvaluationRunConfig(
             run_id="r",
             task_id="t",
             model="mistral/mistral-medium-3.5",
             model_api_key="sk-abc",
             turn_limit=7,
+            temperature=temperature,
         )
         return MistralVibeAgent(config)
 
@@ -117,8 +119,13 @@ class TestMistralVibeAgent:
         env = self._agent()._env()  # pyright: ignore[reportPrivateUsage]
         assert str(tmp_path / ".venv" / "bin") not in env["PATH"].split(":")
 
-    def _write_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
-        agent = self._agent()
+    def _write_config(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        temperature: float | None = None,
+    ) -> str:
+        agent = self._agent(temperature)
         agent._vibe_home = tmp_path / ".vibe"  # pyright: ignore[reportPrivateUsage]
         monkeypatch.setattr(
             "karotte.agents.mistral_vibe.agent.demoted_uid_gid", lambda: None
@@ -150,6 +157,18 @@ class TestMistralVibeAgent:
         monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
         config = self._write_config(tmp_path, monkeypatch)
         assert 'api_base = "https://api.mistral.ai/v1"' in config
+
+    def test_write_config_leaves_vibes_temperature_by_default(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        config = tomllib.loads(self._write_config(tmp_path, monkeypatch))
+        assert "temperature" not in config["models"][0]
+
+    def test_write_config_sets_the_run_configs_temperature(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        config = tomllib.loads(self._write_config(tmp_path, monkeypatch, 0.3))
+        assert config["models"][0]["temperature"] == 0.3
 
     @pytest.mark.asyncio
     async def test_start_without_proxy_forwards_and_withholds_the_key(

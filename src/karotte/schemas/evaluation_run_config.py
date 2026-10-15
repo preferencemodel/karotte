@@ -40,6 +40,9 @@ class EvaluationRunConfig(BaseModel):
 
     reasoning_effort: ReasoningEffort | None = None
 
+    temperature: float | None = None
+    """Sampling temperature, or None to leave the agent's or provider's default."""
+
     turn_limit: int | None = None
     """Maximum number of turns (model responses) allowed before terminating the run."""
 
@@ -237,6 +240,18 @@ class EvaluationRunConfig(BaseModel):
         """grok-build runs Grok's own CLI, which only drives grok models."""
         if self.resolved_agent == "grok-build" and not self.model.startswith("xai/"):
             msg = f"grok-build only runs xai/ grok models; got {self.model!r}"
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_temperature(self) -> Self:
+        if self.temperature is None or self.use_fake_model:
+            return self
+        if self.resolved_agent == "external":
+            msg = "temperature can't be applied by the external agent"
+            raise ValueError(msg)
+        if not spec_for(self.model).supports_sampling_params:
+            msg = f"{self.model} takes no temperature"
             raise ValueError(msg)
         return self
 
