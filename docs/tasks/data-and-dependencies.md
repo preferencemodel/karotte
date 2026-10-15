@@ -101,7 +101,7 @@ Run it before you build the image:
 uv run setup_data.py
 ```
 
-`karotte build` and `karotte run` don't run it for you.
+`karotte build` and `karotte run` don't run it for you, unless you [run from a folder or repo](../running/run-from-a-source.md).
 Builds are faster if you preprocess the data once, upload the result to cloud storage, and only download it in `setup_data.py` (see [Google Cloud Storage](#google-cloud-storage)).
 
 ### Small data: commit it

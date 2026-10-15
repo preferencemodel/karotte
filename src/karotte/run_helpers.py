@@ -30,7 +30,7 @@ from karotte.forwarded_env import sandbox_env
 from karotte.hardware import container_run_args
 from karotte.load_tasks import load_task
 from karotte.model_spec import LITELLM_API_KEY_ENV, api_key_env_var, spec_for
-from karotte.runtime import get_engine
+from karotte.runtime import get_engine, image_name
 from karotte.save_artifact import local_artifact_dir
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import ErrorEvent, TaskCompletedEvent
@@ -400,7 +400,7 @@ def get_container_run_command(
     for var, value in sandbox_env().items():
         command.extend(["--env", f"{var}={value}"])
 
-    command.append("localhost/karotte" if engine == "podman" else "karotte")
+    command.append(f"localhost/{image_name()}" if engine == "podman" else image_name())
 
     command.extend(
         [

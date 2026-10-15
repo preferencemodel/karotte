@@ -1,9 +1,17 @@
+import os
 from typing import Literal
 
 Runtime = Literal[
     "podman", "docker", "docker:gvisor", "nerdctl", "apple-container", "firecracker"
 ]
 Engine = Literal["podman", "docker", "nerdctl", "container"]
+
+IMAGE_ENV_VAR = "KAROTTE_IMAGE"
+"""Names the image `run` builds and starts instead of `karotte`."""
+
+
+def image_name() -> str:
+    return os.environ.get(IMAGE_ENV_VAR) or "karotte"
 
 
 def get_engine(runtime: Runtime) -> Engine:

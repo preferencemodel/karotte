@@ -809,6 +809,27 @@ class TestGetContainerRunCommand:
         assert "karotte" in command
         assert "localhost/karotte" not in command
 
+    @pytest.mark.parametrize(
+        ("runtime", "image"),
+        [("podman", "localhost/karotte-env-1234"), ("docker", "karotte-env-1234")],
+    )
+    def test_the_image_env_var_names_the_image(
+        self,
+        sample_config: EvaluationRunConfig,
+        monkeypatch: pytest.MonkeyPatch,
+        runtime: Runtime,
+        image: str,
+    ):
+        monkeypatch.setenv("KAROTTE_IMAGE", "karotte-env-1234")
+
+        command, _ = get_container_run_command(
+            sample_config, runtime, dev=False, keep_container=False
+        )
+
+        assert image in command
+        assert "karotte" not in command
+        assert "localhost/karotte" not in command
+
     def test_includes_karotte_run_command(self, sample_config: EvaluationRunConfig):
         command, _ = get_container_run_command(
             sample_config, "podman", dev=False, keep_container=False

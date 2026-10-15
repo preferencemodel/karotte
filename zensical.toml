@@ -25,6 +25,7 @@ nav = [
   ] },
   { "Running" = [
     "running/run-config.md",
+    "running/run-from-a-source.md",
     "running/runtimes.md",
     "running/run-lifecycle.md",
     "running/student-resources.md",

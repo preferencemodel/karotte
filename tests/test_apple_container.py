@@ -387,6 +387,19 @@ class TestRunCommand:
         ]
         assert env_value(command, "ANTHROPIC_BASE_URL") == "http://proxy:4000"
 
+    def test_the_image_env_var_names_the_image(
+        self, config: EvaluationRunConfig, monkeypatch: pytest.MonkeyPatch
+    ):
+        platforms: list[str] = []
+        monkeypatch.setattr(apple_container, "image_platform", platforms.append)
+        monkeypatch.setenv("KAROTTE_IMAGE", "karotte-env-1234")
+
+        command = run_command(config)
+
+        assert "karotte-env-1234" in command
+        assert "karotte" not in command
+        assert platforms == ["karotte-env-1234"]
+
     def test_host_settings_are_forwarded(
         self, config: EvaluationRunConfig, monkeypatch: pytest.MonkeyPatch
     ):

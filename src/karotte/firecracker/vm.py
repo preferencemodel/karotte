@@ -38,6 +38,7 @@ from karotte.firecracker.rootfs import build_base_drive
 from karotte.forwarded_env import sandbox_env
 from karotte.hardware import VmSize, vm_size
 from karotte.load_tasks import load_task
+from karotte.runtime import image_name
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 
 GUEST_CID = 3
@@ -552,7 +553,7 @@ def run_firecracker(
     mounts: Sequence[str] | None = None,
     proxy_url: str | None = None,
     prepare_only: bool = False,
-    image: str = "karotte",
+    image: str | None = None,
     engine: str = "docker",
     parallel_runs: int = 1,
 ) -> None:
@@ -580,7 +581,10 @@ def run_firecracker(
         # The run's own link to the drive: old drives may be evicted from the
         # cache while this run is still starting.
         base, image_config = build_base_drive(
-            image, cache_dir() / "rootfs", engine, link_to=run.path / "base.ext4"
+            image or image_name(),
+            cache_dir() / "rootfs",
+            engine,
+            link_to=run.path / "base.ext4",
         )
         if image_config.architecture != host_arch():
             raise VmError(

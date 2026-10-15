@@ -199,6 +199,16 @@ class TestBuildContainerWithTag:
         tag_index = call_args.index("--tag")
         assert call_args[tag_index + 1] == "custom-tag"
 
+    def test_the_image_env_var_names_the_default_tag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.setenv("KAROTTE_IMAGE", "karotte-env-1234")
+
+        command = get_container_build_command("podman", ".")
+
+        assert command[command.index("--tag") + 1] == "karotte-env-1234"
+
 
 class TestPodmanThroughARemoteService:
     def test_builds_with_secrets_without_asking_podman(

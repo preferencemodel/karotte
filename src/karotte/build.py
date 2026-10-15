@@ -10,7 +10,7 @@ from typing import Never
 import typer
 from loguru import logger
 
-from karotte.runtime import Runtime, get_engine
+from karotte.runtime import Runtime, get_engine, image_name
 
 
 def require_runtime(runtime: Runtime) -> None:
@@ -45,7 +45,7 @@ def require_builder(runtime: Runtime) -> None:
 def build_container(
     runtime: Runtime,
     build_context: str,
-    tag: str = "karotte",
+    tag: str | None = None,
     cache_from: list[str] | None = None,
     cache_to: list[str] | None = None,
     build_secrets: Sequence[str] = (),
@@ -82,7 +82,7 @@ def build_container(
 def get_container_build_command(
     runtime: Runtime,
     build_context: str,
-    tag: str = "karotte",
+    tag: str | None = None,
     cache_from: list[str] | None = None,
     cache_to: list[str] | None = None,
     build_secrets: Sequence[str] = (),
@@ -93,6 +93,7 @@ def get_container_build_command(
     ``/run/secrets/<name>``.
     """
     secret_flags = [_secret_flag(s) for s in build_secrets]
+    tag = tag or image_name()
 
     engine = get_engine(runtime)
 

@@ -44,12 +44,12 @@ from karotte.confinement import (
 )
 from karotte.forwarded_env import sandbox_env
 from karotte.hardware import VmSize, vm_size
+from karotte.runtime import image_name
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.staged_mounts import STAGED_MOUNTS_ENV_VAR, StagedMount, encode
 from karotte.task import Task
 
 CONTAINER = "container"
-IMAGE = "karotte"
 NAME_PREFIX = "karotte_run_"
 BUILDER_ID = "buildkit"
 """Apple's image builder, listed next to our containers."""
@@ -109,7 +109,7 @@ def get_run_command(
         f"{size.vm_memory_bytes // 1024**2}M",
     ]
 
-    if platform_flag := image_platform(IMAGE):
+    if platform_flag := image_platform(image_name()):
         command.extend(["--platform", platform_flag])
 
     # `--publish` binds every interface unless given an address.
@@ -167,7 +167,7 @@ def get_run_command(
     for var, value in sandbox_env().items():
         command.extend(["--env", f"{var}={value}"])
 
-    command.append(IMAGE)
+    command.append(image_name())
     command.extend(
         [
             "/root/.venv/bin/karotte",

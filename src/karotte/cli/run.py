@@ -16,6 +16,15 @@ from pydantic import ValidationError
 from karotte import Runtime, staged_mounts
 from karotte.build import build_container, require_builder, require_runtime
 from karotte.container import is_containerized
+from karotte.env_source import (
+    SourceError,
+    environment_dir,
+    image_name_for,
+    pre_build_scripts,
+    run_pre_build,
+    single_task_id,
+    uv_env,
+)
 from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
 from karotte.hardware import container_run_args, default_runtime
 from karotte.judges import RubricJudge
@@ -35,6 +44,7 @@ from karotte.run_helpers import (
     stop_containers,
     validate_gvisor_runtime,
 )
+from karotte.runtime import IMAGE_ENV_VAR
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 
 PROXY_ENTRY_POINT_GROUP = "karotte.default_proxy_url"
@@ -113,6 +123,17 @@ def _export_proxy(proxy_url: str) -> None:
 
 
 def run(
+    source: Annotated[
+        str | None,
+        typer.Argument(
+            metavar="[SOURCE]",
+            help="Environment to run, instead of the current one: a folder, a GitHub URL "
+            + "(also of a folder: .../tree/<ref>/<path>), or "
+            + "git+<url>@<ref>#subdirectory=<path> (ref and subdirectory optional). "
+            + "Runs the karotte version the environment pins. "
+            + "--task can be omitted if the environment has only one task.",
+        ),
+    ] = None,
     config: Annotated[
         str | None,
         typer.Option(
@@ -265,10 +286,64 @@ def run(
             + "the current process holds it. Cannot be combined with --n-parallel > 1.",
         ),
     ] = False,
+    pre_build: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--pre-build",
+            metavar="SCRIPT",
+            help="Script in a SOURCE environment to run with `uv run` before the image is "
+            + "built. Repeatable. Default: setup_data.py, if the environment has one.",
+        ),
+    ] = None,
+    no_pre_build: Annotated[
+        bool,
+        typer.Option(
+            "--no-pre-build",
+            help="Run no scripts before building a SOURCE environment.",
+        ),
+    ] = False,
 ) -> None:
     """Execute an evaluation run."""
 
     from karotte.mcp_servers.http_mcp_server import run_server as run_mcp_server
+
+    if source is not None:
+        _run_from_source(
+            source,
+            config,
+            {
+                "task_id": task,
+                "model": model,
+                "model_api_key": model_api_key,
+                "reasoning_effort": reasoning_effort,
+                "temperature": temperature,
+                "transcript_file": transcript_file,
+            },
+            pre_build=pre_build,
+            no_pre_build=no_pre_build,
+            dev=dev,
+            options=_source_run_options(
+                containerized=containerized,
+                runtime=runtime,
+                build_context=build_context,
+                n_parallel=n_parallel,
+                dev=dev,
+                mount=mount or [],
+                no_ui=no_ui,
+                keep_containers=keep_containers,
+                cache_from=cache_from or [],
+                cache_to=cache_to or [],
+                build_secret=build_secret or [],
+                proxy=proxy,
+                no_proxy=no_proxy,
+                prepare_only=prepare_only,
+                model_api_key_file=model_api_key_file,
+            ),
+        )
+        return
+
+    if pre_build or no_pre_build:
+        _print_and_abort("--pre-build and --no-pre-build only apply with a SOURCE.")
 
     if n_parallel > 1 and not containerized:
         _print_and_abort("Cannot run multiple runs without containerization.")
@@ -451,6 +526,110 @@ def run(
     _print_output_paths(run_configs)
     if tui_app.run_failed:
         raise typer.Exit(1)
+
+
+def _run_from_source(
+    source: str,
+    config: str | None,
+    flags: dict[str, str | float | None],
+    *,
+    pre_build: list[str] | None,
+    no_pre_build: bool,
+    dev: bool,
+    options: list[str],
+) -> None:
+    """Prepare the environment ``source`` names and replace this process with its own `karotte run`."""
+    if pre_build and no_pre_build:
+        _print_and_abort("Pass --pre-build or --no-pre-build, not both.")
+    data = None if config is None else _read_config(config)
+    if config is not None and not isinstance(data, dict):
+        _print_and_abort(f"Could not read the config {config}.")
+    try:
+        path, name = environment_dir(source)
+        if flags["task_id"] is None and not (data or {}).get("task_id"):
+            flags["task_id"] = single_task_id(path)
+        scripts = [] if no_pre_build or dev else pre_build_scripts(path, pre_build)
+        run_pre_build(path, scripts)
+    except SourceError as e:
+        _print_and_abort(str(e))
+
+    run_config = json.loads(
+        _config_with_flags(None if data is None else json.dumps(data), flags)
+    )
+    # The environment's karotte runs in its folder, but outputs belong here.
+    if transcript := run_config.get("transcript_file"):
+        run_config["transcript_file"] = str(Path(transcript).absolute())
+    os.execvpe(
+        "uv",
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "--directory",
+            str(path),
+            "karotte",
+            "run",
+            "--config",
+            json.dumps(run_config),
+            *options,
+        ],
+        {**uv_env(), IMAGE_ENV_VAR: image_name_for(path, name)},
+    )
+
+
+def _source_run_options(
+    *,
+    containerized: bool,
+    runtime: Runtime | None,
+    build_context: str,
+    n_parallel: int,
+    dev: bool,
+    mount: list[str],
+    no_ui: bool,
+    keep_containers: bool,
+    cache_from: list[str],
+    cache_to: list[str],
+    build_secret: list[str],
+    proxy: str | None,
+    no_proxy: bool,
+    prepare_only: bool,
+    model_api_key_file: str | None,
+) -> list[str]:
+    """The `run` options to pass on, with host paths made absolute."""
+    options: list[str] = []
+    if not containerized:
+        options.append("--no-containerized")
+    if runtime is not None:
+        options += ["--runtime", runtime]
+    if build_context != ".":
+        options += ["--build-context", build_context]
+    if n_parallel != 1:
+        options += ["--n-parallel", str(n_parallel)]
+    if dev:
+        options.append("--dev")
+    for spec in _expand_mount_file_references(mount):
+        host, _, rest = spec.partition(":")
+        options += ["--mount", f"{Path(host).absolute()}:{rest}"]
+    if no_ui:
+        options.append("--no-ui")
+    if keep_containers:
+        options.append("--keep-containers")
+    for value in cache_from:
+        options += ["--cache-from", value]
+    for value in cache_to:
+        options += ["--cache-to", value]
+    for spec in build_secret:
+        secret, _, file = spec.partition("=")
+        options += ["--build-secret", f"{secret}={Path(file).absolute()}"]
+    if proxy is not None:
+        options += ["--proxy", proxy]
+    if no_proxy:
+        options.append("--no-proxy")
+    if prepare_only:
+        options.append("--prepare-only")
+    if model_api_key_file is not None:
+        options += ["--model-api-key-file", str(Path(model_api_key_file).absolute())]
+    return options
 
 
 def _run_without_ui(

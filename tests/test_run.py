@@ -1,4 +1,5 @@
 import functools
+import json
 import os
 import re
 import subprocess
@@ -17,6 +18,7 @@ from karotte.cli.run import (
     default_proxy_url,
     run,
 )
+from karotte.env_source import SourceError, image_name_for
 from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
 from karotte.run_helpers import build_configs, sanitize_paths
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -1412,3 +1414,232 @@ class TestPluginRefusesTheLaunch:
 
         with pytest.raises(RuntimeError, match="ran"):
             self._launch(monkeypatch)
+
+
+class TestRunFromSource:
+    """With a SOURCE, run hands off to the environment's own karotte."""
+
+    @pytest.fixture
+    def env(self, tmp_path: Path) -> Path:
+        path = tmp_path / "envs" / "my-env"
+        path.mkdir(parents=True)
+        (path / "pyproject.toml").write_text("")
+        return path
+
+    @pytest.fixture(autouse=True)
+    def cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        path = tmp_path / "work"
+        path.mkdir()
+        monkeypatch.chdir(path)
+        return path
+
+    def _run(
+        self, env: Path, task_ids: tuple[str, ...] = ("only-task",), **kwargs: Any
+    ) -> SimpleNamespace:
+        def only_task(_env: Path) -> str:
+            if len(task_ids) != 1:
+                raise SourceError("several")
+            return task_ids[0]
+
+        with (
+            patch("karotte.cli.run.os.execvpe") as execvpe,
+            patch("karotte.cli.run.run_pre_build") as pre_build,
+            patch(
+                "karotte.cli.run.single_task_id", side_effect=only_task
+            ) as single_task,
+        ):
+            kwargs.setdefault("model", "openai/gpt-5.5")
+            run(source=str(env), **kwargs)
+        argv: list[str] = execvpe.call_args.args[1]
+        config_index = argv.index("--config") + 1
+        return SimpleNamespace(
+            file=execvpe.call_args.args[0],
+            argv=argv,
+            env=execvpe.call_args.args[2],
+            config=json.loads(argv[config_index]),
+            flags=argv[config_index + 1 :],
+            pre_build=pre_build,
+            single_task=single_task,
+        )
+
+    def test_runs_the_environments_karotte_in_it(self, env: Path):
+        result = self._run(env, task="t")
+
+        assert result.file == "uv"
+        assert result.argv[:8] == [
+            "uv",
+            "run",
+            "--frozen",
+            "--directory",
+            str(env.resolve()),
+            "karotte",
+            "run",
+            "--config",
+        ]
+        assert result.config["task_id"] == "t"
+        assert result.config["model"] == "openai/gpt-5.5"
+        assert result.flags == []
+
+    def test_ignores_the_callers_venv(self, env: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("VIRTUAL_ENV", "/somewhere/.venv")
+
+        result = self._run(env, task="t")
+
+        assert "VIRTUAL_ENV" not in result.env
+
+    def test_builds_a_per_environment_image(self, env: Path):
+        result = self._run(env, task="t")
+
+        assert result.env["KAROTTE_IMAGE"] == image_name_for(env.resolve(), "my-env")
+        assert result.env["PATH"] == os.environ["PATH"]
+
+    def test_the_transcript_stays_in_the_working_directory(self, env: Path, cwd: Path):
+        result = self._run(env, task="t")
+
+        assert result.config["transcript_file"] == str(cwd / "out" / "transcript.json")
+
+    def test_a_relative_transcript_file_is_made_absolute(self, env: Path, cwd: Path):
+        result = self._run(env, task="t", transcript_file="runs/t.json")
+
+        assert result.config["transcript_file"] == str(cwd / "runs" / "t.json")
+
+    def test_a_config_file_is_read_from_the_working_directory(
+        self, env: Path, cwd: Path
+    ):
+        (cwd / "config.json").write_text(
+            json.dumps(
+                {
+                    "run_id": "r",
+                    "task_id": "from-file",
+                    "model": "m",
+                    "transcript_file": "here/t.json",
+                }
+            )
+        )
+
+        result = self._run(env, config="config.json", model=None)
+
+        assert result.config["task_id"] == "from-file"
+        assert result.config["transcript_file"] == str(cwd / "here" / "t.json")
+        result.single_task.assert_not_called()
+
+    def test_an_unreadable_config_aborts(
+        self, env: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        with pytest.raises(typer.Abort):
+            self._run(env, config="missing.json")
+
+        assert "missing.json" in capsys.readouterr().err
+
+    def test_the_only_task_is_picked(self, env: Path):
+        result = self._run(env)
+
+        assert result.config["task_id"] == "only-task"
+        result.single_task.assert_called_once_with(env.resolve())
+
+    def test_task_skips_the_lookup(self, env: Path):
+        result = self._run(env, task="t")
+
+        result.single_task.assert_not_called()
+
+    def test_several_tasks_abort(self, env: Path, capsys: pytest.CaptureFixture[str]):
+        with pytest.raises(typer.Abort):
+            self._run(env, task_ids=("a", "b"))
+
+        assert "several" in capsys.readouterr().err
+
+    def test_runs_setup_data_before_the_build(self, env: Path):
+        (env / "setup_data.py").write_text("")
+
+        result = self._run(env, task="t")
+
+        result.pre_build.assert_called_once_with(env.resolve(), ["setup_data.py"])
+
+    def test_runs_the_given_pre_build_scripts(self, env: Path):
+        (env / "a.py").write_text("")
+
+        result = self._run(env, task="t", pre_build=["a.py"])
+
+        result.pre_build.assert_called_once_with(env.resolve(), ["a.py"])
+
+    @pytest.mark.parametrize("flags", [{"no_pre_build": True}, {"dev": True}])
+    def test_no_pre_build_scripts(self, env: Path, flags: dict[str, Any]):
+        (env / "setup_data.py").write_text("")
+
+        result = self._run(env, task="t", **flags)
+
+        result.pre_build.assert_called_once_with(env.resolve(), [])
+
+    def test_pre_build_and_no_pre_build_conflict(
+        self, env: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        with pytest.raises(typer.Abort):
+            self._run(env, task="t", pre_build=["a.py"], no_pre_build=True)
+
+        assert "--no-pre-build" in capsys.readouterr().err
+
+    def test_forwards_the_other_options_with_absolute_paths(self, env: Path, cwd: Path):
+        (cwd / "data").mkdir()
+        (cwd / "mounts.txt").write_text("# comment\ndata:/b:ro\n")
+
+        result = self._run(
+            env,
+            task="t",
+            containerized=False,
+            runtime="podman",
+            build_context="sub",
+            n_parallel=3,
+            dev=True,
+            mount=["data:/a", "@mounts.txt"],
+            no_ui=True,
+            keep_containers=True,
+            cache_from=["type=local,src=c"],
+            cache_to=["type=local,dest=c"],
+            build_secret=["uv_env=secret.env"],
+            proxy="http://proxy",
+            no_proxy=True,
+            prepare_only=True,
+            model_api_key_file="key.txt",
+        )
+
+        assert result.flags == [
+            "--no-containerized",
+            "--runtime",
+            "podman",
+            "--build-context",
+            "sub",
+            "--n-parallel",
+            "3",
+            "--dev",
+            "--mount",
+            f"{cwd / 'data'}:/a",
+            "--mount",
+            f"{cwd / 'data'}:/b:ro",
+            "--no-ui",
+            "--keep-containers",
+            "--cache-from",
+            "type=local,src=c",
+            "--cache-to",
+            "type=local,dest=c",
+            "--build-secret",
+            f"uv_env={cwd / 'secret.env'}",
+            "--proxy",
+            "http://proxy",
+            "--no-proxy",
+            "--prepare-only",
+            "--model-api-key-file",
+            str(cwd / "key.txt"),
+        ]
+        assert "model_api_key" not in result.config
+
+    def test_a_bad_source_aborts(self, capsys: pytest.CaptureFixture[str]):
+        with pytest.raises(typer.Abort):
+            run(source="no-such-env", task="t", model="m")
+
+        assert "no-such-env" in capsys.readouterr().err
+
+    def test_pre_build_needs_a_source(self, capsys: pytest.CaptureFixture[str]):
+        with pytest.raises(typer.Abort):
+            run(task="t", model="m", pre_build=["a.py"])
+
+        assert "SOURCE" in capsys.readouterr().err
