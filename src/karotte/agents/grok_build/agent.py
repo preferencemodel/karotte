@@ -105,8 +105,8 @@ class GrokBuildAgent(CliAgent):
         student-writable ``GROK_HOME``, where the tool also keeps its sessions.
 
         Model traffic goes through the proxy's OpenAI-compatible route when
-        ``KAROTTE_PROXY_URL`` is set, else through the forwarder to xAI. The
-        run config only allows grok models for this agent. Features that
+        ``KAROTTE_PROXY_URL`` is set, else through the forwarder to xAI.
+        Features that
         call xAI's backend on their own (telemetry, remote model catalog,
         backend web search, media generation) are turned off, and session
         titles use the run's model rather than Grok's default."""
@@ -157,11 +157,8 @@ class GrokBuildAgent(CliAgent):
         flag is ignored for a model without a menu)."""
         spec = spec_for(self._config.model)
         lines: list[str] = []
-        temperature = self._config.temperature
-        if temperature is None:
-            temperature = spec.temperature
-        if temperature is not None:
-            lines.append(f"temperature = {temperature}")
+        if self._config.temperature is not None:
+            lines.append(f"temperature = {self._config.temperature}")
         effort = self._config.applied_reasoning_effort
         if effort is not None:
             options = [

@@ -374,11 +374,8 @@ class BuiltinSource:
             ],
         }
 
-        temperature = self.config.temperature
-        if temperature is None:
-            temperature = spec.temperature
-        if temperature is not None:
-            completion_params["temperature"] = temperature
+        if self.config.temperature is not None:
+            completion_params["temperature"] = self.config.temperature
 
         completion_params.update(
             self._provider.request_params(spec, _provider_auth(self.config))

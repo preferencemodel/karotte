@@ -146,10 +146,10 @@ class TestGrokBuildSampling:
         config: dict[str, Any] = _write_config(tmp_path, monkeypatch, agent)
         return config["model"][model.split("/", 1)[1]]
 
-    def test_sends_fixed_temperature(
+    def test_sends_no_temperature_by_default(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        assert self._model_table(tmp_path, monkeypatch)["temperature"] == 0.7
+        assert "temperature" not in self._model_table(tmp_path, monkeypatch)
 
     def test_sends_the_run_configs_temperature(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -157,16 +157,10 @@ class TestGrokBuildSampling:
         table = self._model_table(tmp_path, monkeypatch, temperature=0.3)
         assert table["temperature"] == 0.3
 
-    def test_effort_defaults_to_high(
+    def test_sends_no_effort_menu_by_default(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        menu = self._model_table(tmp_path, monkeypatch)["reasoning_efforts"]
-        assert menu == [
-            {"value": "low"},
-            {"value": "medium"},
-            {"value": "high", "default": True},
-            {"value": "xhigh"},
-        ]
+        assert "reasoning_efforts" not in self._model_table(tmp_path, monkeypatch)
 
     @pytest.mark.parametrize(
         ("requested", "sent"), [("medium", "medium"), ("min", "low"), ("max", "xhigh")]

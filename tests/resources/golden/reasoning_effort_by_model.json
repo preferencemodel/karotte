@@ -984,10 +984,8 @@
   },
   "xai/grok-4.7": {
     "None": {
-      "sent_by_karotte": "high",
-      "mapped_by_litellm": {
-        "reasoning_effort": "high"
-      }
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
     },
     "min": {
       "sent_by_karotte": "low",
@@ -1004,10 +1002,8 @@
   },
   "xai/grok-4.6": {
     "None": {
-      "sent_by_karotte": "high",
-      "mapped_by_litellm": {
-        "reasoning_effort": "high"
-      }
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
     },
     "min": {
       "sent_by_karotte": "low",

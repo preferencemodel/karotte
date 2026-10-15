@@ -135,7 +135,7 @@ For those runs, set `rubric_judge_model` or pass a model to `RubricJudge` in the
 
 - `"min"` or `"max"`: the model's lowest or highest level, whatever the provider calls it
 - one of the provider's own level names, such as `"medium"`, if the model accepts it
-- `null`: send nothing and use the provider's default, except for grok models, which get `high`
+- `null`: send nothing and use the provider's default
 
 Providers don't agree on what the levels are called or how many there are, so Karotte automatically selects the right level if you pass `min` or `max`.
 `karotte models list` shows available levels per model.
@@ -144,8 +144,7 @@ Providers don't agree on what the levels are called or how many there are, so Ka
 
 `temperature` sets the sampling temperature.
 The run config is rejected if it's set for the `external` agent or for a model that takes no temperature, such as Claude Opus 5.
-
-Unset, Karotte sends none and the agent or provider picks, except for grok models (`xai/`), which get 0.7 from both the builtin agent and `grok-build`.
+Unset, Karotte sends none and the agent or provider picks.
 
 ## Limits
 
@@ -254,11 +253,10 @@ CLI agents differ from `builtin` in a few ways:
 
 `grok-build` specifics:
 
-- It only runs grok models (`xai/`); the run config is rejected for any other model.
 - All steps of a run share one Grok session, so later steps see the earlier conversation.
 - Grok doesn't list MCP tools to the model directly. The model finds the task's tools with `search_tool` and calls them through `use_tool` (as `karotte__<tool>`), and the transcript records those calls as `use_tool`.
 - Grok's web search, image editing, feedback and ask-the-user tools are turned off, along with its telemetry and update checks.
-- It sends temperature 0.7 and `reasoning_effort` (see [Reasoning effort](#reasoning-effort)).
+- It sends `temperature` and `reasoning_effort` when the run config sets them.
 
 ## Fake model
 
