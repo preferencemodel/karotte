@@ -238,10 +238,7 @@ async def _execute_tool_calls(
         assert tool_call.function.name
 
         try:
-            result = await mcp_client.call_tool_mcp(
-                tool_call.function.name,
-                json.loads(tool_call.function.arguments or "{}"),
-            )
+            arguments = json.loads(tool_call.function.arguments or "{}")
         except json.JSONDecodeError:
             # Sanitize the tool call arguments to prevent downstream API errors.
             # Some providers (e.g., TogetherAI) validate JSON in tool_call arguments
@@ -253,6 +250,21 @@ async def _execute_tool_calls(
                 result="Error: Invalid JSON in tool arguments",
                 is_error=True,
             )
+        else:
+            if arguments is None or isinstance(arguments, dict):
+                result = await mcp_client.call_tool_mcp(
+                    tool_call.function.name, arguments
+                )
+            else:
+                # MCP only takes an object (or nothing) as tool arguments, and
+                # rejects anything else before the call reaches the tool.
+                tool_call.function.arguments = json.dumps(
+                    {"_error": "original arguments are not a JSON object"}
+                )
+                result = _build_call_tool_result(
+                    result="Error: Tool arguments must be a JSON object",
+                    is_error=True,
+                )
 
         completed, message = tool_result_events(tool_call.id, result)
         yield completed
