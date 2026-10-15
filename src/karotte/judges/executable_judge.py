@@ -1,3 +1,5 @@
+import codecs
+import io
 import json
 import os
 import select
@@ -5,13 +7,28 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import Final, override
+from typing import Final, TextIO, override
 
 from loguru import logger
 
 from karotte.judges.judge import Judge
 from karotte.schemas.scoring import Scoring
 from karotte.schemas.transcript import Transcript
+
+_HEARTBEAT_INTERVAL_S: Final = 30.0
+"""How long the scoring script can be quiet before a heartbeat is logged, so it
+isn't taken for stuck and killed for a prolonged lack of output."""
+
+_EXIT_CHECK_INTERVAL_S: Final = 1.0
+"""How often to check whether the scoring script has exited while its pipes
+are quiet. A process it started can keep them open after it exits, so their
+EOF can't be what ends scoring."""
+
+_DRAIN_AFTER_EXIT_S: Final = 10.0
+"""The longest the judge reads what's left in the pipes after the script has
+exited, should a process it started keep them full."""
+
+_READ_SIZE: Final = 65536
 
 
 class ExecutableJudge(Judge):
@@ -96,57 +113,8 @@ class ExecutableJudge(Judge):
                     stderr=subprocess.PIPE,
                     text=True,
                 )
-                assert process.stdout is not None
-                assert process.stderr is not None
-                stdout_lines = []
-                stderr_lines = []
-                eval_start_time = time.time()
-
-                while True:
-                    reads = [process.stdout.fileno(), process.stderr.fileno()]
-                    # Timeout on select() so we can emit periodic heartbeat logs,
-                    # preventing the process from being killed due to prolonged
-                    # lack of output.
-                    readable, _, _ = select.select(reads, [], [], 30.0)
-
-                    if not readable:
-                        elapsed = time.time() - eval_start_time
-                        logger.info(
-                            "Scoring process heartbeat: PID={}, elapsed={:.0f}s",
-                            process.pid,
-                            elapsed,
-                        )
-                        continue
-
-                    for fd in readable:
-                        if fd == process.stdout.fileno():
-                            read = process.stdout.readline()
-                            if read:
-                                sys.stdout.write(read)
-                                sys.stdout.flush()
-                                stdout_lines.append(read)
-                        if fd == process.stderr.fileno():
-                            read = process.stderr.readline()
-                            if read:
-                                sys.stderr.write(read)
-                                sys.stderr.flush()
-                                stderr_lines.append(read)
-
-                    if process.poll() is not None:
-                        # Process finished, read any remaining output
-                        for line in process.stdout:
-                            stdout_lines.append(line)
-                            sys.stdout.write(line)
-                            sys.stdout.flush()
-                        for line in process.stderr:
-                            stderr_lines.append(line)
-                            sys.stderr.write(line)
-                            sys.stderr.flush()
-                        break
-
+                stdout, stderr = _read_output(process)
                 return_code = process.wait()
-                stdout = "".join(stdout_lines)
-                stderr = "".join(stderr_lines)
                 if return_code != 0:
                     raise subprocess.CalledProcessError(
                         return_code, self.subprocess_run_args, stdout, stderr
@@ -183,3 +151,90 @@ class ExecutableJudge(Judge):
                 metadata = {"json_read_error": str(e)}
                 continue_task = False
                 return Scoring(score, metadata, continue_task)
+
+
+class _Pipe:
+    """One of the scoring script's output pipes, echoed and collected as text."""
+
+    def __init__(self, stream: io.TextIOWrapper, echo: TextIO) -> None:
+        self.fd: Final = stream.fileno()
+        # Read without blocking: ``select`` only says when to look.
+        os.set_blocking(self.fd, False)
+        # Decode the way reading ``stream`` would: its encoding and errors,
+        # with universal newlines.
+        self._decoder: Final = io.IncrementalNewlineDecoder(
+            codecs.getincrementaldecoder(stream.encoding)(stream.errors or "strict"),
+            translate=True,
+        )
+        self._echo: Final = echo
+        self._parts: Final[list[str]] = []
+        self.at_eof: bool = False
+
+    def read(self) -> bool:
+        """Read what the pipe holds right now. Returns whether there was
+        anything, counting EOF."""
+        if self.at_eof:
+            return False
+        try:
+            chunk = os.read(self.fd, _READ_SIZE)
+        except BlockingIOError:
+            return False
+        self.at_eof = not chunk
+        self._take(self._decoder.decode(chunk, final=self.at_eof))
+        return True
+
+    def text(self) -> str:
+        """Everything read so far."""
+        if not self.at_eof:
+            # Reading stopped before EOF, so the last character may be cut
+            # short: drop its bytes, but keep a pending "\r".
+            _, flag = self._decoder.getstate()
+            self._decoder.setstate((b"", flag))
+            self._take(self._decoder.decode(b"", final=True))
+        return "".join(self._parts)
+
+    def _take(self, text: str) -> None:
+        if text:
+            self._echo.write(text)
+            self._echo.flush()
+            self._parts.append(text)
+
+
+def _read_output(process: subprocess.Popen[str]) -> tuple[str, str]:
+    """Echo and collect the script's stdout and stderr until it has exited.
+
+    Each pipe is read as soon as it holds anything, never a line at a time:
+    waiting for one pipe's newline while the script fills the other would
+    block both for good. Once the script has exited, what it wrote is read and
+    the pipes are left, since a process it started may still hold them open.
+    """
+    assert isinstance(process.stdout, io.TextIOWrapper)
+    assert isinstance(process.stderr, io.TextIOWrapper)
+    stdout = _Pipe(process.stdout, sys.stdout)
+    stderr = _Pipe(process.stderr, sys.stderr)
+    pipes = {stdout.fd: stdout, stderr.fd: stderr}
+    started_at = time.time()
+    quiet_since = time.monotonic()
+
+    while process.poll() is None:
+        fds = [fd for fd, pipe in pipes.items() if not pipe.at_eof]
+        if not fds:
+            break  # Both pipes are closed; only the exit is left to wait for.
+        readable, _, _ = select.select(fds, [], [], _EXIT_CHECK_INTERVAL_S)
+        reads = [pipes[fd].read() for fd in readable]  # every one, not any()
+        if any(reads):
+            quiet_since = time.monotonic()
+        elif time.monotonic() - quiet_since >= _HEARTBEAT_INTERVAL_S:
+            logger.info(
+                "Scoring process heartbeat: PID={}, elapsed={:.0f}s",
+                process.pid,
+                time.time() - started_at,
+            )
+            quiet_since = time.monotonic()
+
+    drain_until = time.monotonic() + _DRAIN_AFTER_EXIT_S
+    while time.monotonic() < drain_until:
+        reads = [pipe.read() for pipe in pipes.values()]  # every one, not any()
+        if not any(reads):
+            break
+    return stdout.text(), stderr.text()
