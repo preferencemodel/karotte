@@ -9,7 +9,6 @@ Steps share one Grok session (created on the first step, resumed after), so a
 later step sees the conversation of the earlier ones, as with the builtin loop.
 """
 
-import json
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -18,7 +17,9 @@ from typing import ClassVar, Literal, final
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     CliAgent,
+    install_release,
     register_cli_agent,
+    toml_string,
 )
 from karotte.agents.grok_build.adapter import parse_line
 from karotte.agents.models import resolve_model
@@ -50,6 +51,7 @@ class GrokBuildAgent(CliAgent):
     binary: ClassVar[str] = _GROK_BIN
     home_dir: ClassVar[str] = ".grok_home"
     home_env: ClassVar[str] = "GROK_HOME"
+    supports_turn_limit: ClassVar[bool] = True
     supports_temperature: ClassVar[bool] = True
     applies_reasoning_effort: ClassVar[bool] = True
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "file"
@@ -61,22 +63,14 @@ class GrokBuildAgent(CliAgent):
 
     @classmethod
     def install(cls) -> list[str]:
-        url = _RELEASE_URL.format(version=cls.version, arch="$arch")
-        checks = " ".join(f"{arch}) sha={sha} ;;" for arch, sha in _SHA256.items())
-        return [
-            f"mkdir -p {AGENTS_BIN_DIR}",
-            (
-                "set -e; "
-                'arch="$(uname -m)"; '
-                'case "$arch" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; esac; '
-                f'case "$arch" in {checks} '
-                '*) echo "grok-build: unsupported arch $arch" >&2; exit 1 ;; esac; '
-                f'curl -fsSL "{url}" | gunzip > {_GROK_BIN}.tmp; '
-                f'echo "$sha  {_GROK_BIN}.tmp" | sha256sum -c -; '
-                f"mv {_GROK_BIN}.tmp {_GROK_BIN}"
-            ),
-            f"chmod 755 {_GROK_BIN}",
-        ]
+        return install_release(
+            cls.name,
+            _RELEASE_URL.format(version=cls.version, arch="$arch"),
+            _SHA256,
+            _GROK_BIN,
+            unpack='gunzip -c "$tmp/download" > "$tmp/bin"',
+            verify_unpacked=True,
+        )
 
     def __init__(self, config: EvaluationRunConfig) -> None:
         super().__init__(config)
@@ -91,7 +85,7 @@ class GrokBuildAgent(CliAgent):
         catalog, backend web search, media generation) are turned off, and
         session titles use the run's model rather than Grok's default."""
         resolved = resolve_model(self._config.model, None)
-        model = _toml(resolved.model)
+        model = toml_string(resolved.model)
         config = (
             "[cli]\n"
             "auto_update = false\n\n"
@@ -113,12 +107,12 @@ class GrokBuildAgent(CliAgent):
             f"session_summary = {model}\n\n"
             f"[model.{model}]\n"
             f"model = {model}\n"
-            f"base_url = {_toml(f'{self.model_url}/v1')}\n"
-            f"env_key = {_toml(_KEY_ENV)}\n"
+            f"base_url = {toml_string(f'{self.model_url}/v1')}\n"
+            f"env_key = {toml_string(_KEY_ENV)}\n"
             'api_backend = "chat_completions"\n'
             f"{self._sampling_config()}\n"
             "[mcp_servers.karotte]\n"
-            f"url = {_toml(self.mcp_url)}\n"
+            f"url = {toml_string(self.mcp_url)}\n"
         )
         return {"config.toml": config}
 
@@ -135,7 +129,7 @@ class GrokBuildAgent(CliAgent):
         effort = self._config.applied_reasoning_effort
         if effort is not None:
             options = [
-                f"{{ value = {_toml(level)}"
+                f"{{ value = {toml_string(level)}"
                 + (", default = true" if level == effort else "")
                 + " }"
                 for level in spec.reasoning_effort_levels
@@ -180,8 +174,3 @@ class GrokBuildAgent(CliAgent):
 
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
         return parse_line
-
-
-def _toml(value: str) -> str:
-    """A TOML basic string; JSON string escaping is valid TOML."""
-    return json.dumps(value)

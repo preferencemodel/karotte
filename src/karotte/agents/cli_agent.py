@@ -9,6 +9,7 @@ configured and invoked; the base class runs it.
 
 import abc
 import asyncio
+import json
 import os
 import shutil
 import signal
@@ -58,6 +59,9 @@ class CliAgent(abc.ABC):
 
     applies_reasoning_effort: ClassVar[bool] = False
     """Whether the tool sends the run config's ``reasoning_effort``."""
+
+    supports_turn_limit: ClassVar[bool] = False
+    """Whether the tool stops a step at the run config's ``turn_limit``."""
 
     provider_url: ClassVar[str]
     """The provider API root, without ``/v1``, the tool calls when there is no
@@ -118,6 +122,10 @@ class CliAgent(abc.ABC):
     @abc.abstractmethod
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
         """Turns line ``i`` of one step's stdout into transcript events."""
+
+    def _output_ended(self) -> Iterable[Event]:
+        """Events the step's parser still holds when the tool's output ends."""
+        return ()
 
     async def start(self, ctx: RunContext) -> None:
         self._ctx = ctx
@@ -291,6 +299,8 @@ class CliAgent(abc.ABC):
                         line_index += 1
                     if timed_out or not chunk:
                         break
+            for event in self._output_ended():
+                yield event
             if not timed_out:
                 try:
                     _ = await asyncio.wait_for(_exited(proc), remaining())
@@ -356,6 +366,51 @@ async def _read_rest(stream: asyncio.StreamReader) -> bytes:
         return await asyncio.wait_for(stream.read(), _DRAIN_TIMEOUT_SECONDS)
     except TimeoutError:
         return b""
+
+
+def toml_string(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False).replace("\x7f", "\\u007f")
+
+
+def install_release(
+    tool: str,
+    url: str,
+    sha256: dict[str, str],
+    target: str,
+    *,
+    arch_names: dict[str, str] | None = None,
+    unpack: str = 'mv "$tmp/download" "$tmp/bin"',
+    verify_unpacked: bool = False,
+) -> list[str]:
+    """Shell commands that install the checksummed release at ``url`` as ``target``.
+
+    ``$arch`` in ``url`` and the keys of ``sha256`` use the release's
+    architecture names, which ``arch_names`` maps from ``x86_64``/``aarch64``."""
+    names = arch_names or {"x86_64": "x86_64", "aarch64": "aarch64"}
+    checks = " ".join(
+        f"{machine}) arch={name}; sha={sha256[name]} ;;"
+        for machine, name in names.items()
+    )
+    verify = (
+        f'echo "$sha  $tmp/{"bin" if verify_unpacked else "download"}" | sha256sum -c -'
+    )
+    steps = [
+        "set -e",
+        'arch="$(uname -m)"',
+        'case "$arch" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; esac',
+        (
+            f'case "$arch" in {checks} '
+            f'*) echo "{tool}: unsupported arch $arch" >&2; exit 1 ;; esac'
+        ),
+        'tmp="$(mktemp -d)"',
+        """trap 'rm -rf "$tmp"' EXIT""",
+        f'curl -fsSL "{url}" -o "$tmp/download"',
+        *([unpack, verify] if verify_unpacked else [verify, unpack]),
+        'chmod 755 "$tmp/bin"',
+        f'mkdir -p "$(dirname {target})"',
+        f'mv "$tmp/bin" {target}',
+    ]
+    return ["; ".join(steps)]
 
 
 _CLI_AGENTS: dict[str, type[CliAgent]] = {}

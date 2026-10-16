@@ -12,7 +12,6 @@ The native log is saved as an artifact elsewhere and remains the source of
 truth, so the events can always be re-derived from it.
 """
 
-import json
 from collections.abc import Iterable, Iterator
 from typing import Any
 
@@ -20,6 +19,7 @@ from litellm import token_counter
 from loguru import logger
 from mcp.types import CallToolResult, TextContent
 
+from karotte.agents.ndjson import parse_json_line
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
     Event,
@@ -71,7 +71,7 @@ class StreamParser:
         self._synthetic_id_count: int = 0
 
     def __call__(self, line: str, i: int) -> Iterator[Event]:
-        record = _parse_line(line, i)
+        record = parse_json_line(line, i, "vibe")
         if record is None:
             return
 
@@ -130,21 +130,6 @@ class StreamParser:
 
         for tool_call in tool_calls:
             yield ToolCallStartedEvent(tool_call=tool_call)
-
-
-def _parse_line(line: str, i: int) -> dict[str, Any] | None:
-    line = line.strip()
-    if not line:
-        return None
-    try:
-        record = json.loads(line)
-    except json.JSONDecodeError:
-        logger.warning("Skipping unparseable vibe NDJSON line {}: {!r}", i, line[:200])
-        return None
-    if not isinstance(record, dict):
-        logger.warning("Skipping non-object vibe NDJSON line {}.", i)
-        return None
-    return record
 
 
 def _parse_tool_call(element: Any, i: int) -> ChatCompletionMessageToolCall | None:

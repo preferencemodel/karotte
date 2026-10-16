@@ -4116,6 +4116,53 @@ class TestTemperatureNeedsAnAgentThatSendsIt:
         _ = EvaluationRunner(config, _NoStepsTask(config))
 
 
+class TestTurnLimitNeedsAnAgentThatEnforcesIt:
+    def _config(
+        self, sample_config: EvaluationRunConfig, **update: Any
+    ) -> EvaluationRunConfig:
+        return sample_config.model_copy(update={"turn_limit": 5, **update})
+
+    @pytest.mark.parametrize(
+        ("agent", "model"),
+        [
+            ("builtin", "claude-opus-5"),
+            ("grok-build", "xai/grok-4.7"),
+            ("mistral-vibe", "mistral/mistral-medium-3.5"),
+            ("claude-code", "claude-opus-5"),
+        ],
+    )
+    def test_accepted_by_agents_that_enforce_it(
+        self, sample_config: EvaluationRunConfig, agent: str, model: str
+    ):
+        config = self._config(sample_config, agent=agent, model=model)
+        _ = EvaluationRunner(config, _NoStepsTask(config))
+
+    @pytest.fixture
+    def no_turns_agent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        agent = type("NoTurns", (CliAgent,), {"name": "no-turns", "home_dir": ".x"})
+        monkeypatch.setattr(agent, "__abstractmethods__", frozenset())
+        monkeypatch.setitem(_CLI_AGENTS, "no-turns", agent)
+
+    @pytest.mark.usefixtures("no_turns_agent")
+    def test_rejected_for_a_cli_agent_that_cant_enforce_it(
+        self, sample_config: EvaluationRunConfig
+    ):
+        config = self._config(sample_config, agent="no-turns", model="mistral/m")
+        with pytest.raises(
+            ValueError, match="turn_limit can't be enforced by the no-turns agent"
+        ):
+            _ = EvaluationRunner(config, _NoStepsTask(config))
+
+    @pytest.mark.usefixtures("no_turns_agent")
+    def test_a_fake_model_run_ignores_the_agent(
+        self, sample_config: EvaluationRunConfig
+    ):
+        config = self._config(
+            sample_config, agent="no-turns", model="mistral/m", use_fake_model=True
+        )
+        _ = EvaluationRunner(config, _NoStepsTask(config))
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_hints", [True, False])
 async def test_task_started_records_use_hints(

@@ -2,9 +2,13 @@
 and per-step process handling, driven by a stand-in tool script."""
 
 import asyncio
+import gzip
+import hashlib
 import stat
+import subprocess
 import sys
 import time
+import tomllib
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import ClassVar, Literal, final
@@ -12,7 +16,12 @@ from typing import ClassVar, Literal, final
 import pytest
 
 from karotte.agents.agent import CliAgentExitedError, StepTimeLimitReachedError
-from karotte.agents.cli_agent import AGENTS_BIN_DIR, CliAgent
+from karotte.agents.cli_agent import (
+    AGENTS_BIN_DIR,
+    CliAgent,
+    install_release,
+    toml_string,
+)
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event, MessageAddedEvent
@@ -45,6 +54,7 @@ class _EchoAgent(CliAgent):
 
     after_output: str = ""
     exit_code: int = 0
+    held: str = ""
 
     @classmethod
     def install(cls) -> list[str]:
@@ -81,6 +91,12 @@ class _EchoAgent(CliAgent):
                 )
 
         return parse
+
+    def _output_ended(self) -> Iterable[Event]:
+        if self.held:
+            yield MessageAddedEvent(
+                message=Message(role="assistant", content=self.held)
+            )
 
 
 def _agent(
@@ -200,6 +216,22 @@ class TestRunStep:
         assert _contents(events) == ["0:hi"]
 
     @pytest.mark.asyncio
+    async def test_time_limit_still_yields_what_the_parser_held(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        agent.after_output = "time.sleep(30)"
+        agent.held = "held"
+        (tmp_path / ".echo" / "gate").touch()
+        events = [
+            e
+            async for e in agent.run_step(
+                "hi", time_limit_seconds=1, on_time_limit="score"
+            )
+        ]
+        assert _contents(events) == ["0:hi", "held"]
+
+    @pytest.mark.asyncio
     async def test_time_limit_applies_after_the_tool_closes_its_output(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
@@ -303,3 +335,52 @@ class TestStepFiles:
         steps = _step_dir(agent)
         await agent.stop()
         assert not steps.exists()
+
+
+class TestTomlString:
+    @pytest.mark.parametrize(
+        "value",
+        ["plain", 'q"uote\\back', "new\nline\ttab", "emoji 😀", "del\x7f", "nul\x00"],
+    )
+    def test_round_trips_through_a_toml_parser(self, value: str):
+        assert tomllib.loads(f"v = {toml_string(value)}")["v"] == value
+
+
+def _install(tmp_path: Path, payload: bytes, sha: str, **kwargs: object) -> Path:
+    release = tmp_path / "release"
+    release.write_bytes(payload)
+    target = tmp_path / "bin" / "tool"
+    script = install_release(
+        "tool",
+        f"file://{release}",
+        dict.fromkeys(("x86_64", "aarch64"), sha),
+        str(target),
+        **kwargs,  # pyright: ignore[reportArgumentType]
+    )
+    for command in script:
+        _ = subprocess.run(command, shell=True, check=True, capture_output=True)
+    return target
+
+
+class TestInstallRelease:
+    def test_installs_a_verified_binary(self, tmp_path: Path):
+        payload = b"#!/bin/sh\necho hi\n"
+        target = _install(tmp_path, payload, hashlib.sha256(payload).hexdigest())
+        assert target.read_bytes() == payload
+        assert stat.S_IMODE(target.stat().st_mode) == 0o755
+
+    def test_refuses_a_download_that_fails_its_checksum(self, tmp_path: Path):
+        with pytest.raises(subprocess.CalledProcessError):
+            _ = _install(tmp_path, b"tampered", "0" * 64)
+        assert not (tmp_path / "bin" / "tool").exists()
+
+    def test_can_verify_the_unpacked_binary(self, tmp_path: Path):
+        binary = b"unpacked"
+        target = _install(
+            tmp_path,
+            gzip.compress(binary),
+            hashlib.sha256(binary).hexdigest(),
+            unpack='gunzip -c "$tmp/download" > "$tmp/bin"',
+            verify_unpacked=True,
+        )
+        assert target.read_bytes() == binary

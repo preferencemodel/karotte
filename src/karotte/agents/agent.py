@@ -78,6 +78,9 @@ class Agent(Protocol):
     applies_reasoning_effort: ClassVar[bool]
     """Whether the agent sends the run config's ``reasoning_effort``."""
 
+    supports_turn_limit: ClassVar[bool]
+    """Whether the agent can stop a step at the run config's ``turn_limit``."""
+
     async def start(self, ctx: RunContext) -> None:
         """Verify/configure the agent for the run."""
         ...
