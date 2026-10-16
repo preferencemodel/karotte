@@ -25,6 +25,7 @@ from karotte.agents.cli_agent import (
     get_cli_agent_type,
     register_cli_agent,
 )
+from karotte.agents.codex import CodexAgent
 from karotte.agents.external import ExternalAgent
 from karotte.agents.fake_source import FakeSource
 from karotte.agents.grok_build import GrokBuildAgent
@@ -41,6 +42,7 @@ __all__ = [
     "ClaudeCodeAgent",
     "CliAgent",
     "CliAgentExitedError",
+    "CodexAgent",
     "EmptyTurnLimitReachedError",
     "ExternalAgent",
     "FakeSource",

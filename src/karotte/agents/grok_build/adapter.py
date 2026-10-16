@@ -21,6 +21,7 @@ from typing import Any
 from loguru import logger
 from mcp.types import CallToolResult, ImageContent, TextContent
 
+from karotte.agents.ndjson import parse_json_line
 from karotte.agents.tool_results import tool_result_events
 from karotte.agents.usage import messages_usage_event
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
@@ -51,7 +52,7 @@ def parse_line(line: str, i: int) -> Iterator[Event]:
     `MessageAddedEvent`. ``system`` and ``result`` lines carry only metadata
     and yield nothing.
     """
-    record = _parse_line(line, i)
+    record = parse_json_line(line, i, "grok")
     if record is None:
         return
     if record.get("parent_tool_use_id") is not None:
@@ -177,18 +178,3 @@ def _result_text(content: Any) -> str:
             if isinstance(block, dict) and block.get("type") == "text"
         )
     return ""
-
-
-def _parse_line(line: str, i: int) -> dict[str, Any] | None:
-    line = line.strip()
-    if not line:
-        return None
-    try:
-        record = json.loads(line)
-    except json.JSONDecodeError:
-        logger.warning("Skipping unparseable grok NDJSON line {}: {!r}", i, line[:200])
-        return None
-    if not isinstance(record, dict):
-        logger.warning("Skipping non-object grok NDJSON line {}.", i)
-        return None
-    return record
