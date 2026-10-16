@@ -179,13 +179,13 @@ A counter has no effect unless its limit is set.
 
 Agents that run a step in their own process can only enforce the limits their CLI supports.
 
-| Limit                              | `builtin`                          | `external` | CLI agents                                |
-| ---------------------------------- | ---------------------------------- | ---------- | ----------------------------------------- |
-| `turn_limit`                       | Yes                                | Yes        | Per step, through the CLI's `--max-turns` |
-| `step_time_limit_seconds`          | Yes                                | Yes        | Yes, by killing the CLI's processes       |
-| `inject_time_remaining_counter`    | Yes                                | Yes        | No                                        |
-| `step_context_window_limit`        | Yes, if the provider reports usage | No         | No                                        |
-| `inject_context_remaining_counter` | Yes, if the provider reports usage | No[^ext]   | No                                        |
+| Limit                              | `builtin`                          | `external` | CLI agents                                                                         |
+| ---------------------------------- | ---------------------------------- | ---------- | ---------------------------------------------------------------------------------- |
+| `turn_limit`                       | Yes                                | Yes        | Per step, through the CLI's `--max-turns`; `codex` has none, so Karotte rejects it |
+| `step_time_limit_seconds`          | Yes                                | Yes        | Yes, by killing the CLI's processes                                                |
+| `inject_time_remaining_counter`    | Yes                                | Yes        | No                                                                                 |
+| `step_context_window_limit`        | Yes, if the provider reports usage | No         | No                                                                                 |
+| `inject_context_remaining_counter` | Yes, if the provider reports usage | No[^ext]   | No                                                                                 |
 
 [^ext]: The external agent doesn't report token usage, so its context counter, if on, always shows the full limit.
 
@@ -195,11 +195,11 @@ The agent produces the student's messages and tool calls for each step.
 Don't confuse it with the model: `model` picks which LLM answers, `agent` picks the harness that calls it.
 Whichever agent you use, Karotte still runs the task's hooks, judges and artifacts.
 
-| Agent      | What it does                                                                                                                                    |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                      |
-| `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).     |
-| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe`, `grok-build` or `claude-code`. |
+| Agent      | What it does                                                                                                                                                            |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                                              |
+| `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).                             |
+| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe`, `grok-build`, `claude-code` or `codex`. |
 
 Set `agent` in the run config:
 
@@ -244,13 +244,14 @@ CLI agents differ from `builtin` in a few ways:
 - They run as the student and call the tool server directly.
   If they bring their own tools, those replace the task's tools that do the same job; their shell replaces `bash`, for example.
 - They send their own system prompt instead of the task's.
-- `reasoning_effort` isn't applied, except by `grok-build` and `claude-code`.
+- `reasoning_effort` isn't applied, except by `grok-build`, `claude-code` and `codex`.
 - The student's firewall only lets them reach localhost and the model proxy.
   Without a proxy (no `--proxy` and no plugin default), Karotte listens on a local port and forwards the agent's model calls from there to the provider, adding the API key itself.
   The agent gets a placeholder key, so the real one never reaches the student.
 - `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or through that forwarder to Mistral's API when there's no proxy.
   `grok-build` does the same with the proxy, or goes through the forwarder to xAI's API without one.
   `claude-code` sends Anthropic-style calls to `<proxy>/v1/messages`, or through the forwarder to Anthropic's API.
+  `codex` sends OpenAI Responses calls to `<proxy>/v1/responses`, or through the forwarder to OpenAI's API.
 
 `grok-build` specifics:
 
@@ -267,6 +268,19 @@ CLI agents differ from `builtin` in a few ways:
 - It sends `reasoning_effort` when the run config sets it.
   It can't send `temperature`, so a run config that sets it is rejected.
 - The transcript's reasoning is Anthropic's summary of the model's thinking; the raw thinking isn't available.
+
+`codex` specifics:
+
+- All steps of a run share one Codex session, so later steps see the earlier conversation.
+- Codex reports what the model did, not each model response.
+  The transcript has one assistant message per group of tool calls Codex runs together, carrying the text and reasoning that came before them, and one token usage entry per step.
+- Its shell, file-editing and image tools replace `bash`, `replace_in_file` and `view_image_file`.
+  The transcript records them as `exec_command` and `apply_patch`, and the task's tools as `mcp__karotte__<tool>`.
+- Codex's hosted web search, telemetry and feedback are turned off.
+  Its own command sandbox is off, since it can't run inside a container; the student's sandbox still applies.
+- It sends `reasoning_effort` when the run config sets it.
+  It can't send `temperature` or stop at `turn_limit`, so a run config that sets either is rejected.
+- The transcript's reasoning is OpenAI's summary of the model's reasoning.
 
 ## Fake model
 

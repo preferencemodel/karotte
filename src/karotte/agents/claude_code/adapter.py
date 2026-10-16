@@ -17,6 +17,7 @@ from typing import Any
 from loguru import logger
 from mcp.types import CallToolResult, ContentBlock, ImageContent, TextContent
 
+from karotte.agents.ndjson import parse_json_line
 from karotte.agents.tool_results import tool_result_events
 from karotte.agents.usage import messages_usage_event
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
@@ -44,7 +45,7 @@ class StreamParser:
         self._held_results: list[Event] = []
 
     def __call__(self, line: str, i: int) -> Iterator[Event]:
-        record = _parse_line(line, i)
+        record = parse_json_line(line, i, "claude")
         if record is None or record.get("parent_tool_use_id") is not None:
             return
         match record.get("type"):
@@ -79,12 +80,19 @@ class StreamParser:
                 if isinstance(usage := event.get("usage"), dict):
                     self._usage.update(usage)
             case "message_stop":
-                yield from _response_events(self._blocks, self._usage)
-                yield from self._held_results
-                self._blocks, self._usage, self._held_results = [], {}, []
-                self._in_response = False
+                yield from self.flush()
             case _:
                 pass
+
+    def flush(self) -> Iterator[Event]:
+        """The response in progress, with the results held for it."""
+        if self._in_response and self._blocks:
+            yield from _response_events(self._blocks, self._usage)
+        elif self._in_response:
+            yield messages_usage_event(self._usage)
+        yield from self._held_results
+        self._blocks, self._usage, self._held_results = [], {}, []
+        self._in_response = False
 
 
 def _response_events(
@@ -174,18 +182,3 @@ def _result_content(content: Any) -> list[ContentBlock]:
 def _message(record: dict[str, Any]) -> dict[str, Any]:
     message = record.get("message")
     return message if isinstance(message, dict) else {}
-
-
-def _parse_line(line: str, i: int) -> dict[str, Any] | None:
-    line = line.strip()
-    if not line:
-        return None
-    try:
-        record = json.loads(line)
-    except json.JSONDecodeError:
-        logger.warning("Skipping unparseable claude line {}: {!r}", i, line[:200])
-        return None
-    if not isinstance(record, dict):
-        logger.warning("Skipping non-object claude line {}.", i)
-        return None
-    return record

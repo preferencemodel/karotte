@@ -33,6 +33,7 @@ class MistralVibeAgent(CliAgent):
     binary: ClassVar[str] = _VIBE_BIN
     home_dir: ClassVar[str] = ".vibe"
     home_env: ClassVar[str] = "VIBE_HOME"
+    supports_turn_limit: ClassVar[bool] = True
     supports_temperature: ClassVar[bool] = True
     # Vibe ships its own shell and file read/edit tools; use those rather than
     # registering karotte's equivalents over MCP.

@@ -73,6 +73,13 @@ class EvaluationRunner:
         ):
             msg = f"temperature can't be applied by the {config.resolved_agent} agent"
             raise ValueError(msg)
+        if (
+            config.turn_limit is not None
+            and not config.use_fake_model
+            and not self._agent.supports_turn_limit
+        ):
+            msg = f"turn_limit can't be enforced by the {config.resolved_agent} agent"
+            raise ValueError(msg)
 
     def _make_agent(self) -> Agent:
         match self.config.resolved_agent:

@@ -54,6 +54,7 @@ class MessageLoopAgent:
     native_tool_names: ClassVar[frozenset[str]] = frozenset()
     supports_temperature: ClassVar[bool] = False
     applies_reasoning_effort: ClassVar[bool] = False
+    supports_turn_limit: ClassVar[bool] = True
 
     def __init__(self, source: MessageSource) -> None:
         self._source: MessageSource = source

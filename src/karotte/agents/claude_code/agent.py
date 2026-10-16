@@ -16,6 +16,7 @@ from karotte.agents.claude_code.adapter import StreamParser
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     CliAgent,
+    install_release,
     register_cli_agent,
 )
 from karotte.agents.models import resolve_model
@@ -51,6 +52,7 @@ class ClaudeCodeAgent(CliAgent):
     home_dir: ClassVar[str] = ".claude_home"
     home_env: ClassVar[str] = "CLAUDE_CONFIG_DIR"
     applies_reasoning_effort: ClassVar[bool] = True
+    supports_turn_limit: ClassVar[bool] = True
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "stdin"
     native_tool_names: ClassVar[frozenset[str]] = frozenset(
         {"bash", "view_lines_in_file", "view_image_file", "replace_in_file"}
@@ -58,26 +60,18 @@ class ClaudeCodeAgent(CliAgent):
 
     @classmethod
     def install(cls) -> list[str]:
-        url = _RELEASE_URL.format(version=cls.version, arch="$arch")
-        checks = " ".join(f"{arch}) sha={sha} ;;" for arch, sha in _SHA256.items())
-        return [
-            f"mkdir -p {AGENTS_BIN_DIR}",
-            (
-                "set -e; "
-                'arch="$(uname -m)"; '
-                'case "$arch" in x86_64|amd64) arch=x64 ;; aarch64) arch=arm64 ;; esac; '
-                f'case "$arch" in {checks} '
-                '*) echo "claude-code: unsupported arch $arch" >&2; exit 1 ;; esac; '
-                f'curl -fsSL "{url}" -o {_CLAUDE_BIN}.tmp; '
-                f'echo "$sha  {_CLAUDE_BIN}.tmp" | sha256sum -c -; '
-                f"mv {_CLAUDE_BIN}.tmp {_CLAUDE_BIN}"
-            ),
-            f"chmod 755 {_CLAUDE_BIN}",
-        ]
+        return install_release(
+            cls.name,
+            _RELEASE_URL.format(version=cls.version, arch="$arch"),
+            _SHA256,
+            _CLAUDE_BIN,
+            arch_names={"x86_64": "x64", "aarch64": "arm64"},
+        )
 
     def __init__(self, config: EvaluationRunConfig) -> None:
         super().__init__(config)
         self._session_id: str = str(uuid.uuid4())
+        self._parser: StreamParser | None = None
 
     def _config_files(self) -> dict[str, str]:
         server = {"type": "http", "url": self.mcp_url}
@@ -127,4 +121,8 @@ class ClaudeCodeAgent(CliAgent):
         return argv
 
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
-        return StreamParser()
+        self._parser = StreamParser()
+        return self._parser
+
+    def _output_ended(self) -> Iterable[Event]:
+        return () if self._parser is None else self._parser.flush()

@@ -133,6 +133,49 @@ class TestClaudeCodeAgent:
         finally:
             await agent.stop()
 
+    def test_end_of_output_keeps_the_unfinished_response_and_its_results(self):
+        agent = _agent()
+        parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+        # Cut after two tool calls have run, before the response's message_stop.
+        for i, line in enumerate(_lines("step_0.ndjson")[:100]):
+            _ = list(parse(line, i))
+        ended = list(agent._output_ended())  # pyright: ignore[reportPrivateUsage]
+        (message,) = _messages(ended, "assistant")
+        assert message.message.content
+        assert message.message.reasoning_content
+        calls = [c.id for c in message.message.tool_calls or []]
+        assert len(calls) == 2
+        assert [
+            e.tool_call.id for e in ended if isinstance(e, ToolCallStartedEvent)
+        ] == calls
+        assert [
+            e.tool_call_id for e in ended if isinstance(e, ToolCallCompletedEvent)
+        ] == calls
+        assert list(agent._output_ended()) == []  # pyright: ignore[reportPrivateUsage]
+
+    def test_end_of_output_before_any_content_keeps_only_the_usage(self):
+        agent = _agent()
+        parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+        start = {
+            "type": "stream_event",
+            "event": {
+                "type": "message_start",
+                "message": {"usage": {"input_tokens": 5}},
+            },
+        }
+        _ = list(parse(json.dumps(start), 0))
+        ended = list(agent._output_ended())  # pyright: ignore[reportPrivateUsage]
+        assert not [e for e in ended if isinstance(e, MessageAddedEvent)]
+        (usage,) = [e for e in ended if isinstance(e, TokenUsageEvent)]
+        assert usage.input_tokens == 5
+
+    def test_end_of_output_after_a_finished_response_adds_nothing(self):
+        agent = _agent()
+        parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+        for i, line in enumerate(_lines("step_0.ndjson")):
+            _ = list(parse(line, i))
+        assert list(agent._output_ended()) == []  # pyright: ignore[reportPrivateUsage]
+
 
 def _messages(events: list[Event], role: str) -> list[MessageAddedEvent]:
     return [
