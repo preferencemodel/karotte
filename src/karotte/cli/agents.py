@@ -24,11 +24,20 @@ def list_agents(
 
     import rich
 
-    from karotte.agents import cli_agent_types
+    from karotte.agents import BuiltinAgent, ExternalAgent, cli_agent_types
 
     agents = [
-        {"name": name, "kind": kind, "version": None, "requires_install": False}
-        for name, kind in (("builtin", "builtin"), ("external", "external"))
+        {
+            "name": name,
+            "kind": name,
+            "version": None,
+            "requires_install": False,
+            "installed": True,
+            "providers": None,
+            "applies_reasoning_effort": agent_type.applies_reasoning_effort,
+            "supports_temperature": agent_type.supports_temperature,
+        }
+        for name, agent_type in (("builtin", BuiltinAgent), ("external", ExternalAgent))
     ]
     agents += [
         {
@@ -36,6 +45,10 @@ def list_agents(
             "kind": "cli",
             "version": agent_type.version,
             "requires_install": True,
+            "installed": agent_type.is_installed(),
+            "providers": [agent_type.provider],
+            "applies_reasoning_effort": agent_type.applies_reasoning_effort,
+            "supports_temperature": agent_type.supports_temperature,
         }
         for name, agent_type in sorted(cli_agent_types().items())
     ]
@@ -46,11 +59,12 @@ def list_agents(
 
     rich.print("Available agents:")
     for agent in agents:
-        detail = (
-            f"CLI agent v{agent['version']}, bake into the image with `karotte build`"
-            if agent["requires_install"]
-            else "usable on any image"
-        )
+        if not agent["requires_install"]:
+            detail = "usable on any image"
+        elif agent["installed"]:
+            detail = f"CLI agent v{agent['version']}, installed"
+        else:
+            detail = f"CLI agent v{agent['version']}, bake into the image with `karotte build`"
         rich.print(f"  [bold]{agent['name']}[/bold] — {detail}")
 
 

@@ -29,6 +29,7 @@ class MistralVibeAgent(CliAgent):
     name: ClassVar[str] = "mistral-vibe"
     version: ClassVar[str] = "2.19.0"
     provider_url: ClassVar[str] = "https://api.mistral.ai"
+    provider: ClassVar[str] = "mistral"
     binary: ClassVar[str] = _VIBE_BIN
     home_dir: ClassVar[str] = ".vibe"
     home_env: ClassVar[str] = "VIBE_HOME"

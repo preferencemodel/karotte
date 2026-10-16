@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from karotte.agents import ClaudeCodeAgent, GrokBuildAgent
 from karotte.cli import app
 from karotte.model_catalog import ModelCatalog
 from karotte.model_spec import (
@@ -86,11 +87,49 @@ class TestAgents:
             "kind": "builtin",
             "version": None,
             "requires_install": False,
+            "installed": True,
+            "providers": None,
+            "applies_reasoning_effort": True,
+            "supports_temperature": True,
         }
         vibe = agents["mistral-vibe"]
         assert vibe["kind"] == "cli"
         assert vibe["requires_install"] is True
         assert isinstance(vibe["version"], str)
+
+    def test_list_json_providers(self):
+        result = runner.invoke(app, ["agents", "list", "--json"])
+        agents = {a["name"]: a for a in json.loads(result.stdout)}
+
+        assert agents["external"]["providers"] is None
+        assert agents["claude-code"]["providers"] == ["anthropic"]
+        assert agents["grok-build"]["providers"] == ["xai"]
+        assert agents["mistral-vibe"]["providers"] == ["mistral"]
+
+    def test_list_json_run_settings(self):
+        result = runner.invoke(app, ["agents", "list", "--json"])
+        agents = {a["name"]: a for a in json.loads(result.stdout)}
+
+        claude = agents["claude-code"]
+        assert claude["applies_reasoning_effort"] is True
+        assert claude["supports_temperature"] is False
+        external = agents["external"]
+        assert external["applies_reasoning_effort"] is False
+        assert external["supports_temperature"] is False
+
+    def test_list_json_installed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        claude = tmp_path / "claude"
+        claude.write_text("#!/bin/sh\n")
+        claude.chmod(0o755)
+        monkeypatch.setattr(ClaudeCodeAgent, "binary", str(claude))
+        monkeypatch.setattr(GrokBuildAgent, "binary", str(tmp_path / "missing"))
+
+        result = runner.invoke(app, ["agents", "list", "--json"])
+        agents = {a["name"]: a for a in json.loads(result.stdout)}
+
+        assert agents["claude-code"]["installed"] is True
+        assert agents["grok-build"]["installed"] is False
+        assert agents["external"]["installed"] is True
 
     def test_add_and_install_are_unchanged(self):
         """`agents install` is baked into every env's Containerfile."""

@@ -46,6 +46,7 @@ class ClaudeCodeAgent(CliAgent):
     name: ClassVar[str] = "claude-code"
     version: ClassVar[str] = "2.1.292"
     provider_url: ClassVar[str] = "https://api.anthropic.com"
+    provider: ClassVar[str] = "anthropic"
     binary: ClassVar[str] = _CLAUDE_BIN
     home_dir: ClassVar[str] = ".claude_home"
     home_env: ClassVar[str] = "CLAUDE_CONFIG_DIR"

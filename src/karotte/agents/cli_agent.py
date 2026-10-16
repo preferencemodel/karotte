@@ -64,6 +64,9 @@ class CliAgent(abc.ABC):
     proxy. It sits outside the student firewall, so the tool reaches it through
     a :class:`ModelForwarder`."""
 
+    provider: ClassVar[str]
+    """The model catalog's name for the provider at :attr:`provider_url`."""
+
     binary: ClassVar[str]
 
     home_dir: ClassVar[str]
@@ -90,6 +93,11 @@ class CliAgent(abc.ABC):
         """Shell commands, run as root at ``karotte build`` time, that install
         the pinned tool so the student user can execute it from
         :data:`AGENTS_BIN_DIR`."""
+
+    @classmethod
+    def is_installed(cls) -> bool:
+        """Whether the tool is installed on this machine or image."""
+        return os.access(cls.binary, os.X_OK)
 
     @abc.abstractmethod
     def _config_files(self) -> dict[str, str]:

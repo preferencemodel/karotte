@@ -37,6 +37,7 @@ class _EchoAgent(CliAgent):
     name: ClassVar[str] = "echo"
     version: ClassVar[str] = "1"
     provider_url: ClassVar[str] = "https://example.invalid"
+    provider: ClassVar[str] = "example"
     binary: ClassVar[str] = f"{AGENTS_BIN_DIR}/echo"
     home_dir: ClassVar[str] = ".echo"
     home_env: ClassVar[str] = "ECHO_HOME"

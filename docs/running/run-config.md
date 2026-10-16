@@ -211,8 +211,8 @@ Set `agent` in the run config:
 }
 ```
 
-`karotte agents list` shows the agents your Karotte version supports, and the version it pins for each CLI agent.
-`--json` prints the list as JSON.
+`karotte agents list` shows the agents your Karotte version supports, the version it pins for each CLI agent, and whether that agent is installed.
+`--json` prints the list as JSON, including the model providers each agent works with (`null` means any) and whether it applies the run config's `reasoning_effort` and `temperature`.
 
 ```sh
 karotte agents list
