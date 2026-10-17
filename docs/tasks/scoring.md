@@ -123,6 +123,57 @@ RegexJudge([re.compile(r"answer: 42")]) & ExecutableJudge([...])
 
 The combined `Scoring` keeps the score and `continue_task` of the judge it returns.
 
+### Weighted rewards with mandatory checks
+
+`WeightedJudge` combines several graders into one reward and can require checks
+to pass before any reward component runs. For example, a code optimization task
+can require correctness before rewarding speed and memory efficiency:
+
+```python
+from karotte.judges import WeightedJudge
+
+WeightedJudge(
+    components={
+        "speed": (speed_judge, 0.7),
+        "memory": (memory_judge, 0.3),
+    },
+    gates={"correctness": correctness_judge},
+    continue_threshold=0.8,
+)
+```
+
+Here the three graders are `Judge` instances, including `ExecutableJudge`,
+`RubricJudge`, or custom judges. The correctness gate must set `continue_task`
+to `False` for an incorrect submission. For a binary `ExecutableJudge`, set its
+`continue_threshold` to `1.0`. A failed gate always gives zero reward and stops
+the task, even if that gate returned a positive score. Remaining gates and all
+components are skipped. Gates are optional; omit them for an ungated reward.
+
+After the gates pass, every component runs, in insertion order. The score is
+`sum(weight * score) / sum(weight)`, so weights need not sum to one. Component
+`continue_task` flags are recorded but do not veto aggregation; use a gate for
+mandatory conditions. The task continues when the combined score is at least
+the required `continue_threshold`.
+
+In the example, speed scoring 0.8 and memory scoring 0.5 produces a reward of
+0.71. A failed correctness gate produces 0 instead. Normalize measurements such
+as time and memory into comparable score scales in your graders, typically
+[0, 1], where zero is an appropriate failure reward for gates. Scores are
+not clamped; weights must be positive and finite, and the threshold, total weight,
+and every child score must be finite. At least one component is required.
+
+The scoring metadata contains named `gates` and `components` dictionaries.
+Each records whether it was evaluated and, when evaluated, its score,
+`continue_task`, and original metadata. Components also record their configured
+weight, normalized weight, and contribution to the final score. Skipped entries
+have `evaluated=False`. The breakdown appears in the transcript and dashboard,
+subject to the usual metadata size limits.
+
+Collect protected submission copies once in `pre_scoring_hook` and pass those
+copies to each file-based grader. Exceptions propagate rather than dropping a
+component and redistributing its weight. `StudentMisbehaviorError` still makes
+the entire step score zero through the normal `Step.score` handling.
+
 ## Writing your own judge
 
 Subclass `Judge` and implement `evaluate`:

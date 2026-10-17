@@ -10,6 +10,7 @@ from karotte.judges.rubric_context import RubricContext as RubricContext
 from karotte.judges.rubric_context import TranscriptContext as TranscriptContext
 from karotte.judges.rubric_judge import RubricCriterion as RubricCriterion
 from karotte.judges.rubric_judge import RubricJudge as RubricJudge
+from karotte.judges.weighted_judge import WeightedJudge as WeightedJudge
 
 __all__ = [
     "Judge",
@@ -18,6 +19,7 @@ __all__ = [
     "RubricJudge",
     "RubricCriterion",
     "ExecutableJudge",
+    "WeightedJudge",
     "RubricContext",
     "AnswersContext",
     "FileContext",
