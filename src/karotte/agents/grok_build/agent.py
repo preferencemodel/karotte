@@ -47,10 +47,10 @@ class GrokBuildAgent(CliAgent):
     name: ClassVar[str] = "grok-build"
     version: ClassVar[str] = "1.0.46"
     provider_url: ClassVar[str] = "https://api.x.ai"
-    provider: ClassVar[str] = "xai"
+    providers: ClassVar[tuple[str, ...]] = ("xai",)
     binary: ClassVar[str] = _GROK_BIN
     home_dir: ClassVar[str] = ".grok_home"
-    home_env: ClassVar[str] = "GROK_HOME"
+    home_env: ClassVar[str | None] = "GROK_HOME"
     supports_turn_limit: ClassVar[bool] = True
     supports_temperature: ClassVar[bool] = True
     applies_reasoning_effort: ClassVar[bool] = True

@@ -8,12 +8,20 @@ the real API key. The agent is handed a placeholder key, so the key never
 reaches the student.
 """
 
+import asyncio
+import json
+import os
+import re
 import socket
-from typing import Final
+from pathlib import Path
+from typing import TYPE_CHECKING, Final
 
 import aiohttp
 from aiohttp import web
 from loguru import logger
+
+if TYPE_CHECKING:
+    from google.auth.credentials import Credentials
 
 _HOP_BY_HOP: Final = frozenset(
     {
@@ -33,6 +41,7 @@ _DROPPED_REQUEST_HEADERS: Final = _HOP_BY_HOP | {
     "content-length",
     "authorization",
     "x-api-key",
+    "x-goog-api-key",
 }
 
 _DROPPED_RESPONSE_HEADERS: Final = _HOP_BY_HOP | {"content-length"}
@@ -48,7 +57,7 @@ class ModelForwarder:
     """
 
     def __init__(self, upstream: str, api_key: str) -> None:
-        self._upstream: str = upstream.rstrip("/")
+        self.upstream: str = upstream.rstrip("/")
         self._api_key: str = api_key
         self._session: aiohttp.ClientSession | None = None
         self._runner: web.AppRunner | None = None
@@ -72,7 +81,7 @@ class ModelForwarder:
         logger.info(
             "Forwarding model calls from {} to {}; the agent gets a placeholder key",
             self.url,
-            self._upstream,
+            self.upstream,
         )
         return self.url
 
@@ -84,24 +93,37 @@ class ModelForwarder:
             await self._session.close()
             self._session = None
 
+    def _target(self, request: web.Request) -> str | None:
+        """Where ``request`` goes upstream, or None to refuse it."""
+        return self.upstream + request.rel_url.path_qs
+
+    async def _auth_headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._api_key}"}
+
     async def _forward(self, request: web.Request) -> web.StreamResponse:
         assert self._session is not None
+        target = self._target(request)
+        if target is None:
+            logger.warning(
+                "Model forwarder refused {} {}", request.method, request.rel_url.path
+            )
+            return web.Response(status=403, text="karotte model forwarder: refused")
         headers = {
             k: v
             for k, v in request.headers.items()
             if k.lower() not in _DROPPED_REQUEST_HEADERS
         }
-        headers["Authorization"] = f"Bearer {self._api_key}"
+        headers.update(await self._auth_headers())
         try:
             upstream = await self._session.request(
                 request.method,
-                self._upstream + request.rel_url.path_qs,
+                target,
                 headers=headers,
                 data=request.content if request.body_exists else None,
                 allow_redirects=False,
             )
         except aiohttp.ClientError as e:
-            logger.warning("Model forwarder could not reach {}: {}", self._upstream, e)
+            logger.warning("Model forwarder could not reach {}: {}", self.upstream, e)
             return web.Response(status=502, text=f"karotte model forwarder: {e}")
 
         async with upstream:
@@ -121,3 +143,89 @@ class ModelForwarder:
                 # it cares about; drop the rest of the upstream response.
                 pass
         return response
+
+
+class GeminiForwarder(ModelForwarder):
+    """Sends the key the way the Gemini API expects it."""
+
+    async def _auth_headers(self) -> dict[str, str]:
+        return {"x-goog-api-key": self._api_key}
+
+
+_GEMINI_API_GENERATE: Final = re.compile(
+    r"/v1beta/models/([\w.-]+):(generateContent|streamGenerateContent)"
+)
+
+
+class VertexForwarder(ModelForwarder):
+    """Turns Gemini API calls into Vertex AI calls, authorized with the
+    harness's own Google credentials."""
+
+    def __init__(
+        self,
+        project: str,
+        location: str,
+        credentials: "Credentials",
+        *,
+        upstream: str | None = None,
+    ) -> None:
+        host = (
+            "https://aiplatform.googleapis.com"
+            if location == "global"
+            else f"https://{location}-aiplatform.googleapis.com"
+        )
+        super().__init__(upstream or host, "")
+        self.project: str = project
+        self.location: str = location
+        self._credentials: Credentials = credentials
+        self._refreshing: asyncio.Lock = asyncio.Lock()
+
+    def _target(self, request: web.Request) -> str | None:
+        """Only content generation: the credentials reach all of Vertex AI."""
+        match = _GEMINI_API_GENERATE.fullmatch(request.rel_url.path)
+        if request.method != "POST" or match is None:
+            return None
+        model, method = match.groups()
+        query = request.rel_url.raw_query_string
+        location = f"/v1/projects/{self.project}/locations/{self.location}"
+        target = f"{self.upstream}{location}/publishers/google/models/{model}:{method}"
+        return f"{target}?{query}" if query else target
+
+    async def _auth_headers(self) -> dict[str, str]:
+        async with self._refreshing:
+            if not self._credentials.valid:
+                from google.auth.transport.requests import Request
+
+                await asyncio.to_thread(self._credentials.refresh, Request())
+        headers: dict[str, str] = {}
+        self._credentials.apply(headers)
+        return headers
+
+
+def vertex_forwarder() -> VertexForwarder:
+    """A forwarder with the credentials, project and location litellm would use
+    for Vertex AI, except that the location defaults to ``global``."""
+    try:
+        import google.auth
+    except ImportError as e:
+        msg = "Vertex AI models need google-auth; install karotte[gcs]."
+        raise RuntimeError(msg) from e
+
+    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+    if raw := os.environ.get("VERTEXAI_CREDENTIALS"):
+        info = json.loads(Path(raw).read_text() if os.path.exists(raw) else raw)
+        credentials, project = google.auth.load_credentials_from_dict(
+            info, scopes=scopes
+        )
+    else:
+        credentials, project = google.auth.default(scopes=scopes)
+    project = os.environ.get("VERTEXAI_PROJECT") or project
+    if not project:
+        msg = "No Google Cloud project for Vertex AI; set VERTEXAI_PROJECT."
+        raise ValueError(msg)
+    location = (
+        os.environ.get("VERTEXAI_LOCATION")
+        or os.environ.get("VERTEX_LOCATION")
+        or "global"
+    )
+    return VertexForwarder(project, location, credentials)

@@ -404,6 +404,42 @@
       "the criterion is met"
     ]
   },
+  "gemini/gemini-4-argon": {
+    "model": "gemini/gemini-4-argon",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "gemini/gemini-3.1-pro-preview": {
+    "model": "gemini/gemini-3.1-pro-preview",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "gemini/gemini-3.8-flash": {
+    "model": "gemini/gemini-3.8-flash",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "gemini/gemini-3.7-flash": {
+    "model": "gemini/gemini-3.7-flash",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
   "xai/grok-4.7": {
     "model": "xai/responses/grok-4.7",
     "max_tokens": 32000,

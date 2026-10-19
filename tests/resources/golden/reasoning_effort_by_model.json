@@ -982,6 +982,104 @@
       }
     }
   },
+  "gemini/gemini-4-argon": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "high",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "high",
+          "includeThoughts": true
+        }
+      }
+    }
+  },
+  "gemini/gemini-3.1-pro-preview": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "high",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "high",
+          "includeThoughts": true
+        }
+      }
+    }
+  },
+  "gemini/gemini-3.8-flash": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        },
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "high",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "high",
+          "includeThoughts": true
+        },
+        "reasoning_effort": "high"
+      }
+    }
+  },
+  "gemini/gemini-3.7-flash": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "high",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "high",
+          "includeThoughts": true
+        }
+      }
+    }
+  },
   "xai/grok-4.7": {
     "None": {
       "sent_by_karotte": null,

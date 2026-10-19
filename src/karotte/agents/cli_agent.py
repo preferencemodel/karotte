@@ -14,7 +14,7 @@ import os
 import shutil
 import signal
 import tempfile
-from collections.abc import AsyncGenerator, Callable, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable, Mapping
 from pathlib import Path
 from typing import ClassVar, Literal
 
@@ -68,16 +68,16 @@ class CliAgent(abc.ABC):
     proxy. It sits outside the student firewall, so the tool reaches it through
     a :class:`ModelForwarder`."""
 
-    provider: ClassVar[str]
-    """The model catalog's name for the provider at :attr:`provider_url`."""
+    providers: ClassVar[tuple[str, ...]]
+    """The model catalog's names for the providers the tool can call."""
 
     binary: ClassVar[str]
 
     home_dir: ClassVar[str]
     """Directory under the student workdir for the tool's config and state."""
 
-    home_env: ClassVar[str]
-    """Env var that points the tool at :attr:`home_dir`."""
+    home_env: ClassVar[str | None] = None
+    """Env var that points the tool at :attr:`home_dir`, if it reads one."""
 
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "argv"
     """How the tool gets each step's instructions: in :meth:`_argv`, from the
@@ -127,13 +127,24 @@ class CliAgent(abc.ABC):
         """Events the step's parser still holds when the tool's output ends."""
         return ()
 
+    def _prompt_text(self, instructions: str) -> str:
+        """What the tool reads from the prompt file."""
+        return instructions
+
+    def _make_forwarder(self) -> ModelForwarder | None:
+        """The forwarder to the provider when there's no proxy; None leaves the
+        tool calling :attr:`provider_url` itself."""
+        if key := self._config.model_api_key:
+            return ModelForwarder(self.provider_url, key)
+        return None
+
     async def start(self, ctx: RunContext) -> None:
         self._ctx = ctx
-        if not os.environ.get("KAROTTE_PROXY_URL") and self._config.model_api_key:
-            self._forwarder = ModelForwarder(
-                self.provider_url, self._config.model_api_key
-            )
-            _ = await self._forwarder.start()
+        if not os.environ.get("KAROTTE_PROXY_URL"):
+            # Making one may block, e.g. to look up cloud credentials.
+            self._forwarder = await asyncio.to_thread(self._make_forwarder)
+            if self._forwarder is not None:
+                _ = await self._forwarder.start()
         self._write_config()
 
     async def stop(self) -> None:
@@ -181,12 +192,13 @@ class CliAgent(abc.ABC):
 
     def _write_config(self) -> None:
         self._home.mkdir(parents=True, exist_ok=True)
-        written = [self._home]
+        written = {self._home}
         for name, content in self._config_files().items():
             path = self._home / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
-            written.append(path)
+            written.update(p for p in path.parents if p.is_relative_to(self._home))
+            written.add(path)
         if (uid := demoted_uid_gid()) is not None:
             for path in written:
                 os.chown(path, uid, uid)
@@ -197,7 +209,8 @@ class CliAgent(abc.ABC):
         env["HOME"] = os.environ.get("KAROTTE_WORKDIR", str(Path.home()))
         env["USER"] = "student"
         env["LOGNAME"] = "student"
-        env[self.home_env] = str(self._home)
+        if self.home_env is not None:
+            env[self.home_env] = str(self._home)
         env.pop("PYTHONSAFEPATH", None)
 
         # sanitize_paths() strips the task venv's bin from PATH; the student needs it back.
@@ -232,7 +245,7 @@ class CliAgent(abc.ABC):
         prompt_path = None
         if self.prompt_input != "argv":
             prompt_path = steps / f"step_{step}.prompt"
-            prompt_path.write_text(instructions)
+            prompt_path.write_text(self._prompt_text(instructions))
             prompt_path.chmod(0o644)
         argv = self._argv(instructions, prompt_path)
         parse = self._line_parser(instructions)
@@ -374,7 +387,7 @@ def toml_string(value: str) -> str:
 
 def install_release(
     tool: str,
-    url: str,
+    url: str | Mapping[str, str],
     sha256: dict[str, str],
     target: str,
     *,
@@ -384,11 +397,13 @@ def install_release(
 ) -> list[str]:
     """Shell commands that install the checksummed release at ``url`` as ``target``.
 
-    ``$arch`` in ``url`` and the keys of ``sha256`` use the release's
-    architecture names, which ``arch_names`` maps from ``x86_64``/``aarch64``."""
+    ``$arch`` in ``url``, the keys of ``url`` when it differs per architecture,
+    and the keys of ``sha256`` use the release's architecture names, which
+    ``arch_names`` maps from ``x86_64``/``aarch64``."""
     names = arch_names or {"x86_64": "x86_64", "aarch64": "aarch64"}
+    urls = {name: url if isinstance(url, str) else url[name] for name in names.values()}
     checks = " ".join(
-        f"{machine}) arch={name}; sha={sha256[name]} ;;"
+        f'{machine}) arch={name}; url="{urls[name]}"; sha={sha256[name]} ;;'
         for machine, name in names.items()
     )
     verify = (
@@ -404,7 +419,7 @@ def install_release(
         ),
         'tmp="$(mktemp -d)"',
         """trap 'rm -rf "$tmp"' EXIT""",
-        f'curl -fsSL "{url}" -o "$tmp/download"',
+        'curl -fsSL "$url" -o "$tmp/download"',
         *([unpack, verify] if verify_unpacked else [verify, unpack]),
         'chmod 755 "$tmp/bin"',
         f'mkdir -p "$(dirname {target})"',

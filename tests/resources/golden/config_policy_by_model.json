@@ -224,6 +224,26 @@
     "is_special_training_model": false,
     "api_key_required": false
   },
+  "gemini/gemini-4-argon": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "gemini/gemini-3.1-pro-preview": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "gemini/gemini-3.8-flash": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "gemini/gemini-3.7-flash": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
   "xai/grok-4.7": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,

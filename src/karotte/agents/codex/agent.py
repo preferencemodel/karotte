@@ -40,10 +40,10 @@ class CodexAgent(CliAgent):
     name: ClassVar[str] = "codex"
     version: ClassVar[str] = "0.162.1"
     provider_url: ClassVar[str] = "https://api.openai.com"
-    provider: ClassVar[str] = "openai"
+    providers: ClassVar[tuple[str, ...]] = ("openai",)
     binary: ClassVar[str] = _CODEX_BIN
     home_dir: ClassVar[str] = ".codex_home"
-    home_env: ClassVar[str] = "CODEX_HOME"
+    home_env: ClassVar[str | None] = "CODEX_HOME"
     applies_reasoning_effort: ClassVar[bool] = True
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "stdin"
     native_tool_names: ClassVar[frozenset[str]] = frozenset(

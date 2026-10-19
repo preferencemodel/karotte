@@ -299,6 +299,38 @@
     "env": {},
     "key_env": null
   },
+  "gemini/gemini-4-argon": {
+    "provider": "gemini",
+    "model": "gemini-4-argon",
+    "env": {
+      "GEMINI_API_KEY": "test_key"
+    },
+    "key_env": "GEMINI_API_KEY"
+  },
+  "gemini/gemini-3.1-pro-preview": {
+    "provider": "gemini",
+    "model": "gemini-3.1-pro-preview",
+    "env": {
+      "GEMINI_API_KEY": "test_key"
+    },
+    "key_env": "GEMINI_API_KEY"
+  },
+  "gemini/gemini-3.8-flash": {
+    "provider": "gemini",
+    "model": "gemini-3.8-flash",
+    "env": {
+      "GEMINI_API_KEY": "test_key"
+    },
+    "key_env": "GEMINI_API_KEY"
+  },
+  "gemini/gemini-3.7-flash": {
+    "provider": "gemini",
+    "model": "gemini-3.7-flash",
+    "env": {
+      "GEMINI_API_KEY": "test_key"
+    },
+    "key_env": "GEMINI_API_KEY"
+  },
   "xai/grok-4.7": {
     "provider": "xai",
     "model": "grok-4.7",

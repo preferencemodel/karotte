@@ -1039,6 +1039,104 @@
       "extra_allowed_openai_params": []
     },
     {
+      "model": "gemini/gemini-4-argon",
+      "model_display_name": "Gemini 4 Argon",
+      "provider": "gemini",
+      "provider_display_name": "Google",
+      "litellm_model": "gemini/gemini-4-argon",
+      "max_output_tokens": 1048576,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "gemini/gemini-3.1-pro-preview",
+      "model_display_name": "Gemini 3.1 Pro Preview",
+      "provider": "gemini",
+      "provider_display_name": "Google",
+      "litellm_model": "gemini/gemini-3.1-pro-preview",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "gemini/gemini-3.8-flash",
+      "model_display_name": "Gemini 3.8 Flash",
+      "provider": "gemini",
+      "provider_display_name": "Google",
+      "litellm_model": "gemini/gemini-3.8-flash",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
+      "model": "gemini/gemini-3.7-flash",
+      "model_display_name": "Gemini 3.7 Flash",
+      "provider": "gemini",
+      "provider_display_name": "Google",
+      "litellm_model": "gemini/gemini-3.7-flash",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "high",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "reasoning_request": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
       "model": "xai/grok-4.7",
       "model_display_name": "Grok 4.7",
       "provider": "xai",

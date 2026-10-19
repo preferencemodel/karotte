@@ -37,6 +37,7 @@ dev = [
 ]
 
 test = [
+  "karotte[gcs]",
   "pytest>=8.4.1",
   "pytest-randomly>=3.16.0",
   "pytest-xdist",

@@ -1440,6 +1440,123 @@
       "includeThoughts": true
     }
   },
+  "gemini/gemini-4-argon": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "gemini/gemini-4-argon",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 1048576,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "api_base": "https://proxy.example/v1",
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
+  "gemini/gemini-3.1-pro-preview": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "gemini/gemini-3.1-pro-preview",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "api_base": "https://proxy.example/v1",
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
+  "gemini/gemini-3.8-flash": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "gemini/gemini-3.8-flash",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "api_base": "https://proxy.example/v1",
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
+  "gemini/gemini-3.7-flash": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "gemini/gemini-3.7-flash",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "api_base": "https://proxy.example/v1",
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
   "xai/grok-4.7": {
     "stream": true,
     "stream_options": {

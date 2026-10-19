@@ -4,14 +4,17 @@ and per-step process handling, driven by a stand-in tool script."""
 import asyncio
 import gzip
 import hashlib
+import platform
 import stat
 import subprocess
 import sys
+import threading
 import time
 import tomllib
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import ClassVar, Literal, final
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -22,6 +25,8 @@ from karotte.agents.cli_agent import (
     install_release,
     toml_string,
 )
+from karotte.model_forwarder import GeminiForwarder
+from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event, MessageAddedEvent
@@ -46,10 +51,10 @@ class _EchoAgent(CliAgent):
     name: ClassVar[str] = "echo"
     version: ClassVar[str] = "1"
     provider_url: ClassVar[str] = "https://example.invalid"
-    provider: ClassVar[str] = "example"
+    providers: ClassVar[tuple[str, ...]] = ("example",)
     binary: ClassVar[str] = f"{AGENTS_BIN_DIR}/echo"
     home_dir: ClassVar[str] = ".echo"
-    home_env: ClassVar[str] = "ECHO_HOME"
+    home_env: ClassVar[str | None] = "ECHO_HOME"
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "file"
 
     after_output: str = ""
@@ -156,6 +161,83 @@ class TestHomeAndEnv:
         assert env["ECHO_TELEMETRY"] == "0"
         assert env["ECHO_API_KEY"] == "sk-real"
         assert AGENTS_BIN_DIR in env["PATH"].split(":")
+
+    def test_the_student_owns_every_config_dir_and_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            agent, "_config_files", lambda: {"a/b/settings.json": "{}", "c.toml": ""}
+        )
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: 1000)
+        owned: list[Path] = []
+        monkeypatch.setattr(
+            "karotte.agents.cli_agent.os.chown",
+            lambda path, uid, gid: owned.append(Path(path)),  # pyright: ignore[reportUnknownLambdaType]
+        )
+        agent._write_config()  # pyright: ignore[reportPrivateUsage]
+        home = tmp_path / ".echo"
+        assert set(owned) == {
+            home,
+            home / "a",
+            home / "a" / "b",
+            home / "a" / "b" / "settings.json",
+            home / "c.toml",
+        }
+
+    def test_a_tool_without_a_home_env_gets_none(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(agent, "home_env", None)
+        env = agent._env()  # pyright: ignore[reportPrivateUsage]
+        assert "ECHO_HOME" not in env
+        assert all(isinstance(name, str) for name in env)
+
+
+class TestForwarder:
+    @pytest.mark.asyncio
+    async def test_without_a_proxy_the_agent_picks_the_forwarder(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        own = GeminiForwarder("https://example.invalid", "sk-real")
+        monkeypatch.setattr(agent, "_make_forwarder", lambda: own)
+        await agent.start(MagicMock())
+        try:
+            assert agent.model_url == own.url
+            assert own.url.startswith("http://127.0.0.1:")
+            env = agent._env()  # pyright: ignore[reportPrivateUsage]
+            assert env["ECHO_API_KEY"] == PROXY_PLACEHOLDER_KEY
+        finally:
+            await agent.stop()
+
+    @pytest.mark.asyncio
+    async def test_with_a_proxy_there_is_no_forwarder(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://proxy:4000/")
+        made: list[object] = []
+        monkeypatch.setattr(agent, "_make_forwarder", lambda: made.append(1))
+        await agent.start(MagicMock())
+        await agent.stop()
+        assert made == []
+        assert agent.model_url == "http://proxy:4000"
+
+    @pytest.mark.asyncio
+    async def test_the_forwarder_is_made_off_the_event_loop(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        threads: list[int] = []
+        monkeypatch.setattr(
+            agent, "_make_forwarder", lambda: threads.append(threading.get_ident())
+        )
+        await agent.start(MagicMock())
+        await agent.stop()
+        assert threads
+        assert threads != [threading.get_ident()]
 
 
 class TestRunStep:
@@ -326,6 +408,21 @@ class TestStepFiles:
         assert _contents(events) == ["0:from", "1:stdin"]
 
     @pytest.mark.asyncio
+    async def test_the_agent_can_wrap_the_prompt_it_reads(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(agent, "prompt_input", "stdin")
+
+        def wrap(text: str) -> str:
+            return f"<{text}>"
+
+        monkeypatch.setattr(agent, "_prompt_text", wrap)
+        (tmp_path / ".echo" / "gate").touch()
+        events = [e async for e in agent.run_step("hi")]
+        assert _contents(events) == ["0:<hi>"]
+
+    @pytest.mark.asyncio
     async def test_stop_removes_them(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
@@ -384,3 +481,23 @@ class TestInstallRelease:
             verify_unpacked=True,
         )
         assert target.read_bytes() == binary
+
+    def test_downloads_each_architectures_own_url(self, tmp_path: Path):
+        payloads = {"x86_64": b"x86 build", "aarch64": b"arm build"}
+        urls: dict[str, str] = {}
+        for arch, payload in payloads.items():
+            (tmp_path / arch).write_bytes(payload)
+            urls[arch] = f"file://{tmp_path / arch}"
+        target = tmp_path / "bin" / "tool"
+        script = install_release(
+            "tool",
+            urls,
+            {arch: hashlib.sha256(p).hexdigest() for arch, p in payloads.items()},
+            str(target),
+        )
+        for command in script:
+            _ = subprocess.run(command, shell=True, check=True, capture_output=True)
+        machine = {"arm64": "aarch64", "amd64": "x86_64"}.get(
+            platform.machine(), platform.machine()
+        )
+        assert target.read_bytes() == payloads[machine]

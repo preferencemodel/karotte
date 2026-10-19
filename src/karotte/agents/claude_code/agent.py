@@ -47,10 +47,10 @@ class ClaudeCodeAgent(CliAgent):
     name: ClassVar[str] = "claude-code"
     version: ClassVar[str] = "2.1.292"
     provider_url: ClassVar[str] = "https://api.anthropic.com"
-    provider: ClassVar[str] = "anthropic"
+    providers: ClassVar[tuple[str, ...]] = ("anthropic",)
     binary: ClassVar[str] = _CLAUDE_BIN
     home_dir: ClassVar[str] = ".claude_home"
-    home_env: ClassVar[str] = "CLAUDE_CONFIG_DIR"
+    home_env: ClassVar[str | None] = "CLAUDE_CONFIG_DIR"
     applies_reasoning_effort: ClassVar[bool] = True
     supports_turn_limit: ClassVar[bool] = True
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "stdin"

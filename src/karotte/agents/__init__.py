@@ -15,6 +15,7 @@ from karotte.agents.agent import (
     RunContext,
     TurnLimitReachedError,
 )
+from karotte.agents.agy import AgyAgent
 from karotte.agents.backend_source import EXTERNAL_MESSAGE_TIMEOUT_S, BackendSource
 from karotte.agents.builtin import BuiltinAgent
 from karotte.agents.builtin_source import BuiltinSource
@@ -34,6 +35,7 @@ from karotte.agents.message_source import MessageSource
 from karotte.agents.mistral_vibe import MistralVibeAgent
 
 __all__ = [
+    "AgyAgent",
     "EXTERNAL_MESSAGE_TIMEOUT_S",
     "Agent",
     "BackendSource",

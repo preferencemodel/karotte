@@ -46,7 +46,7 @@ def list_agents(
             "version": agent_type.version,
             "requires_install": True,
             "installed": agent_type.is_installed(),
-            "providers": [agent_type.provider],
+            "providers": list(agent_type.providers),
             "applies_reasoning_effort": agent_type.applies_reasoning_effort,
             "supports_temperature": agent_type.supports_temperature,
         }

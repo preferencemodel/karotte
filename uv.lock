@@ -1310,6 +1310,7 @@ gcs = [
     { name = "google-cloud-storage" },
 ]
 test = [
+    { name = "google-cloud-storage" },
     { name = "pillow" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1332,6 +1333,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "karotte", extras = ["gcs"], marker = "extra == 'dev'" },
+    { name = "karotte", extras = ["gcs"], marker = "extra == 'test'" },
     { name = "karotte", extras = ["test"], marker = "extra == 'dev'" },
     { name = "litellm", specifier = ">=1.104.0" },
     { name = "loguru", specifier = ">=0.7.3" },
