@@ -3,6 +3,7 @@
 import os
 import shlex
 import subprocess
+import sys
 from collections.abc import Sequence
 from shutil import which
 from typing import Never
@@ -15,6 +16,14 @@ from karotte.runtime import Runtime, get_engine, image_name
 
 def require_runtime(runtime: Runtime) -> None:
     """Exit with a one-line error if the runtime's binary isn't on PATH."""
+    if runtime == "modal":
+        from karotte.modal_runtime import INSTALL_HINT, modal_installed
+
+        if not modal_installed():
+            _exit_with_error(
+                f"The modal runtime needs the Modal client. {INSTALL_HINT}"
+            )
+        return
     engine = get_engine(runtime)
     if which(engine) is None:
         alternative = "docker" if engine != "docker" else "podman"
@@ -29,6 +38,8 @@ def require_builder(runtime: Runtime) -> None:
     docker needs buildx for `RUN --mount`; nerdctl builds through BuildKit's
     `buildctl`.
     """
+    if runtime == "modal":
+        return
     engine = get_engine(runtime)
     if engine == "docker" and not _buildx_available():
         _exit_with_error(
@@ -92,6 +103,18 @@ def get_container_build_command(
     Each ``build_secrets`` entry is ``name=path``, mounted in the build as
     ``/run/secrets/<name>``.
     """
+    if runtime == "modal":
+        if build_secrets:
+            raise typer.BadParameter(
+                "The modal runtime doesn't take build secrets yet.",
+                param_hint="--build-secret",
+            )
+        if cache_from or cache_to:
+            logger.warning(
+                "Modal caches image layers itself; ignoring the build cache options"
+            )
+        return [sys.executable, "-m", "karotte.modal_runtime", "build", build_context]
+
     secret_flags = [_secret_flag(s) for s in build_secrets]
     tag = tag or image_name()
 

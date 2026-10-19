@@ -925,7 +925,7 @@ def _run_containerized_worker(
     """Run a single containerized evaluation run. Must be a module-level function for pickling."""
     # Write output to log file that can be tailed
     log_file = Path(f"/tmp/karotte_run_{run_config.run_id}.log")
-    if runtime == "firecracker":
+    if runtime in ("firecracker", "modal"):
         run_containerized(
             run_config,
             runtime,

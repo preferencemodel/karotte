@@ -16,6 +16,10 @@ uv run karotte run --config run_config.json
    Karotte checks that the runtime is installed and set up before it goes any further.
    An explicit `--runtime` is checked before step 1, since it doesn't depend on the task.
 3. **Split parallel runs.** With `-n N`, run `i` gets the run id `<run_id>-<i>`, the transcript file `<name>_<i>.json`, and the websocket port plus `i`.
+   `--websocket-port` sets the first run's port.
+   If one of the ports is already taken, for example by another `karotte run`, Karotte stops before the build.
+   Give separate `karotte run` commands that run at the same time different ports.
+   `apple-container` moves a run to a free port instead.
 4. **Build the image** and tag it `karotte`.
    `--dev` skips this step; see [Development loop](development-loop.md).
 5. **Remove leftover containers** from earlier runs.
@@ -29,6 +33,7 @@ uv run karotte run --config run_config.json
 
     The directory that contains `transcript_file` is mounted into the sandbox, so the transcript and the artifacts end up next to each other on your machine.
     On `firecracker`, that directory goes into the VM on a drive and comes back out after the VM shuts down.
+    On `modal`, the sandbox's `/out` is copied back into it when the run ends.
     The websocket port is published to your machine.
 
 7. **Show progress.** The terminal UI connects to each run's websocket and shows its events as they happen.

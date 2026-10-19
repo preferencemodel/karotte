@@ -222,6 +222,17 @@ def run_containerized(
         )
         return
 
+    if runtime == "modal":
+        from karotte.modal_runtime import run_modal
+
+        run_modal(
+            run_config,
+            log_file=log_file,
+            build_context=build_context,
+            proxy_url=proxy_url,
+        )
+        return
+
     run_command, _ = get_container_run_command(
         run_config,
         runtime,
@@ -663,6 +674,18 @@ def common_run_id_prefix(run_ids: list[str]) -> str:
     return prefix
 
 
+def ports_in_use(ports: list[int]) -> list[int]:
+    """The ``ports`` something already listens on at 127.0.0.1."""
+    taken: list[int] = []
+    for port in ports:
+        with socket.socket() as s:
+            try:
+                s.bind(("127.0.0.1", port))
+            except OSError:
+                taken.append(port)
+    return taken
+
+
 def copy_hint(runtime: Runtime, run_id: str) -> str:
     """How to copy a kept container's workdir to the host."""
     if runtime == "apple-container":
@@ -695,6 +718,12 @@ def stop_containers(runtime: Runtime, run_ids: list[str]) -> None:
         from karotte.firecracker.vm import stop_vms
 
         stop_vms(run_ids)
+        return
+
+    if runtime == "modal":
+        from karotte.modal_runtime import stop_sandboxes
+
+        stop_sandboxes(run_ids)
         return
 
     names = [f"karotte_run_{run_id}" for run_id in run_ids]
@@ -732,6 +761,12 @@ def clean_up_old_containers(runtime: Runtime, run_ids: list[str]) -> None:
         from karotte.firecracker.vm import clean_up_vms
 
         clean_up_vms(prefix)
+        return
+
+    if runtime == "modal":
+        from karotte.modal_runtime import clean_up_sandboxes
+
+        clean_up_sandboxes(prefix)
         return
 
     engine = _engine_command(runtime)

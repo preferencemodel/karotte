@@ -8,6 +8,7 @@ Pick one with `--runtime` on `karotte run` and `karotte build`:
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `apple-container`             | A VM per run through Apple's [`container`](https://github.com/apple/container).                          |
 | `firecracker`                 | A [Firecracker](https://firecracker-microvm.github.io/) microVM per run. The image is built with docker. |
+| `modal`                       | A [Modal](https://modal.com/) VM sandbox per run, in the cloud. The image is built on Modal.             |
 | `docker`, `podman`, `nerdctl` | A container on the host kernel, under the engine's default OCI runtime (usually runc).                   |
 | `docker:gvisor`               | A docker container under [gVisor](https://gvisor.dev/), which runs its own kernel in user space.         |
 
@@ -23,15 +24,15 @@ If you don't pass `--runtime`, Karotte uses your platform's VM, so the student g
 
 `karotte run` logs which runtime it picked.
 If your machine can run the VM but it isn't set up yet, Karotte stops before the run and tells you what's missing and how to fix it.
-It never switches to a container on its own.
-Pass `--runtime docker` (or `podman`) if you want one.
+Pass `--runtime modal` to run in a VM on [Modal](https://modal.com/) (see [its setup](#modal)).
+Pass `--runtime docker` (or `podman`) if you want to run in a container instead of a VM.
 
 Tasks that need devices passed through, such as a GPU, run under docker.
 A [plugin](../extending/plugins.md) marks that hardware `passthrough` in `karotte.hardware_limits` and adds the device flags through `karotte.container_run_args`.
 
 ## Setup
 
-### apple-container
+### Apple Container
 
 Install Apple's [`container`](https://github.com/apple/container/releases) (1.4.1 or later) and start its service:
 
@@ -47,7 +48,7 @@ Images that only have an amd64 variant run under Rosetta.
 `--mount` paths aren't shared live.
 They're copied into the VM when the run starts, and read-write ones are copied back when it ends.
 
-### firecracker
+### Firecracker
 
 You need:
 
@@ -80,6 +81,41 @@ The guest can't reach a model proxy running on the same machine, only one runnin
 Use `--runtime docker` if your proxy runs locally.
 
 The VM can't share a writable directory with the host, so `firecracker` only accepts read-only mounts (`--mount source:target:ro`).
+
+### Modal
+
+Add the Modal client to the environment and log in:
+
+```sh
+uv add 'karotte[modal]'
+modal token new
+```
+
+Karotte uses your Modal profile's environment, or the one `MODAL_ENVIRONMENT` names.
+
+`karotte build --runtime modal` builds the image on Modal from the `Containerfile`, and Modal caches its layers.
+Modal's builder requires a few changes to the `Containerfile` before the build:
+
+- dnf installs packages without file capabilities, which Modal's builder can't set.
+- A `COPY` of a folder that holds only files the `.dockerignore` leaves out (such as a `.gitkeep`) still creates the folder, empty.
+
+Modal ignores `USER` instructions and `RUN --mount=type=secret`, and Karotte doesn't take `--build-secret` for Modal yet.
+
+Each run gets its own sandbox under Modal's VM runtime, in a Modal app named `karotte`.
+Karotte terminates the sandbox when the run ends, including on Ctrl-C.
+If Karotte itself dies, the sandbox shuts down 5 minutes after the run inside it ends, and after 24 hours at most.
+
+The run reads its config from a file in the sandbox, so the API key isn't on any command line.
+The terminal UI reaches the run's websocket through a Modal connect token, so nobody without the token can read the run's events.
+When the run ends, Karotte copies `/out` back next to the transcript, keeping only regular files and directories.
+
+Model calls go out from the sandbox, so a model proxy has to be on a public address.
+Karotte refuses a proxy on localhost or a private address.
+
+Modal doesn't filter the network around the sandbox the way `firecracker` does on the host, so only the student firewall inside the sandbox applies.
+
+The `modal` runtime doesn't support `--mount`, `--dev`, `--keep-containers` or `--prepare-only` yet.
+It can't run hardware a plugin marks `passthrough`, such as a GPU, because Modal's VM runtime has no GPUs.
 
 ### docker, podman, nerdctl
 
@@ -122,6 +158,7 @@ The student's memory limit is the sandbox's memory minus 1 GiB, which is kept fo
 The VM itself gets 1 GiB more than the sandbox's memory, for the guest kernel and page cache.
 So without a plugin, the student has a 3 GiB limit inside a 5 GiB VM.
 `apple-container` won't start a VM that's larger than your machine's RAM.
+On `modal`, the sandbox's root filesystem is 512 GiB.
 
 The student's disk budget is 80% of the host's free disk space, capped at the plugin's disk budget if it sets one.
 With `karotte run -n N`, that budget is split evenly between the N runs.
@@ -130,7 +167,7 @@ See [Student resources](student-resources.md) for how these limits are enforced.
 
 ## What each runtime gives the student
 
-|                                                      | `apple-container`, `firecracker`                                            | `docker`/`podman`/`nerdctl` (runc)                                                  | `docker:gvisor`                                                                     |
+|                                                      | `apple-container`, `firecracker`, `modal`                                   | `docker`/`podman`/`nerdctl` (runc)                                                  | `docker:gvisor`                                                                     |
 | ---------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Memory limit                                         | Enforced by the kernel (cgroup)                                             | None by default. Watchdog if a plugin or `KAROTTE_SANDBOX_MEMORY_BYTES` sets a size | None by default. Watchdog if a plugin or `KAROTTE_SANDBOX_MEMORY_BYTES` sets a size |
 | Process limit                                        | Enforced by the kernel (cgroup)                                             | Watchdog                                                                            | Watchdog                                                                            |

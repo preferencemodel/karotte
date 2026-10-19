@@ -39,6 +39,7 @@ from karotte.run_helpers import (
     harden_filesystem,
     key_env_var,
     parse_config,
+    ports_in_use,
     run_containerized,
     sanitize_paths_and_reexec,
     stop_containers,
@@ -206,6 +207,15 @@ def run(
             help="Number of parallel runs. Can only be >1 when running containerized.",
         ),
     ] = 1,
+    websocket_port: Annotated[
+        int | None,
+        typer.Option(
+            metavar="PORT",
+            help="Websocket port of the first run; parallel runs count up from it. "
+            + "Overrides the port in the run config. "
+            + "Give separate `karotte run` commands that run at the same time different ports.",
+        ),
+    ] = None,
     dev: Annotated[
         bool,
         typer.Option(
@@ -327,6 +337,7 @@ def run(
                 runtime=runtime,
                 build_context=build_context,
                 n_parallel=n_parallel,
+                websocket_port=websocket_port,
                 dev=dev,
                 mount=mount or [],
                 no_ui=no_ui,
@@ -404,6 +415,14 @@ def run(
 
     run_config = parse_config(config, prepare_only=prepare_only)
     run_config = apply_run_config_preprocessors(run_config)
+    if websocket_port is not None:
+        run_config = run_config.model_copy(
+            update={
+                "websocket_config": run_config.websocket_config.model_copy(
+                    update={"port": websocket_port}
+                )
+            }
+        )
 
     if runtime is None:
         runtime = default_runtime(
@@ -432,6 +451,19 @@ def run(
         from karotte.firecracker.preflight import validate_firecracker_runtime
 
         validate_firecracker_runtime(load_task(run_config).required_hardware, mount)
+    if runtime == "modal" and containerized and not is_containerized():
+        from karotte.modal_runtime import modal_problems
+
+        problems = modal_problems(
+            required_hardware=load_task(run_config).required_hardware,
+            mounts=mount,
+            dev=dev,
+            keep_containers=keep_containers,
+            prepare_only=prepare_only,
+            proxy_url=proxy_url,
+        )
+        if problems:
+            _print_and_abort("\n".join(problems))
 
     if run_config.resolved_rubric_judge_model is not None:
         RubricJudge.default_model = run_config.resolved_rubric_judge_model
@@ -476,6 +508,12 @@ def run(
         from karotte.apple_container import assign_host_ports
 
         run_configs = assign_host_ports(run_configs)
+    elif not prepare_only:
+        if taken := ports_in_use([c.websocket_config.port for c in run_configs]):
+            _print_and_abort(
+                f"Port {', '.join(map(str, taken))} is in use, maybe by another `karotte run`. "
+                + "Pass --websocket-port to use other ports."
+            )
 
     if n_parallel > 1 and mount:
         writable_mounts = [m for m in mount if not m.endswith(":ro")]
@@ -583,6 +621,7 @@ def _source_run_options(
     runtime: Runtime | None,
     build_context: str,
     n_parallel: int,
+    websocket_port: int | None,
     dev: bool,
     mount: list[str],
     no_ui: bool,
@@ -605,6 +644,8 @@ def _source_run_options(
         options += ["--build-context", build_context]
     if n_parallel != 1:
         options += ["--n-parallel", str(n_parallel)]
+    if websocket_port is not None:
+        options += ["--websocket-port", str(websocket_port)]
     if dev:
         options.append("--dev")
     for spec in _expand_mount_file_references(mount):
@@ -687,12 +728,13 @@ def _run_without_ui(
     # containers. Stopping is also the right response to interrupting a real run.
     def exit_code(config: EvaluationRunConfig) -> int:
         from karotte.firecracker import FirecrackerError
+        from karotte.modal_runtime import ModalError
 
         try:
             run_fn(config)
         except subprocess.CalledProcessError as e:
             return e.returncode
-        except FirecrackerError as e:
+        except (FirecrackerError, ModalError) as e:
             # One VM that can't start fails its run, not every run in the
             # invocation.
             logger.error(f"Run {config.run_id}: {e}")

@@ -2,7 +2,13 @@ import os
 from typing import Literal
 
 Runtime = Literal[
-    "podman", "docker", "docker:gvisor", "nerdctl", "apple-container", "firecracker"
+    "podman",
+    "docker",
+    "docker:gvisor",
+    "nerdctl",
+    "apple-container",
+    "firecracker",
+    "modal",
 ]
 Engine = Literal["podman", "docker", "nerdctl", "container"]
 
@@ -26,6 +32,10 @@ def get_engine(runtime: Runtime) -> Engine:
     if runtime == "firecracker":
         # A Firecracker VM boots from an image docker builds.
         return "docker"
+    if runtime == "modal":
+        raise ValueError(
+            "The modal runtime builds and runs through Modal, not a local engine"
+        )
     engine = runtime.split(":")[0]
     assert engine in ("podman", "docker", "nerdctl", "container")
     return engine  # type: ignore[return-value]

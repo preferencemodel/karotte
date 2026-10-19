@@ -21,6 +21,7 @@ from karotte.cli.run import (
 from karotte.env_source import SourceError, image_name_for
 from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
 from karotte.run_helpers import build_configs, sanitize_paths
+from karotte.runtime import Runtime
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.http_mcp_server_config import HttpMcpServerConfig
 from karotte.schemas.transcript import ErrorEvent
@@ -830,6 +831,48 @@ def test_the_judges_default_model_comes_from_the_config(
     assert RubricJudge.default_model == expected
 
 
+def _run_on(runtime: Runtime, **kwargs: Any) -> list[EvaluationRunConfig]:
+    parsed = EvaluationRunConfig(run_id="r", task_id="t", model="m", model_api_key="k")
+    with (
+        patch("karotte.firecracker.preflight.validate_firecracker_runtime"),
+        patch("karotte.cli.run.require_environment"),
+        patch("karotte.cli.run.require_runtime"),
+        patch("karotte.cli.run.require_builder"),
+        patch("karotte.cli.run.parse_config", return_value=parsed),
+        patch("karotte.cli.run.load_task", return_value=MagicMock()),
+        patch("karotte.cli.run.container_run_args", return_value=[]),
+        patch("karotte.modal_runtime.modal_problems", return_value=[]),
+        patch("karotte.cli.run._run_without_ui") as run_without_ui,
+    ):
+        run(config="{}", runtime=runtime, no_ui=True, **kwargs)
+    return run_without_ui.call_args.args[0]
+
+
+def test_websocket_port_sets_the_first_runs_port():
+    with patch("karotte.cli.run.ports_in_use", return_value=[]):
+        configs = _run_on("modal", n_parallel=2, websocket_port=9100)
+
+    assert [c.websocket_config.port for c in configs] == [9100, 9101]
+
+
+@pytest.mark.parametrize("runtime", ["docker", "firecracker", "modal"])
+def test_a_taken_port_stops_the_run_before_the_build(
+    runtime: Runtime, capsys: pytest.CaptureFixture[str]
+):
+    """Separate `karotte run` commands all start at the default port."""
+    import socket
+
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        port = taken.getsockname()[1]
+        with pytest.raises(typer.Abort):
+            _run_on(runtime, n_parallel=2, websocket_port=port - 1)
+
+    err = capsys.readouterr().err
+    assert str(port) in err and "--websocket-port" in err
+
+
 class TestSanitizePathsTiming:
     """sanitize_paths_and_reexec() must only run in the process that hosts the
     untrusted agent, not in the host process that merely orchestrates a
@@ -1589,6 +1632,7 @@ class TestRunFromSource:
             runtime="podman",
             build_context="sub",
             n_parallel=3,
+            websocket_port=8100,
             dev=True,
             mount=["data:/a", "@mounts.txt"],
             no_ui=True,
@@ -1610,6 +1654,8 @@ class TestRunFromSource:
             "sub",
             "--n-parallel",
             "3",
+            "--websocket-port",
+            "8100",
             "--dev",
             "--mount",
             f"{cwd / 'data'}:/a",
