@@ -12,9 +12,11 @@ Learn about the why and what:
 
 ## Install
 
-Karotte needs Python 3.12+ and [uv](https://docs.astral.sh/uv/). Runs go into a
-VM by default: Apple `container` on macOS, Firecracker on Linux. docker or
-podman work too. See [Installation](https://karotte.dev/getting-started/installation/)
+Karotte needs Python 3.12+ and [uv](https://docs.astral.sh/uv/). Runs go into a local
+VM by default: Apple `container` on macOS, Firecracker on Linux.
+`--runtime modal` runs them in a VM on [Modal](https://modal.com/).
+Local docker or podman work too.
+See [Installation](https://karotte.dev/getting-started/installation/)
 and [Runtimes](https://karotte.dev/running/runtimes/) for what each needs.
 
 ```

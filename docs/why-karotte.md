@@ -357,8 +357,8 @@ HUD's coding template needs working user namespaces, so on Docker Desktop we ran
 
 Karotte's scope is narrower than the others'.
 It focuses on the environment itself, i.e., what runs in the sandbox, and how to keep the student from breaking it.
-It comes with a runner for local runs, but it doesn't integrate with cloud sandbox providers such as Modal, Daytona or E2B; each of the other five supports at least one.
-Running at scale doesn't need that, though.
+It runs sandboxes locally or on [Modal](running/runtimes.md#modal).
+You don't need either to run at scale, though.
 A built Karotte environment is one self-contained image.
 Start it on whatever infrastructure you use, and run `karotte run --no-containerized --config run_config.json` inside it.
 What the sandbox enforces there depends on your infrastructure; see [Runtimes](running/runtimes.md).
