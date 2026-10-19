@@ -75,6 +75,8 @@ jobs:
     timeout-minutes: 60
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Fork PRs get no secrets, so they run the template's fake model.
+      KAROTTE_TEST_FAKE_MODEL: ${{ github.event.pull_request.head.repo.fork && '1' || '' }}
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -98,6 +100,8 @@ jobs:
         mode: [user, jailed]
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Fork PRs get no secrets, so they run the template's fake model.
+      KAROTTE_TEST_FAKE_MODEL: ${{ github.event.pull_request.head.repo.fork && '1' || '' }}
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -135,7 +139,8 @@ jobs:
           D="$HOME/.cache/karotte/test-templates/test_default"
           rm -rf "$D" && mkdir -p "$(dirname "$D")"
           uv run --frozen karotte create-env "$D" --template default --vendor-karotte
-          cd "$D" && uv run setup_data.py && uv run karotte create-run-config --model claude-haiku-4-5-20251001
+          (cd "$D" && uv run setup_data.py)
+          just test-run-config "$D"
       - name: Test the default template under Firecracker's jailer
         if: matrix.mode == 'jailed'
         run: |
