@@ -23,6 +23,7 @@ The run gets a random `run_id`, and `transcript_file` defaults to `out/transcrip
 | Flag                 | Field              |
 | -------------------- | ------------------ |
 | `--task`             | `task_id`          |
+| `--agent`            | `agent`            |
 | `--model`            | `model`            |
 | `--model-api-key`    | `model_api_key`    |
 | `--reasoning-effort` | `reasoning_effort` |

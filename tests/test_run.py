@@ -600,6 +600,13 @@ class TestConfigFromFlags:
 
         assert run_config.temperature == 0.3
 
+    def test_the_agent_flag_is_applied(self):
+        run_config = self._run(
+            config=self._config(agent="builtin"), agent="claude-code"
+        )
+
+        assert run_config.agent == "claude-code"
+
     def test_the_key_can_come_from_a_file(self, tmp_path: Path):
         key_file = tmp_path / "key"
         key_file.write_text("sk-from-file")
@@ -1420,6 +1427,73 @@ class TestHostOutputPaths:
         )
 
 
+class TestAgentCheck:
+    """On the host, the agent is checked before the image is built."""
+
+    def _launch(self, tmp_path: Path, agent: str, manifest_agents: list[str] | None):
+        if manifest_agents is not None:
+            (tmp_path / ".manifest.json").write_text(
+                json.dumps(
+                    {
+                        "karotte_version": "3.0.0",
+                        "templates": [],
+                        "agents": manifest_agents,
+                    }
+                )
+            )
+        config = EvaluationRunConfig(
+            run_id="r", task_id="t", model="m", model_api_key="k"
+        ).model_dump_json()
+        with (
+            patch("karotte.cli.run.require_environment"),
+            patch("karotte.cli.run.require_runtime"),
+            patch("karotte.cli.run.require_builder"),
+            patch("karotte.cli.run.load_task", return_value=MagicMock()),
+            patch("karotte.cli.run.container_run_args", return_value=[]),
+            patch("karotte.cli.run._run_without_ui") as run_without_ui,
+        ):
+            run(
+                config=config,
+                agent=agent,
+                runtime="docker",
+                build_context=str(tmp_path),
+                no_ui=True,
+            )
+        return run_without_ui
+
+    def test_an_unknown_agent_stops_the_run(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        with pytest.raises(typer.Abort):
+            self._launch(tmp_path, "nope", manifest_agents=["codex"])
+
+        err = capsys.readouterr().err
+        assert "'nope'" in err and "karotte agents list" in err
+
+    @pytest.mark.parametrize("manifest_agents", [[], ["agy"], None])
+    def test_a_cli_agent_missing_from_the_manifest_stops_the_run(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        manifest_agents: list[str] | None,
+    ):
+        with pytest.raises(typer.Abort):
+            self._launch(tmp_path, "codex", manifest_agents)
+
+        assert "karotte agents add codex" in capsys.readouterr().err
+
+    def test_a_cli_agent_in_the_manifest_runs(self, tmp_path: Path):
+        run_without_ui = self._launch(tmp_path, "codex", manifest_agents=["codex"])
+
+        assert run_without_ui.call_args.args[0][0].agent == "codex"
+
+    @pytest.mark.parametrize("agent", ["builtin", "external"])
+    def test_builtin_agents_need_no_manifest(self, tmp_path: Path, agent: str):
+        run_without_ui = self._launch(tmp_path, agent, manifest_agents=None)
+
+        assert run_without_ui.call_args.args[0][0].agent == agent
+
+
 class TestPluginRefusesTheLaunch:
     def _launch(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("KAROTTE_CONTAINERIZED", raising=False)
@@ -1545,6 +1619,12 @@ class TestRunFromSource:
         result = self._run(env, task="t", transcript_file="runs/t.json")
 
         assert result.config["transcript_file"] == str(cwd / "runs" / "t.json")
+
+    def test_the_agent_is_passed_on_in_the_config(self, env: Path):
+        result = self._run(env, task="t", agent="codex")
+
+        assert result.config["agent"] == "codex"
+        assert result.flags == []
 
     def test_a_config_file_is_read_from_the_working_directory(
         self, env: Path, cwd: Path

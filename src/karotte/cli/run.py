@@ -148,6 +148,12 @@ def run(
         str | None,
         typer.Option(help="Task ID. Overrides the config's task_id."),
     ] = None,
+    agent: Annotated[
+        str | None,
+        typer.Option(
+            help="Agent that drives the run; see `karotte agents list`. Overrides the config's agent."
+        ),
+    ] = None,
     model: Annotated[
         str | None,
         typer.Option(help="Model name. Overrides the config's model."),
@@ -323,6 +329,7 @@ def run(
             config,
             {
                 "task_id": task,
+                "agent": agent,
                 "model": model,
                 "model_api_key": model_api_key,
                 "reasoning_effort": reasoning_effort,
@@ -371,6 +378,7 @@ def run(
         config,
         {
             "task_id": task,
+            "agent": agent,
             "model": model,
             "model_api_key": model_api_key,
             "reasoning_effort": reasoning_effort,
@@ -436,6 +444,9 @@ def run(
 
     if runtime == "docker:gvisor":
         validate_gvisor_runtime()
+
+    if on_host:
+        _check_agent(run_config.resolved_agent, build_context)
 
     if containerized and not is_containerized():
         try:
@@ -564,6 +575,26 @@ def run(
     _print_output_paths(run_configs)
     if tui_app.run_failed:
         raise typer.Exit(1)
+
+
+def _check_agent(agent: str, build_context: str) -> None:
+    """Abort unless ``agent`` exists and, for a CLI agent, the image gets built with it."""
+    from karotte.agents import cli_agent_types
+    from karotte.create_env import EnvManifest
+
+    if agent in ("builtin", "external"):
+        return
+    if agent not in cli_agent_types():
+        _print_and_abort(f"Unknown agent {agent!r}. See `karotte agents list`.")
+    manifest = Path(build_context) / ".manifest.json"
+    if (
+        not manifest.is_file()
+        or agent not in EnvManifest.model_validate_json(manifest.read_text()).agents
+    ):
+        _print_and_abort(
+            f"The image isn't built with the {agent} agent. "
+            + f"Add it with `karotte agents add {agent}`."
+        )
 
 
 def _run_from_source(
