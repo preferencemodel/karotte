@@ -7,6 +7,7 @@ manifest. Steps share one session, created on the first step and resumed after.
 """
 
 import json
+import os
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -20,6 +21,8 @@ from karotte.agents.cli_agent import (
     register_cli_agent,
 )
 from karotte.agents.models import resolve_model
+from karotte.model_forwarder import ModelForwarder
+from karotte.model_spec import spec_for
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event
 
@@ -40,6 +43,17 @@ _DISALLOWED_TOOLS = ("WebSearch", "WebFetch", "AskUserQuestion")
 
 _MCP_CONFIG = "mcp.json"
 
+# The env vars behind Claude Code's model aliases (`haiku`, `sonnet`, ...) and
+# the models it picks for background calls and subagents.
+_MODEL_ALIAS_ENVS = (
+    "ANTHROPIC_DEFAULT_FABLE_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_SMALL_FAST_MODEL",
+    "CLAUDE_CODE_SUBAGENT_MODEL",
+)
+
 
 @final
 @register_cli_agent
@@ -47,7 +61,11 @@ class ClaudeCodeAgent(CliAgent):
     name: ClassVar[str] = "claude-code"
     version: ClassVar[str] = "2.1.292"
     provider_url: ClassVar[str] = "https://api.anthropic.com"
-    providers: ClassVar[tuple[str, ...]] = ("anthropic",)
+    # Claude Code only speaks Anthropic's Messages API (`/v1/messages`), so each
+    # provider here must serve it. `hosted_vllm` is litellm's prefix for a
+    # self-hosted server (vLLM, SGLang, ...), reached through KAROTTE_PROXY_URL.
+    providers: ClassVar[tuple[str, ...]] = ("anthropic", "hosted_vllm")
+    proxy_via_forwarder: ClassVar[bool] = True
     binary: ClassVar[str] = _CLAUDE_BIN
     home_dir: ClassVar[str] = ".claude_home"
     home_env: ClassVar[str | None] = "CLAUDE_CONFIG_DIR"
@@ -70,8 +88,20 @@ class ClaudeCodeAgent(CliAgent):
 
     def __init__(self, config: EvaluationRunConfig) -> None:
         super().__init__(config)
+        self._on_anthropic: bool = spec_for(config.model).provider == "anthropic"
         self._session_id: str = str(uuid.uuid4())
         self._parser: StreamParser | None = None
+
+    def _make_forwarder(self) -> ModelForwarder | None:
+        # Anthropic is the only provider with a fixed address; without a proxy,
+        # any other model's key would be forwarded to Anthropic.
+        if not self._on_anthropic and not os.environ.get("KAROTTE_PROXY_URL"):
+            msg = (
+                f"claude-code reaches {self._config.model} only through a proxy: "
+                "set KAROTTE_PROXY_URL (`karotte run --proxy`) to its server"
+            )
+            raise ValueError(msg)
+        return super()._make_forwarder()
 
     def _config_files(self) -> dict[str, str]:
         server = {"type": "http", "url": self.mcp_url}
@@ -81,11 +111,16 @@ class ClaudeCodeAgent(CliAgent):
         return "ANTHROPIC_API_KEY"
 
     def _extra_env(self) -> dict[str, str]:
-        return {
+        env = {
             "ANTHROPIC_BASE_URL": self.model_url,
             "DISABLE_AUTOUPDATER": "1",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
         }
+        if not self._on_anthropic:
+            # The aliases name Claude models, which only Anthropic serves.
+            model = resolve_model(self._config.model, None).model
+            env |= dict.fromkeys(_MODEL_ALIAS_ENVS, model)
+        return env
 
     def _argv(self, instructions: str, prompt_file: Path | None) -> list[str]:
         session = (

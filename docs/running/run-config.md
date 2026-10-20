@@ -252,6 +252,7 @@ CLI agents differ from `builtin` in a few ways:
 - `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or through that forwarder to Mistral's API when there's no proxy.
   `grok-build` does the same with the proxy, or goes through the forwarder to xAI's API without one.
   `claude-code` sends Anthropic-style calls to `<proxy>/v1/messages`, or through the forwarder to Anthropic's API.
+  When the run has an API key, `claude-code` reaches the proxy through the forwarder too, so the key still never reaches the student.
   `codex` sends OpenAI Responses calls to `<proxy>/v1/responses`, or through the forwarder to OpenAI's API.
   `agy` sends Gemini API calls to `<proxy>/v1beta/models/<model>`.
   Without a proxy, `gemini/` models go through the forwarder to Google's Gemini API, and `vertex_ai/` models go through it to Vertex AI.
@@ -266,11 +267,15 @@ CLI agents differ from `builtin` in a few ways:
 `claude-code` specifics:
 
 - All steps of a run share one Claude Code session, so later steps see the earlier conversation.
+- It runs Anthropic models, and models on a server you run that serves Anthropic's `/v1/messages` API, as vLLM and SGLang do.
+  Name such a model `hosted_vllm/<the server's name for it>` and point `--proxy` at the server.
+  (`hosted_vllm` is litellm's prefix for any self-hosted OpenAI-compatible server, not only vLLM.)
+- On a `hosted_vllm` model, Claude Code's model aliases (`haiku`, `sonnet`, `opus`, `fable`) and the models it picks for background calls and subagents all name that model, since the server has no Claude models.
 - The model sees the task's tools as `mcp__karotte__<tool>`, and the transcript records them under that name.
 - Claude Code's web search, web fetch and ask-the-user tools are turned off, along with its telemetry, error reporting and update checks.
 - It sends `reasoning_effort` when the run config sets it.
   It can't send `temperature`, so a run config that sets it is rejected.
-- The transcript's reasoning is Anthropic's summary of the model's thinking; the raw thinking isn't available.
+- On an Anthropic model, the transcript's reasoning is Anthropic's summary of the model's thinking; the raw thinking isn't available.
 
 `codex` specifics:
 

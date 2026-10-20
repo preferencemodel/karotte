@@ -5,7 +5,8 @@ addresses and the model proxy. Without a proxy, the harness runs this
 forwarder in its own (root) process, which the firewall doesn't restrict: the
 agent talks to it on loopback, and it relays each request to the provider with
 the real API key. The agent is handed a placeholder key, so the key never
-reaches the student.
+reaches the student. An agent with ``proxy_via_forwarder`` reaches a proxy this
+way too when the run has a key.
 """
 
 import asyncio

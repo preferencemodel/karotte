@@ -71,6 +71,11 @@ class CliAgent(abc.ABC):
     providers: ClassVar[tuple[str, ...]]
     """The model catalog's names for the providers the CLI can call."""
 
+    proxy_via_forwarder: ClassVar[bool] = False
+    """By default, the CLI (e.g. Claude Code) calls a proxy directly with the real
+    API key. If True, it calls the forwarder instead, which adds the key, so the
+    student never sees it."""
+
     binary: ClassVar[str]
 
     home_dir: ClassVar[str]
@@ -132,15 +137,16 @@ class CliAgent(abc.ABC):
         return instructions
 
     def _make_forwarder(self) -> ModelForwarder | None:
-        """The forwarder to the provider when there's no proxy; None leaves the
-        CLI calling :attr:`provider_url` itself."""
+        """The forwarder to the proxy, or to :attr:`provider_url` when there's
+        none; None leaves the CLI calling :attr:`model_url` itself."""
         if key := self._config.model_api_key:
-            return ModelForwarder(self.provider_url, key)
+            upstream = os.environ.get("KAROTTE_PROXY_URL") or self.provider_url
+            return ModelForwarder(upstream, key)
         return None
 
     async def start(self, ctx: RunContext) -> None:
         self._ctx = ctx
-        if not os.environ.get("KAROTTE_PROXY_URL"):
+        if self.proxy_via_forwarder or not os.environ.get("KAROTTE_PROXY_URL"):
             # Making one may block, e.g. to look up cloud credentials.
             self._forwarder = await asyncio.to_thread(self._make_forwarder)
             if self._forwarder is not None:
@@ -165,13 +171,12 @@ class CliAgent(abc.ABC):
 
     @property
     def model_url(self) -> str:
-        """Where the CLI sends model calls, without ``/v1``: the proxy, the
-        forwarder to :attr:`provider_url`, or with no key to forward,
-        :attr:`provider_url` itself."""
-        if proxy := os.environ.get("KAROTTE_PROXY_URL"):
-            return proxy.rstrip("/")
+        """Where the CLI sends model calls, without ``/v1``: the forwarder, the
+        proxy, or with no key to forward, :attr:`provider_url` itself."""
         if self._forwarder is not None:
             return self._forwarder.url
+        if proxy := os.environ.get("KAROTTE_PROXY_URL"):
+            return proxy.rstrip("/")
         return self.provider_url
 
     @property

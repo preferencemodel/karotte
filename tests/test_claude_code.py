@@ -24,6 +24,8 @@ from karotte.schemas.transcript import (
 
 _FIXTURES = Path(__file__).parent / "resources" / "claude_code"
 
+_SELF_HOSTED = "hosted_vllm/Qwen/Qwen3-8B"
+
 
 def _lines(name: str) -> list[str]:
     return (_FIXTURES / name).read_text().splitlines()
@@ -132,6 +134,49 @@ class TestClaudeCodeAgent:
             assert "sk-ant-real" not in env.values()
         finally:
             await agent.stop()
+
+    @pytest.mark.asyncio
+    async def test_a_self_hosted_model_reaches_its_server_through_the_forwarder(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
+        agent = _agent(model=_SELF_HOSTED, model_api_key="server-key")
+        await agent.start(MagicMock())
+        try:
+            forwarder = agent._forwarder  # pyright: ignore[reportPrivateUsage]
+            assert forwarder is not None
+            assert forwarder.upstream == "http://vllm:8000"
+            env = agent._env()  # pyright: ignore[reportPrivateUsage]
+            assert env["ANTHROPIC_BASE_URL"] == forwarder.url
+            assert env["ANTHROPIC_API_KEY"] == PROXY_PLACEHOLDER_KEY
+            argv = agent._argv("x", None)  # pyright: ignore[reportPrivateUsage]
+            assert _value(argv, "--model") == "Qwen/Qwen3-8B"
+        finally:
+            await agent.stop()
+
+    @pytest.mark.asyncio
+    async def test_a_self_hosted_model_without_a_proxy_is_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
+        agent = _agent(model=_SELF_HOSTED)
+        with pytest.raises(ValueError, match="KAROTTE_PROXY_URL"):
+            await agent.start(MagicMock())
+
+    def test_only_a_self_hosted_model_points_the_model_aliases_at_itself(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        monkeypatch.delenv("ANTHROPIC_DEFAULT_HAIKU_MODEL", raising=False)
+        hosted = _agent(model=_SELF_HOSTED)._env()  # pyright: ignore[reportPrivateUsage]
+        claude = _agent()._env()  # pyright: ignore[reportPrivateUsage]
+        assert hosted["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "Qwen/Qwen3-8B"
+        assert hosted["CLAUDE_CODE_SUBAGENT_MODEL"] == "Qwen/Qwen3-8B"
+        assert "ANTHROPIC_DEFAULT_HAIKU_MODEL" not in claude
 
     def test_end_of_output_keeps_the_unfinished_response_and_its_results(self):
         agent = _agent()

@@ -226,6 +226,24 @@ class TestForwarder:
         assert agent.model_url == "http://proxy:4000"
 
     @pytest.mark.asyncio
+    async def test_a_proxy_via_the_forwarder_keeps_the_key_from_the_cli(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(_EchoAgent, "proxy_via_forwarder", True)
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://proxy:4000/")
+        await agent.start(MagicMock())
+        try:
+            forwarder = agent._forwarder  # pyright: ignore[reportPrivateUsage]
+            assert forwarder is not None
+            assert forwarder.upstream == "http://proxy:4000"
+            assert agent.model_url == forwarder.url
+            env = agent._env()  # pyright: ignore[reportPrivateUsage]
+            assert env["ECHO_API_KEY"] == PROXY_PLACEHOLDER_KEY
+        finally:
+            await agent.stop()
+
+    @pytest.mark.asyncio
     async def test_the_forwarder_is_made_off_the_event_loop(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
