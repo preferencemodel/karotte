@@ -1,8 +1,8 @@
-"""Base class and registry for agents that drive an external CLI coding tool.
+"""Base class and registry for agents that drive an external coding CLI.
 
-A CLI agent runs the tool's binary in-container as the student user, once per
-step; the tool talks to the MCP server over HTTP itself (hence
-``allows_student_mcp_access``). Each agent says how its tool is installed at
+A CLI agent runs the CLI's binary in-container as the student user, once per
+step; the CLI talks to the MCP server over HTTP itself (hence
+``allows_student_mcp_access``). Each agent says how its CLI is installed at
 ``karotte build`` time (:meth:`install`, version-pinned via :attr:`version`),
 configured and invoked; the base class runs it.
 """
@@ -49,38 +49,38 @@ class CliAgent(abc.ABC):
     """The value of ``EvaluationRunConfig.agent`` that selects this agent."""
 
     version: ClassVar[str]
-    """The tool version this karotte release pins and installs."""
+    """The CLI version this karotte release pins and installs."""
 
     allows_student_mcp_access: ClassVar[bool] = True
     native_tool_names: ClassVar[frozenset[str]] = frozenset()
 
     supports_temperature: ClassVar[bool] = False
-    """Whether the tool sends the run config's ``temperature``."""
+    """Whether the CLI sends the run config's ``temperature``."""
 
     applies_reasoning_effort: ClassVar[bool] = False
-    """Whether the tool sends the run config's ``reasoning_effort``."""
+    """Whether the CLI sends the run config's ``reasoning_effort``."""
 
     supports_turn_limit: ClassVar[bool] = False
-    """Whether the tool stops a step at the run config's ``turn_limit``."""
+    """Whether the CLI stops a step at the run config's ``turn_limit``."""
 
     provider_url: ClassVar[str]
-    """The provider API root, without ``/v1``, the tool calls when there is no
-    proxy. It sits outside the student firewall, so the tool reaches it through
+    """The provider API root, without ``/v1``, the CLI calls when there is no
+    proxy. It sits outside the student firewall, so the CLI reaches it through
     a :class:`ModelForwarder`."""
 
     providers: ClassVar[tuple[str, ...]]
-    """The model catalog's names for the providers the tool can call."""
+    """The model catalog's names for the providers the CLI can call."""
 
     binary: ClassVar[str]
 
     home_dir: ClassVar[str]
-    """Directory under the student workdir for the tool's config and state."""
+    """Directory under the student workdir for the CLI's config and state."""
 
     home_env: ClassVar[str | None] = None
-    """Env var that points the tool at :attr:`home_dir`, if it reads one."""
+    """Env var that points the CLI at :attr:`home_dir`, if it reads one."""
 
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "argv"
-    """How the tool gets each step's instructions: in :meth:`_argv`, from the
+    """How the CLI gets each step's instructions: in :meth:`_argv`, from the
     file :meth:`_argv` is given, or on stdin."""
 
     def __init__(self, config: EvaluationRunConfig) -> None:
@@ -95,21 +95,21 @@ class CliAgent(abc.ABC):
     @abc.abstractmethod
     def install(cls) -> list[str]:
         """Shell commands, run as root at ``karotte build`` time, that install
-        the pinned tool so the student user can execute it from
+        the pinned CLI so the student user can execute it from
         :data:`AGENTS_BIN_DIR`."""
 
     @classmethod
     def is_installed(cls) -> bool:
-        """Whether the tool is installed on this machine or image."""
+        """Whether the CLI is installed on this machine or image."""
         return os.access(cls.binary, os.X_OK)
 
     @abc.abstractmethod
     def _config_files(self) -> dict[str, str]:
-        """Contents of the tool's config files, by path relative to its home."""
+        """Contents of the CLI's config files, by path relative to its home."""
 
     @abc.abstractmethod
     def _key_env(self) -> str:
-        """Env var the tool reads its model API key from."""
+        """Env var the CLI reads its model API key from."""
 
     def _extra_env(self) -> dict[str, str]:
         return {}
@@ -124,16 +124,16 @@ class CliAgent(abc.ABC):
         """Turns line ``i`` of one step's stdout into transcript events."""
 
     def _output_ended(self) -> Iterable[Event]:
-        """Events the step's parser still holds when the tool's output ends."""
+        """Events the step's parser still holds when the CLI's output ends."""
         return ()
 
     def _prompt_text(self, instructions: str) -> str:
-        """What the tool reads from the prompt file."""
+        """What the CLI reads from the prompt file."""
         return instructions
 
     def _make_forwarder(self) -> ModelForwarder | None:
         """The forwarder to the provider when there's no proxy; None leaves the
-        tool calling :attr:`provider_url` itself."""
+        CLI calling :attr:`provider_url` itself."""
         if key := self._config.model_api_key:
             return ModelForwarder(self.provider_url, key)
         return None
@@ -165,7 +165,7 @@ class CliAgent(abc.ABC):
 
     @property
     def model_url(self) -> str:
-        """Where the tool sends model calls, without ``/v1``: the proxy, the
+        """Where the CLI sends model calls, without ``/v1``: the proxy, the
         forwarder to :attr:`provider_url`, or with no key to forward,
         :attr:`provider_url` itself."""
         if proxy := os.environ.get("KAROTTE_PROXY_URL"):
@@ -176,7 +176,7 @@ class CliAgent(abc.ABC):
 
     @property
     def model_api_key(self) -> str | None:
-        """The key the tool sends. The forwarder adds the real one, so the tool
+        """The key the CLI sends. The forwarder adds the real one, so the CLI
         gets a placeholder; a proxy that needs no key gets one too."""
         if self._forwarder is not None:
             return PROXY_PLACEHOLDER_KEY
@@ -186,7 +186,7 @@ class CliAgent(abc.ABC):
 
     @property
     def mcp_url(self) -> str:
-        """Endpoint the tool's own MCP client connects to. The server binds
+        """Endpoint the CLI's own MCP client connects to. The server binds
         0.0.0.0; a local client reaches it on loopback."""
         return self._config.mcp_server_config.client_url
 
@@ -233,14 +233,14 @@ class CliAgent(abc.ABC):
         context_window_limit: int | None = None,  # pyright: ignore[reportUnusedParameter]
         on_context_window_limit: Literal["error", "score"] = "error",  # pyright: ignore[reportUnusedParameter]
     ) -> AsyncGenerator[Event]:
-        """Run the tool once, yielding transcript events as it writes each line.
+        """Run the CLI once, yielding transcript events as it writes each line.
 
-        Past `time_limit_seconds` the tool and its children are killed: `error`
+        Past `time_limit_seconds` the CLI and its children are killed: `error`
         raises after yielding the output so far, `score` keeps it."""
         yield MessageAddedEvent(message=Message(role="user", content=instructions))
 
         step = self._step_index
-        tool = Path(self.binary).name
+        cli = Path(self.binary).name
         steps = self._step_files()
         prompt_path = None
         if self.prompt_input != "argv":
@@ -318,7 +318,7 @@ class CliAgent(abc.ABC):
                 try:
                     _ = await asyncio.wait_for(_exited(proc), remaining())
                 except TimeoutError:
-                    # wait_for times out on a past deadline even once the tool has exited.
+                    # wait_for times out on a past deadline even once the CLI has exited.
                     if proc.returncode is None:
                         timed_out = True
                         kill_process_tree(proc)
@@ -336,14 +336,14 @@ class CliAgent(abc.ABC):
 
         if timed_out:
             logger.warning(
-                "{} hit the {}s time limit on step {}", tool, time_limit_seconds, step
+                "{} hit the {}s time limit on step {}", cli, time_limit_seconds, step
             )
             if on_time_limit == "error":
                 msg = f"Time limit of {time_limit_seconds}s reached."
                 raise StepTimeLimitReachedError(msg)
         elif proc.returncode != 0:
             stderr = stderr_b.decode("utf-8", errors="replace")[-2000:]
-            msg = f"{tool} exited {proc.returncode} on step {step}: {stderr}"
+            msg = f"{cli} exited {proc.returncode} on step {step}: {stderr}"
             raise CliAgentExitedError(msg)
 
 
@@ -351,7 +351,7 @@ def kill_process_tree(proc: asyncio.subprocess.Process) -> None:
     """SIGKILL a CLI agent process and its children.
 
     ``make_preexec`` puts the child in its own session, so its pid is a process
-    group id; killing the group takes down any tools it spawned. Falls back to
+    group id; killing the group takes down any processes it spawned. Falls back to
     killing just the process when there is no group (e.g. no ``setsid`` outside
     a container) or it has already exited.
     """
@@ -386,7 +386,7 @@ def toml_string(value: str) -> str:
 
 
 def install_release(
-    tool: str,
+    cli: str,
     url: str | Mapping[str, str],
     sha256: dict[str, str],
     target: str,
@@ -415,7 +415,7 @@ def install_release(
         'case "$arch" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; esac',
         (
             f'case "$arch" in {checks} '
-            f'*) echo "{tool}: unsupported arch $arch" >&2; exit 1 ;; esac'
+            f'*) echo "{cli}: unsupported arch $arch" >&2; exit 1 ;; esac'
         ),
         'tmp="$(mktemp -d)"',
         """trap 'rm -rf "$tmp"' EXIT""",
