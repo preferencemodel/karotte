@@ -134,6 +134,8 @@ _DEFAULT_MAX_OUTPUT_TOKENS = 64000
 # budget on adaptive-thinking models.
 _MAX_OUTPUT_TOKENS: dict[str, int] = {
     "gemini-4-argon": 1048576,
+    "DeepSeek-V4.1-Flash-1017": 393216,
+    "deepseek-v4p1-flash-1017": 393216,
     "muse-spark-1.3": 128000,
     "muse-wonder-1.0": 128000,
     "Qwen3.8-2.4T-A95B": 128000,
@@ -169,6 +171,8 @@ _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
     "muse-spark-1.2": ("minimal", "low", "medium", "high", "xhigh"),
     "muse-spark-1.3": ("minimal", "low", "medium", "high", "xhigh", "max"),
     "DeepSeek-V4-Pro-0813": ("high", "max"),
+    "DeepSeek-V4.1-Flash-1017": ("low", "high", "max"),
+    "deepseek-v4p1-flash-1017": ("low", "high", "max"),
     "GLM-5.3": ("low", "high", "max"),
     # The same checkpoint under Fireworks' spelling of the id.
     "glm-5p3": ("low", "high", "max"),
@@ -294,6 +298,8 @@ def _model_display_name(name: str) -> str:
     # kimi-k2p6); read those back as the vendor's own spelling.
     if words[0] == "glm":
         words[0] = "GLM"
+    if words[0] == "deepseek":
+        words[0] = "DeepSeek"
     words = [re.sub(r"(?<=\d)p(?=\d)", ".", word) for word in words]
     return " ".join(word.capitalize() if word.islower() else word for word in words)
 

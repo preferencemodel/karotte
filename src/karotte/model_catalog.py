@@ -42,6 +42,8 @@ CATALOG_MODEL_IDS: tuple[str, ...] = (
     "together_ai/moonshotai/Kimi-K2.6",
     "together_ai/moonshotai/Kimi-K2.5",
     "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017",
     "together_ai/deepseek-ai/DeepSeek-V3.1",
     "fireworks_ai/accounts/fireworks/models/glm-5p3",
     "fireworks_ai/accounts/fireworks/models/glm-5p3-flash",

@@ -107,6 +107,18 @@
     "env": {},
     "key_env": null
   },
+  "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "provider": "together_ai",
+    "model": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "env": {},
+    "key_env": null
+  },
+  "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+    "provider": "fireworks_ai",
+    "model": "accounts/fireworks/models/deepseek-v4p1-flash-1017",
+    "env": {},
+    "key_env": null
+  },
   "together_ai/deepseek-ai/DeepSeek-V3.1": {
     "provider": "together_ai",
     "model": "deepseek-ai/DeepSeek-V3.1",

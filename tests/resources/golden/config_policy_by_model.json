@@ -89,6 +89,16 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
   "together_ai/deepseek-ai/DeepSeek-V3.1": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,

@@ -19,6 +19,8 @@
     "together_ai/moonshotai/Kimi-K2.6": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "together_ai/moonshotai/Kimi-K2.5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813": "{\"text\": \"\\\"hello\\\"\"}",
+    "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": "{\"text\": \"\\\"hello\\\"\"}",
+    "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": "{\"text\": \"\\\"hello\\\"\"}",
     "together_ai/deepseek-ai/DeepSeek-V3.1": "{\"text\": \"\\\"hello\\\"\"}",
     "fireworks_ai/accounts/fireworks/models/glm-5p3": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "fireworks_ai/accounts/fireworks/models/glm-5p3-flash": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",

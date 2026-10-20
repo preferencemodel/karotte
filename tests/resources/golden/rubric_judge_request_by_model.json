@@ -161,6 +161,24 @@
       "the criterion is met"
     ]
   },
+  "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "model": "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+    "model": "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
   "together_ai/deepseek-ai/DeepSeek-V3.1": {
     "model": "together_ai/deepseek-ai/DeepSeek-V3.1",
     "max_tokens": 32000,

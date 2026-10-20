@@ -490,6 +490,42 @@
       }
     }
   },
+  "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "high"
+      }
+    }
+  },
+  "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "max"
+      }
+    }
+  },
   "together_ai/deepseek-ai/DeepSeek-V3.1": {
     "None": {
       "sent_by_karotte": null,

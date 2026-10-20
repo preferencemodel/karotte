@@ -421,6 +421,50 @@
       ]
     },
     {
+      "model": "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "model_display_name": "DeepSeek V4.1 Flash 1017",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "max_output_tokens": 393216,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [
+        "deepseek"
+      ],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017",
+      "model_display_name": "DeepSeek V4.1 Flash 1017",
+      "provider": "fireworks_ai",
+      "provider_display_name": "Fireworks AI",
+      "litellm_model": "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017",
+      "max_output_tokens": 393216,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [
+        "deepseek"
+      ],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": []
+    },
+    {
       "model": "together_ai/deepseek-ai/DeepSeek-V3.1",
       "model_display_name": "DeepSeek V3.1",
       "provider": "together_ai",

@@ -151,6 +151,8 @@ class TestMaxOutputTokens:
             ("together_ai/zai-org/GLM-5.3", 64000),
             # Fireworks documents no output ceiling for it, so it keeps the default.
             ("fireworks_ai/accounts/fireworks/models/glm-5p3-flash", 64000),
+            ("together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017", 393216),
+            ("fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017", 393216),
         ],
     )
     def test_max_output_tokens(self, model: str, expected: int):
@@ -244,6 +246,11 @@ class TestReasoningEffort:
             # Together rounds low and medium up to high on V4-Pro; GLM-5.3 takes low.
             ("together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", ("high", "max")),
             ("together_ai/zai-org/GLM-5.3", ("low", "max")),
+            ("together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017", ("low", "max")),
+            (
+                "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017",
+                ("low", "max"),
+            ),
             ("fireworks_ai/accounts/fireworks/models/glm-5p3", ("low", "max")),
             ("fireworks_ai/accounts/fireworks/models/glm-5p3-flash", ("low", "max")),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", ("low", "xhigh")),
@@ -306,6 +313,14 @@ class TestReasoningEffort:
                 ("minimal", "low", "medium", "high", "xhigh", "max"),
             ),
             ("together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", ("high", "max")),
+            (
+                "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+                ("low", "high", "max"),
+            ),
+            (
+                "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017",
+                ("low", "high", "max"),
+            ),
             ("together_ai/zai-org/GLM-5.3", ("low", "high", "max")),
             # Fireworks spells the same checkpoint glm-5p3.
             (
@@ -368,6 +383,11 @@ class TestToolCallRepairs:
         [
             ("together_ai/deepseek-ai/DeepSeek-V3.1", ("deepseek",)),
             ("together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", ("deepseek",)),
+            ("together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017", ("deepseek",)),
+            (
+                "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017",
+                ("deepseek",),
+            ),
             ("together_ai/zai-org/GLM-5.3", ()),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", ()),
             ("xai/grok-4.7", ("xai",)),
@@ -501,12 +521,20 @@ class TestDisplayNames:
             ("together_ai/moonshotai/Kimi-K2.6", "Kimi K2.6"),
             ("together_ai/deepseek-ai/DeepSeek-V3.1", "DeepSeek V3.1"),
             ("together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", "DeepSeek V4 Pro 0813"),
+            (
+                "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+                "DeepSeek V4.1 Flash 1017",
+            ),
             ("together_ai/zai-org/GLM-5.2", "GLM 5.2"),
             ("together_ai/zai-org/GLM-5.3", "GLM 5.3"),
             # Fireworks' spelling reads back as the vendor's.
             ("fireworks_ai/accounts/fireworks/models/glm-5p3", "GLM 5.3"),
             ("fireworks_ai/accounts/fireworks/models/glm-5p3-flash", "GLM 5.3 Flash"),
             ("fireworks_ai/accounts/fireworks/models/kimi-k2p5", "Kimi K2.5"),
+            (
+                "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017",
+                "DeepSeek V4.1 Flash 1017",
+            ),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", "Qwen3.8 2.4T A95B"),
             ("minimax/MiniMax-M2.5", "MiniMax M2.5"),
             ("vertex_ai/gemini-4-argon", "Gemini 4 Argon"),

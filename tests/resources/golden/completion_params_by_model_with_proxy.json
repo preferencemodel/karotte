@@ -640,6 +640,61 @@
     "api_key": "test_key",
     "api_base": "https://proxy.example/v1"
   },
+  "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 393216,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "api_base": "https://proxy.example/v1"
+  },
+  "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 393216,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "api_base": "https://proxy.example/v1",
+    "extra_headers": {
+      "x-session-affinity": "golden-run"
+    }
+  },
   "together_ai/deepseek-ai/DeepSeek-V3.1": {
     "stream": true,
     "stream_options": {
