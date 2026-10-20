@@ -178,6 +178,8 @@ class EvaluationRunner:
                 task_id=self.task.id,
                 model=self.config.model,
                 reasoning_effort=effort,
+                temperature=self.config.temperature,
+                agent=self.config.resolved_agent,
                 use_hints=self.config.use_hints,
                 n_steps=len(self.task.steps)  # pyright: ignore[reportArgumentType]
                 if hasattr(self.task.steps, "__len__")

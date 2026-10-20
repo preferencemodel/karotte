@@ -4072,6 +4072,35 @@ class TestReasoningEffortIsRecorded:
         assert not any("reasoning_effort" in w for w in warnings)
 
 
+class TestSamplingSetupIsRecorded:
+    @pytest.mark.asyncio
+    async def test_records_the_temperature_and_agent(
+        self,
+        sample_config: EvaluationRunConfig,
+        mcp_server: HttpMcpServer,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        config = sample_config.model_copy(
+            update={
+                "model": "xai/grok-4.7",
+                "agent": "grok-build",
+                "temperature": 0.7,
+            }
+        )
+        started = await _task_started(config, mcp_server)
+        assert (started.temperature, started.agent) == (0.7, "grok-build")
+
+    @pytest.mark.asyncio
+    async def test_records_the_default_agent_and_no_temperature_when_unset(
+        self, sample_config: EvaluationRunConfig, mcp_server: HttpMcpServer
+    ):
+        config = sample_config.model_copy(update={"model": "claude-opus-5"})
+        started = await _task_started(config, mcp_server)
+        assert (started.temperature, started.agent) == (None, "builtin")
+
+
 class TestTemperatureNeedsAnAgentThatSendsIt:
     def _config(
         self, sample_config: EvaluationRunConfig, **update: Any

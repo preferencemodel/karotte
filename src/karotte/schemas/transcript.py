@@ -35,6 +35,10 @@ class TaskStartedEvent(BaseEvent):
     model: str | None = None
     n_steps: int
     reasoning_effort: str | None = None
+    # None when the run leaves the provider's default.
+    temperature: float | None = None
+    # The agent harness that drove the model, e.g. ``builtin``.
+    agent: str | None = None
     use_hints: bool | None = None
 
 
