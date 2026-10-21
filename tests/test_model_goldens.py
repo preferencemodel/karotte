@@ -299,6 +299,7 @@ _IMAGE = {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,AAAA
 _IMAGES_REJECTED = [
     "Together_aiException - Invalid multimodal request: multimodal not supported for model: zai-org/GLM-5.2",
     "Together_aiException - Multimodal processing failed: Multimodal not supported for model: Qwen/Qwen3.8-2.4T-A95B",
+    'Together_aiException - {"error":{"type":"invalid_request_error","code":"multimodal_not_supported","message":"the router has no media spec for this model\'s family and cannot process its media itself; a vLLM worker with --mm-processor inprocess|redis processes it under --mm-processing worker (or auto, when every worker of the model does)","param":null}}',
     "Fireworks AI model accounts/fireworks/models/glm-5p3 does not support image inputs. Use a Fireworks vision model or remove image_url content blocks.",
     'Fireworks_aiException - {"error":{"object":"error","type":"invalid_request_error","code":"invalid_request_error","message":"This model does not support image inputs"}}',
     'Fireworks_aiException - {"error":{"message":"This model does not support image inputs","type":"invalid_request_error","code":400}}',

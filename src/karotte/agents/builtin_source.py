@@ -79,7 +79,7 @@ _RETRY_AFTER_BODY_RE = re.compile(r'"retry_after"\s*:\s*(\d+(?:\.\d+)?)')
 # How Together and Fireworks (and litellm on Fireworks' behalf) word a 400 for
 # an image sent to a text-only model.
 _IMAGES_REJECTED_RE = re.compile(
-    r"multimodal not supported|does not support image inputs", re.IGNORECASE
+    r"multimodal[ _]not[ _]supported|does not support image inputs", re.IGNORECASE
 )
 
 
