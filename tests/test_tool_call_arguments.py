@@ -42,7 +42,7 @@ async def _completed(
     return next(e for e in events if isinstance(e, ToolCallCompletedEvent))
 
 
-def _call(name: str | None, arguments: str) -> ChatCompletionMessageToolCall:
+def _call(name: str, arguments: str) -> ChatCompletionMessageToolCall:
     return ChatCompletionMessageToolCall(
         id="call_1", type="function", function=Function(name=name, arguments=arguments)
     )
@@ -58,6 +58,18 @@ async def test_non_object_arguments_give_an_error_result(
     mcp_client: Client[FastMCPTransport], arguments: str
 ):
     tool_call = _call("echo", arguments)
+
+    completed = await _completed(tool_call, mcp_client)
+
+    assert completed.result.isError
+    assert isinstance(json.loads(tool_call.function.arguments), dict)
+
+
+@pytest.mark.asyncio
+async def test_invalid_json_gives_an_error_result(
+    mcp_client: Client[FastMCPTransport],
+):
+    tool_call = _call("echo", '{"text": "hi"')
 
     completed = await _completed(tool_call, mcp_client)
 
