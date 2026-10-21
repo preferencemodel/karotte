@@ -34,6 +34,9 @@ from karotte.trusted_bin import trusted_binary
 
 STAGED_MOUNTS_ENV_VAR = "KAROTTE_STAGED_MOUNTS"
 
+STAGED_MOUNTS_DIR = "/root/.karotte_mounts"
+"""Where a launcher stages user mounts in the guest, under root's 0700 home."""
+
 _MODE_BITS = 0o777
 
 
@@ -135,6 +138,33 @@ def copy_back() -> None:
                 f"Mount {mount.target}: skipped {skipped} links and special files on copy-back"
             )
         logger.info(f"Copied mount {mount.target} back to the host")
+
+
+def plain_entries(root: Path) -> list[Path]:
+    """The regular files and directories under ``root``, relative to it: all
+    that copy-back brings back, so nothing else can look deleted."""
+    return [
+        rel
+        for rel in _entries(root)
+        if stat.S_ISREG(mode := (root / rel).lstat().st_mode) or stat.S_ISDIR(mode)
+    ]
+
+
+def apply_copy_back(back: Path, dest: Path, copied: list[Path]) -> int:
+    """Write a mount's copy, downloaded from the guest into ``back``, over its
+    host path ``dest``, as a bind mount would have left it. For a launcher that
+    can't share the staging directory and copies it out instead. ``copied`` is
+    what :func:`plain_entries` listed under ``dest`` before the run; what's
+    gone from ``back`` is removed. Returns how many entries were skipped."""
+    if dest.is_dir():
+        skipped = _copy_back(back, dest)
+        _remove_deleted(back, dest, set(), copied)
+        return skipped
+    returned = back / dest.name
+    if returned.is_symlink() or not returned.is_file():
+        return 1
+    _copy_file_back(returned, dest)
+    return 0
 
 
 def _student_id() -> int | None:
