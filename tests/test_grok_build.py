@@ -360,13 +360,16 @@ class TestGrokBuildRunStep:
         stream: Path = _FIXTURE,
         linger_seconds: float = 0.0,
         exit_code: int = 0,
+        inject_time_budget_note: bool = True,
     ) -> GrokBuildAgent:
         monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
         monkeypatch.setattr(
             "karotte.agents.cli_agent.make_preexec",
             lambda *_fds: None,  # pyright: ignore[reportUnknownLambdaType]
         )
-        agent = _agent(save_artifacts=False)
+        agent = _agent(
+            save_artifacts=False, inject_time_budget_note=inject_time_budget_note
+        )
         agent._home = tmp_path / ".grok_home"  # pyright: ignore[reportPrivateUsage]
         agent._home.mkdir()  # pyright: ignore[reportPrivateUsage]
         script = tmp_path / "fake_grok.py"
@@ -486,3 +489,76 @@ class TestGrokBuildRunStep:
             if isinstance(e, MessageAddedEvent) and e.message.role == "assistant"
         ]
         assert answers == [big]
+
+
+class TestGrokBuildTimeBudget:
+    """Grok gets no remaining-time counter, so a limited step states its budget."""
+
+    async def _prompt(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        instructions: str,
+        time_limit_seconds: float | None,
+        inject_time_budget_note: bool = True,
+    ) -> tuple[str, str]:
+        (tmp_path / "gate").touch()
+        agent = TestGrokBuildRunStep()._agent(
+            tmp_path, monkeypatch, inject_time_budget_note=inject_time_budget_note
+        )  # pyright: ignore[reportPrivateUsage]
+        events = [
+            event
+            async for event in agent.run_step(
+                instructions, time_limit_seconds=time_limit_seconds
+            )
+        ]
+        first = events[0]
+        assert isinstance(first, MessageAddedEvent)
+        assert isinstance(first.message.content, str)
+        steps = agent._step_dir  # pyright: ignore[reportPrivateUsage]
+        assert steps is not None
+        return first.message.content, (steps / "step_0.prompt").read_text()
+
+    @pytest.mark.asyncio
+    async def test_a_limited_step_states_its_budget(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("karotte.agents.cli_agent.time.time", lambda: 1792630000.5)
+        recorded, prompt = await self._prompt(
+            tmp_path, monkeypatch, "do the thing", 14400
+        )
+        # What Grok reads is what the transcript records.
+        assert recorded == prompt
+        assert prompt == (
+            "do the thing\n\n"
+            "Time budget: you have 14400 seconds (4 h) for this task. At the limit "
+            "your session ends and your work is tested as it stands. Nothing reports "
+            "the time remaining, so track it yourself: "
+            "`echo $(( $(date +%s) - 1792630000 ))` prints the seconds used so far.\n"
+        )
+
+    @pytest.mark.asyncio
+    async def test_an_unlimited_step_is_left_alone(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        recorded, prompt = await self._prompt(
+            tmp_path, monkeypatch, "do the thing", None
+        )
+        assert recorded == prompt == "do the thing"
+
+    @pytest.mark.asyncio
+    async def test_the_note_can_be_turned_off(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        recorded, prompt = await self._prompt(
+            tmp_path, monkeypatch, "do the thing", 14400, inject_time_budget_note=False
+        )
+        assert recorded == prompt == "do the thing"
+
+    @pytest.mark.asyncio
+    async def test_instructions_that_state_a_budget_get_no_second_one(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        own = "do the thing\n\nTime budget: you have 2 hours."
+        recorded, prompt = await self._prompt(tmp_path, monkeypatch, own, 7200)
+        assert recorded == prompt == own

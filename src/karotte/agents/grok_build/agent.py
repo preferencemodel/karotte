@@ -52,6 +52,9 @@ class GrokBuildAgent(CliAgent):
     home_dir: ClassVar[str] = ".grok_home"
     home_env: ClassVar[str | None] = "GROK_HOME"
     supports_turn_limit: ClassVar[bool] = True
+    # Grok runs a step as one opaque subprocess, so karotte can't append a
+    # remaining-time counter to its turns; it states the budget up front instead.
+    announces_time_budget: ClassVar[bool] = True
     supports_temperature: ClassVar[bool] = True
     applies_reasoning_effort: ClassVar[bool] = True
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "file"

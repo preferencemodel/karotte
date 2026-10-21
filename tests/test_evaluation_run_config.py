@@ -252,6 +252,10 @@ def test_inject_time_remaining_counter_defaults_to_true():
     assert _config().inject_time_remaining_counter is True
 
 
+def test_inject_time_budget_note_defaults_to_true():
+    assert _config().inject_time_budget_note is True
+
+
 def test_resolve_step_context_window_limit_defaults_to_none():
     config = _config()
     assert config.resolve_step_context_window_limit(0) is None

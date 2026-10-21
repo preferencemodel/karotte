@@ -14,6 +14,7 @@ import os
 import shutil
 import signal
 import tempfile
+import time
 from collections.abc import AsyncGenerator, Callable, Iterable, Mapping
 from pathlib import Path
 from typing import ClassVar, Literal
@@ -25,6 +26,7 @@ from karotte.agents.agent import (
     RunContext,
     StepTimeLimitReachedError,
 )
+from karotte.agents.time_budget import with_time_budget
 from karotte.model_forwarder import ModelForwarder
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.save_artifact import save_artifact
@@ -62,6 +64,11 @@ class CliAgent(abc.ABC):
 
     supports_turn_limit: ClassVar[bool] = False
     """Whether the CLI stops a step at the run config's ``turn_limit``."""
+
+    announces_time_budget: ClassVar[bool] = False
+    """Whether a step's instructions end with the time-budget paragraph (see
+    :mod:`karotte.agents.time_budget`) when the step has a time limit and the
+    run config's ``inject_time_budget_note`` is on."""
 
     provider_url: ClassVar[str]
     """The provider API root, without ``/v1``, the CLI calls when there is no
@@ -237,6 +244,17 @@ class CliAgent(abc.ABC):
 
         Past `time_limit_seconds` the CLI and its children are killed: `error`
         raises after yielding the output so far, `score` keeps it."""
+        if (
+            self.announces_time_budget
+            and time_limit_seconds is not None
+            and self._config.inject_time_budget_note
+        ):
+            instructions = with_time_budget(
+                instructions,
+                time_limit_seconds,
+                started_at=int(time.time()),
+                multi_step=isinstance(self._config.step_time_limit_seconds, list),
+            )
         yield MessageAddedEvent(message=Message(role="user", content=instructions))
 
         step = self._step_index

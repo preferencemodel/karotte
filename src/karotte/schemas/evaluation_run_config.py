@@ -61,6 +61,13 @@ class EvaluationRunConfig(BaseModel):
     time limit is set. No effect without a limit, or for agents that run the
     step in one opaque subprocess (e.g. the Vibe CLI agent)."""
 
+    inject_time_budget_note: bool = True
+    """Whether a CLI agent that announces its budget (grok-build) ends each step's
+    instructions with a paragraph stating the step's time limit and a command
+    that prints the seconds used. The stand-in for the remaining-time counter
+    such agents can't get; no effect without a limit, or when the instructions
+    already state a budget."""
+
     step_context_window_limit: int | list[int] | None = None
     """Maximum context-window length (input tokens of the most recent turn)
     allowed per step. A single value applies to every step; a list is indexed
