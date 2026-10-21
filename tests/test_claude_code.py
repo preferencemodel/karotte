@@ -237,6 +237,44 @@ class TestParseStream:
         part = tool_messages[1].message.content[0]  # pyright: ignore[reportOptionalSubscript]
         assert part["image_url"]["url"].startswith("data:image/png;base64,iVBOR")  # pyright: ignore[reportArgumentType]
 
+    def test_a_result_with_text_and_an_image_keeps_both(self):
+        record = {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_1",
+                        "content": [
+                            {"type": "text", "text": "caption"},
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": "QUJD",
+                                },
+                            },
+                        ],
+                    }
+                ],
+            },
+        }
+        events = list(parse_stream([json.dumps(record)]))
+        (completed,) = [e for e in events if isinstance(e, ToolCallCompletedEvent)]
+        assert [
+            b.model_dump(include={"type", "data"}) for b in completed.result.content
+        ] == [
+            {"type": "text"},
+            {"type": "image", "data": ""},
+        ]
+        (message,) = _messages(events, "tool")
+        assert message.message.content == [
+            {"type": "text", "text": "caption"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,QUJD"}},
+        ]
+
     def test_usage_is_reported_once_per_response_and_adds_up_to_claudes_total(
         self,
     ):
