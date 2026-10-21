@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -238,6 +239,8 @@ class FakeFilesystem:
         self.sandbox.files[path] = data.encode()
 
     def copy_to_local(self, remote: str, local: Path) -> None:
+        if remote in self.sandbox.modal.failing_downloads:
+            raise FakeError(f"lost {remote}")
         Path(local).write_bytes(self.sandbox.files[remote])
 
     def copy_from_local(self, local: Path, remote: str) -> None:
@@ -312,6 +315,7 @@ class FakeModal(ModuleType):
         self.mount_tars: dict[str, bytes] = {}
         """What packing each staged mount directory yields at the end."""
         self.failing_tars: set[str] = set()
+        self.failing_downloads: set[str] = set()
         self.exec_error: Exception | None = None
         self.token_ports: list[int] = []
         self.images: list[dict[str, Any]] = []
@@ -477,6 +481,9 @@ class TestRun:
         )
 
         [sandbox] = fake.sandboxes
+        assert ("mkdir", "-p", "-m", "0700", "/root/.karotte_mounts") in [
+            argv for argv, _ in sandbox.execs
+        ]
         [env] = [kwargs["env"] for _, kwargs in sandbox.execs if "env" in kwargs]
         assert json.loads(env["KAROTTE_STAGED_MOUNTS"]) == [
             {
@@ -541,12 +548,16 @@ class TestRun:
         assert (data / "changed.txt").read_text() == "after"
         assert (data / "sub" / "deep.txt").read_text() == "after"
         assert notes.read_text() == "before"
-        packed = [
-            argv[argv.index("-C") + 1]
+        packs = [
+            argv
             for argv, _ in fake.sandboxes[0].execs
-            if argv[0] == "tar" and "-cf" in argv
+            if argv[0] == "tar" and "-cf" in argv and "/out" not in argv
         ]
-        assert "/root/.karotte_mounts/1" not in packed
+        assert [argv[argv.index("-C") + 1] for argv in packs] == [
+            "/root/.karotte_mounts/0"
+        ]
+        # A hard link the filter dropped would read as deleted on the host.
+        assert "--hard-dereference" in packs[0]
 
     def test_a_mount_that_fails_to_come_back_is_left_alone(
         self, fake: FakeModal, env_dir: Path, tmp_path: Path
@@ -566,6 +577,48 @@ class TestRun:
 
         assert (data / "kept.txt").read_text() == "before"
         assert transcript.exists()
+
+    def test_one_mount_lost_on_the_way_back_spares_the_others(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        first, second = tmp_path / "first", tmp_path / "second"
+        for mount in (first, second):
+            mount.mkdir()
+            (mount / "a.txt").write_text("before")
+        fake.failing_downloads.add("/root/.karotte_transfer/mount-0-back.tar")
+
+        def after(tar: tarfile.TarFile) -> None:
+            _add_file(tar, "./a.txt", b"after")
+
+        fake.mount_tars["/root/.karotte_mounts/1"] = _out_tar(after)
+
+        def out(tar: tarfile.TarFile) -> None:
+            _add_file(tar, "./transcript.json", b"{}")
+
+        fake.out_tar = _out_tar(out)
+
+        transcript = self._run(
+            env_dir, tmp_path, mounts=[f"{first}:/workdir/a", f"{second}:/workdir/b"]
+        )
+
+        assert (first / "a.txt").read_text() == "before"
+        assert (second / "a.txt").read_text() == "after"
+        assert transcript.exists()
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+    def test_an_unreadable_mount_is_a_modal_error(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        data = tmp_path / "data"
+        data.mkdir()
+        secret = data / "secret.txt"
+        secret.write_text("x")
+        secret.chmod(0)
+
+        with pytest.raises(ModalError, match="Cannot pack the mount"):
+            self._run(env_dir, tmp_path, mounts=[f"{data}:/workdir/data:ro"])
+
+        assert fake.sandboxes[0].terminated
 
     def test_a_failed_run_still_copies_out_and_terminates(
         self, fake: FakeModal, env_dir: Path, tmp_path: Path

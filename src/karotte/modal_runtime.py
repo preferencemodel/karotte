@@ -399,7 +399,8 @@ def run_modal(
         sandbox.filesystem.make_directory("/out")
         sandbox.filesystem.write_text(run_config.model_dump_json(), CONFIG_PATH)
         if uploads:
-            _exec_checked(sandbox, "mkdir", "-p", "-m", "0700", TRANSFER_DIR)
+            for root_only in (TRANSFER_DIR, STAGED_MOUNTS_DIR):
+                _exec_checked(sandbox, "mkdir", "-p", "-m", "0700", root_only)
             for index, upload in enumerate(uploads):
                 _upload(sandbox, upload, index)
         token = sandbox.create_connect_token(port=port)
@@ -465,7 +466,10 @@ def _plan_uploads(mounts: Sequence[str] | None) -> list[_Upload]:
         # tarfile stores a link as a link; a bind mount would follow it.
         source = Path(parts[0]).resolve()
         writable = not (len(parts) == 3 and parts[2] == "ro")
-        copied = plain_entries(source) if writable and source.is_dir() else []
+        try:
+            copied = plain_entries(source) if writable and source.is_dir() else []
+        except OSError as e:
+            raise ModalError(f"Cannot read the mount {parts[0]}: {e}") from e
         uploads.append(
             _Upload(source, parts[1], writable, f"{STAGED_MOUNTS_DIR}/{index}", copied)
         )
@@ -481,9 +485,12 @@ def _upload(sandbox: Any, upload: _Upload, index: int) -> None:
     remote = f"{TRANSFER_DIR}/mount-{index}.tar"
     with tempfile.TemporaryDirectory(prefix="karotte-modal-mount-") as tmp:
         archive = Path(tmp) / "mount.tar"
-        with tarfile.open(archive, "w") as tar:
-            name = "." if upload.source.is_dir() else upload.source.name
-            tar.add(upload.source, arcname=name)
+        try:
+            with tarfile.open(archive, "w") as tar:
+                name = "." if upload.source.is_dir() else upload.source.name
+                tar.add(upload.source, arcname=name)
+        except OSError as e:
+            raise ModalError(f"Cannot pack the mount {upload.source}: {e}") from e
         sandbox.filesystem.copy_from_local(archive, remote)
     _exec_checked(sandbox, "mkdir", "-p", upload.staging)
     _exec_checked(
@@ -499,7 +506,17 @@ def _bring_back(sandbox: Any, upload: _Upload, index: int) -> None:
     back: an archive that never arrived must not read as everything deleted."""
     remote = f"{TRANSFER_DIR}/mount-{index}-back.tar"
     try:
-        _exec_checked(sandbox, "tar", "-cf", remote, "-C", upload.staging, ".")
+        # A hard link would be left out on the host and so read as deleted.
+        _exec_checked(
+            sandbox,
+            "tar",
+            "--hard-dereference",
+            "-cf",
+            remote,
+            "-C",
+            upload.staging,
+            ".",
+        )
         with tempfile.TemporaryDirectory(prefix="karotte-modal-mount-") as tmp:
             # Copy-back distrusts links above its source, such as macOS's /var.
             local = Path(tmp).resolve()
@@ -507,7 +524,7 @@ def _bring_back(sandbox: Any, upload: _Upload, index: int) -> None:
             with tarfile.open(local / "back.tar") as archive:
                 archive.extractall(local / "back", filter=_plain_member)
             skipped = apply_copy_back(local / "back", upload.source, upload.copied)
-    except (ModalError, OSError, tarfile.TarError) as e:
+    except Exception as e:  # noqa: BLE001 - one mount mustn't cost the others or /out
         logger.warning(f"Could not copy mount {upload.target} back: {e}")
         return
     if skipped:
