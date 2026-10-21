@@ -48,8 +48,11 @@ ExecutableJudge(
   Karotte puts the file in a fresh temporary directory, passes the script that path, and deletes the directory after scoring finishes.
 - The script must write `{"score": <float>, "metadata": {...}}` to that file, with both keys.
   Karotte converts the metadata values to strings and adds the script's `stdout` and `stderr`.
+  The script's `stdin` is empty.
 - The script must exit 0.
   A non-zero exit, a missing executable, or an output file that is missing or not valid JSON scores 0 with `continue_task=False` and the error in the scoring metadata.
+- Scoring ends when the script exits.
+  Karotte then kills every process the script started that is still running in its process group.
 - `continue_threshold` (default `-1`): the task continues if the score is at least this.
   With the default, every score of -1 or higher continues the task.
 - `cwd` sets the script's working directory.

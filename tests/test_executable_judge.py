@@ -5,6 +5,7 @@ import signal
 import sys
 import textwrap
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -207,23 +208,18 @@ def test_stdout_captured_on_success(transcript: Transcript) -> None:
 
 
 _EVALUATE_BOUND_S = 10.0
-"""How long a test waits for evaluate() to return. A judge that works returns in
-well under a second; one that hangs never does."""
 
 
 @pytest.fixture
 def pid_file(tmp_path: Path) -> Iterator[Path]:
-    """A file the scoring script writes its pid to, then the pids of the
-    processes it starts, one per line. Those are killed afterwards, so a test
-    leaves nothing running."""
+    """Pids of the scoring script and what it starts; the latter are killed afterwards."""
     path = tmp_path / "pids"
     yield path
     _kill_recorded(path, script=False)
 
 
 def _kill_recorded(pid_file: Path, *, script: bool) -> None:
-    """SIGKILL the pids in ``pid_file``. The script's own, the first, only with
-    ``script``: once the judge has reaped it, its pid can belong to anyone."""
+    """The script's own pid, the first, only with ``script``: once reaped, it can be reused."""
     pids = pid_file.read_text().split() if pid_file.exists() else []
     for line in pids if script else pids[1:]:
         try:
@@ -233,8 +229,7 @@ def _kill_recorded(pid_file: Path, *, script: bool) -> None:
 
 
 def _scoring_script(tmp_path: Path, body: str) -> Path:
-    """A scoring script that records its pid in argv[1], runs ``body`` and
-    writes score 1 to the output file in argv[-1]."""
+    """Records its pid in argv[1], runs ``body`` and writes score 1 to argv[-1]."""
     script = tmp_path / "scoring_script.py"
     script.write_text(
         "import json, os, subprocess, sys\n"
@@ -265,8 +260,7 @@ def _evaluate_within_bound(
     thread.join(_EVALUATE_BOUND_S)
     hung = thread.is_alive()
     if hung:
-        # Free the stuck judge, so it can't outlive the test and take the
-        # interpreter down at exit.
+        # Free the stuck judge so it can't outlive the test.
         _kill_recorded(pid_file, script=True)
         thread.join(_EVALUATE_BOUND_S)
     assert not hung, f"evaluate() did not return within {_EVALUATE_BOUND_S}s"
@@ -278,9 +272,6 @@ def _evaluate_within_bound(
 def test_returns_when_the_script_exits_but_its_child_holds_the_pipes(
     transcript: Transcript, tmp_path: Path, pid_file: Path
 ) -> None:
-    """A scoring script may leave a helper running (a server it tested, a
-    daemon it started) that inherited its stdout and stderr. The script's exit
-    ends scoring; the pipes never reach EOF while the helper lives."""
     script = _scoring_script(
         tmp_path,
         """
@@ -302,8 +293,6 @@ def test_returns_when_the_script_exits_but_its_child_holds_the_pipes(
 def test_returns_when_the_pipes_are_left_mid_character(
     transcript: Transcript, tmp_path: Path, pid_file: Path
 ) -> None:
-    """When a process the script started keeps the pipes, the judge stops
-    reading before EOF, which can be part-way through a character."""
     script = _scoring_script(
         tmp_path,
         """
@@ -329,9 +318,6 @@ def test_returns_when_the_pipes_are_left_mid_character(
 def test_does_not_deadlock_on_a_partial_line_while_the_other_pipe_fills(
     transcript: Transcript, tmp_path: Path, pid_file: Path, partial: str, flooded: str
 ) -> None:
-    """A line without its newline yet (a progress bar, a prompt) on one pipe,
-    then more output on the other than a pipe holds. The script blocks until
-    its output is read, so the judge must not wait for the newline first."""
     script = _scoring_script(
         tmp_path,
         f"""
@@ -354,8 +340,6 @@ def test_does_not_deadlock_on_a_partial_line_while_the_other_pipe_fills(
 def test_reads_what_the_script_wrote_when_select_never_reports_it(
     transcript: Transcript, tmp_path: Path, pid_file: Path
 ) -> None:
-    """As in `test_select_timeout_does_not_hang`, select() can time out with
-    output waiting. Once the script has exited, what it wrote is still read."""
     script = _scoring_script(tmp_path, 'print("scored")')
     judge = karotte.judges.executable_judge.ExecutableJudge(
         [sys.executable, str(script), str(pid_file), "out.json"]
@@ -366,3 +350,56 @@ def test_reads_what_the_script_wrote_when_select_never_reports_it(
 
     assert evaluation.score == 1
     assert "scored" in evaluation.metadata["stdout"]
+
+
+def test_kills_what_the_script_leaves_running(
+    transcript: Transcript, tmp_path: Path, pid_file: Path
+) -> None:
+    script = _scoring_script(
+        tmp_path,
+        """
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"])
+        print(child.pid, file=pids, flush=True)
+        """,
+    )
+    judge = karotte.judges.executable_judge.ExecutableJudge(
+        [sys.executable, str(script), str(pid_file), "out.json"]
+    )
+
+    evaluation = _evaluate_within_bound(judge, transcript, pid_file)
+
+    assert evaluation.score == 1
+    child = int(pid_file.read_text().split()[1])
+    deadline = time.monotonic() + _EVALUATE_BOUND_S
+    while _is_running(child) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not _is_running(child)
+
+
+def _is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def test_does_not_hand_the_script_its_stdin(
+    transcript: Transcript, tmp_path: Path, pid_file: Path
+) -> None:
+    script = _scoring_script(tmp_path, "print(repr(sys.stdin.read()))")
+    judge = karotte.judges.executable_judge.ExecutableJudge(
+        [sys.executable, str(script), str(pid_file), "out.json"]
+    )
+    read_end, write_end = os.pipe()
+    saved_stdin = os.dup(0)
+    os.dup2(read_end, 0)
+    try:
+        evaluation = _evaluate_within_bound(judge, transcript, pid_file)
+    finally:
+        os.dup2(saved_stdin, 0)
+        for fd in (saved_stdin, read_end, write_end):
+            os.close(fd)
+
+    assert evaluation.score == 1
+    assert "''" in evaluation.metadata["stdout"]

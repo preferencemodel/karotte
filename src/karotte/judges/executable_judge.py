@@ -3,6 +3,7 @@ import io
 import json
 import os
 import select
+import signal
 import subprocess
 import sys
 import tempfile
@@ -16,18 +17,8 @@ from karotte.schemas.scoring import Scoring
 from karotte.schemas.transcript import Transcript
 
 _HEARTBEAT_INTERVAL_S: Final = 30.0
-"""How long the scoring script can be quiet before a heartbeat is logged, so it
-isn't taken for stuck and killed for a prolonged lack of output."""
-
 _EXIT_CHECK_INTERVAL_S: Final = 1.0
-"""How often to check whether the scoring script has exited while its pipes
-are quiet. A process it started can keep them open after it exits, so their
-EOF can't be what ends scoring."""
-
 _DRAIN_AFTER_EXIT_S: Final = 10.0
-"""The longest the judge reads what's left in the pipes after the script has
-exited, should a process it started keep them full."""
-
 _READ_SIZE: Final = 65536
 
 
@@ -109,11 +100,16 @@ class ExecutableJudge(Judge):
                 process = subprocess.Popen(
                     self.subprocess_run_args,
                     cwd=self.cwd,
+                    stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
+                    process_group=0,
                 )
-                stdout, stderr = _read_output(process)
+                try:
+                    stdout, stderr = _read_output(process)
+                finally:
+                    _kill_process_group(process.pid)
                 return_code = process.wait()
                 if return_code != 0:
                     raise subprocess.CalledProcessError(
@@ -158,10 +154,7 @@ class _Pipe:
 
     def __init__(self, stream: io.TextIOWrapper, echo: TextIO) -> None:
         self.fd: Final = stream.fileno()
-        # Read without blocking: ``select`` only says when to look.
         os.set_blocking(self.fd, False)
-        # Decode the way reading ``stream`` would: its encoding and errors,
-        # with universal newlines.
         self._decoder: Final = io.IncrementalNewlineDecoder(
             codecs.getincrementaldecoder(stream.encoding)(stream.errors or "strict"),
             translate=True,
@@ -171,8 +164,7 @@ class _Pipe:
         self.at_eof: bool = False
 
     def read(self) -> bool:
-        """Read what the pipe holds right now. Returns whether there was
-        anything, counting EOF."""
+        """Returns whether there was anything to read, counting EOF."""
         if self.at_eof:
             return False
         try:
@@ -184,10 +176,8 @@ class _Pipe:
         return True
 
     def text(self) -> str:
-        """Everything read so far."""
         if not self.at_eof:
-            # Reading stopped before EOF, so the last character may be cut
-            # short: drop its bytes, but keep a pending "\r".
+            # Drop a character cut short before EOF, but keep a pending "\r".
             _, flag = self._decoder.getstate()
             self._decoder.setstate((b"", flag))
             self._take(self._decoder.decode(b"", final=True))
@@ -201,13 +191,8 @@ class _Pipe:
 
 
 def _read_output(process: subprocess.Popen[str]) -> tuple[str, str]:
-    """Echo and collect the script's stdout and stderr until it has exited.
-
-    Each pipe is read as soon as it holds anything, never a line at a time:
-    waiting for one pipe's newline while the script fills the other would
-    block both for good. Once the script has exited, what it wrote is read and
-    the pipes are left, since a process it started may still hold them open.
-    """
+    """Echo and collect the script's output until it exits, without waiting for
+    EOF, which a process it started can hold off."""
     assert isinstance(process.stdout, io.TextIOWrapper)
     assert isinstance(process.stderr, io.TextIOWrapper)
     stdout = _Pipe(process.stdout, sys.stdout)
@@ -238,3 +223,10 @@ def _read_output(process: subprocess.Popen[str]) -> tuple[str, str]:
         if not any(reads):
             break
     return stdout.text(), stderr.text()
+
+
+def _kill_process_group(pgid: int) -> None:
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
