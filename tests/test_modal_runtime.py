@@ -162,7 +162,6 @@ class TestProblems:
     def _problems(self, **kwargs: Any) -> list[str]:
         args: dict[str, Any] = {
             "required_hardware": None,
-            "mounts": None,
             "dev": False,
             "keep_containers": False,
             "prepare_only": False,
@@ -178,7 +177,6 @@ class TestProblems:
         ("kwargs", "named"),
         [
             ({"required_hardware": "gpu"}, "gpu"),
-            ({"mounts": ["a:/b"]}, "--mount"),
             ({"dev": True}, "--dev"),
             ({"keep_containers": True}, "--keep-containers"),
             ({"prepare_only": True}, "--prepare-only"),
@@ -242,6 +240,9 @@ class FakeFilesystem:
     def copy_to_local(self, remote: str, local: Path) -> None:
         Path(local).write_bytes(self.sandbox.files[remote])
 
+    def copy_from_local(self, local: Path, remote: str) -> None:
+        self.sandbox.files[remote] = Path(local).read_bytes()
+
 
 @final
 class FakeSandbox:
@@ -251,6 +252,8 @@ class FakeSandbox:
         self.tags: dict[str, str] = dict(kwargs.get("tags") or {})
         self.files: dict[str, bytes] = {}
         self.dirs: list[str] = []
+        self.uploaded: dict[str, bytes] = {}
+        """Archives unpacked in the sandbox, by the directory they went to."""
         self.execs: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.terminated = False
         self.filesystem = FakeFilesystem(self)
@@ -259,8 +262,18 @@ class FakeSandbox:
         if self.modal.exec_error is not None:
             raise self.modal.exec_error
         self.execs.append((argv, kwargs))
+        if argv[0] in ("mkdir", "rm"):
+            return FakeProcess([], 0)
+        if argv[0] == "tar" and "-xf" in argv:
+            staging = argv[argv.index("-C") + 1]
+            self.uploaded[staging] = self.files[argv[argv.index("-xf") + 1]]
+            return FakeProcess([], 0)
         if argv[0] == "tar":
-            self.files[argv[argv.index("-cf") + 1]] = self.modal.out_tar
+            packed = argv[argv.index("-C") + 1]
+            if packed in self.modal.failing_tars:
+                return FakeProcess([], 2)
+            tar = self.modal.mount_tars.get(packed, self.modal.out_tar)
+            self.files[argv[argv.index("-cf") + 1]] = tar
             return FakeProcess([], 0)
         return FakeProcess(self.modal.output, self.modal.returncode)
 
@@ -296,6 +309,9 @@ class FakeModal(ModuleType):
         self.output = ["line one\n", "line two\n"]
         self.returncode = 0
         self.out_tar = _out_tar(_empty)
+        self.mount_tars: dict[str, bytes] = {}
+        """What packing each staged mount directory yields at the end."""
+        self.failing_tars: set[str] = set()
         self.exec_error: Exception | None = None
         self.token_ports: list[int] = []
         self.images: list[dict[str, Any]] = []
@@ -441,6 +457,115 @@ class TestRun:
         assert transcript.read_text() == "{}"
         assert (out / "modal-test_artifacts" / "a.txt").read_text() == "artifact"
         assert not (out / "escape").exists()
+
+    def test_mounts_are_staged_for_the_guest(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        data = tmp_path / "data"
+        (data / "sub").mkdir(parents=True)
+        (data / "a.txt").write_text("a")
+        (data / "sub" / "b.txt").write_text("b")
+        notes = tmp_path / "notes.txt"
+        notes.write_text("notes")
+        link = tmp_path / "data-link"
+        link.symlink_to(data)
+
+        self._run(
+            env_dir,
+            tmp_path,
+            mounts=[f"{link}:/workdir/data", f"{notes}:/workdir/notes.txt:ro"],
+        )
+
+        [sandbox] = fake.sandboxes
+        [env] = [kwargs["env"] for _, kwargs in sandbox.execs if "env" in kwargs]
+        assert json.loads(env["KAROTTE_STAGED_MOUNTS"]) == [
+            {
+                "source": "/root/.karotte_mounts/0",
+                "target": "/workdir/data",
+                "writable": True,
+            },
+            {
+                "source": "/root/.karotte_mounts/1/notes.txt",
+                "target": "/workdir/notes.txt",
+                "writable": False,
+            },
+        ]
+        with tarfile.open(
+            fileobj=io.BytesIO(sandbox.uploaded["/root/.karotte_mounts/0"])
+        ) as tar:
+            # The link's target, not the link.
+            assert sorted(tar.getnames()) == [".", "./a.txt", "./sub", "./sub/b.txt"]
+        with tarfile.open(
+            fileobj=io.BytesIO(sandbox.uploaded["/root/.karotte_mounts/1"])
+        ) as tar:
+            assert tar.getnames() == ["notes.txt"]
+
+    def test_a_writable_mount_comes_back(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        data = tmp_path / "data"
+        (data / "sub").mkdir(parents=True)
+        for name in ("kept.txt", "changed.txt", "deleted.txt", "sub/deep.txt"):
+            (data / name).write_text("before")
+        notes = tmp_path / "notes.txt"
+        notes.write_text("before")
+
+        def build(tar: tarfile.TarFile) -> None:
+            _add_file(tar, "./kept.txt", b"before")
+            sub = tarfile.TarInfo("./sub")
+            sub.type = tarfile.DIRTYPE
+            sub.mode = 0o755
+            tar.addfile(sub)
+            _add_file(tar, "./sub/deep.txt", b"after")
+            _add_file(tar, "./changed.txt", b"after")
+            _add_file(tar, "./added.txt", b"new")
+            link = tarfile.TarInfo("./escape")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "/etc/passwd"
+            tar.addfile(link)
+
+        fake.mount_tars["/root/.karotte_mounts/0"] = _out_tar(build)
+
+        self._run(
+            env_dir,
+            tmp_path,
+            mounts=[f"{data}:/workdir/data", f"{notes}:/workdir/notes.txt:ro"],
+        )
+
+        assert sorted(p.name for p in data.iterdir()) == [
+            "added.txt",
+            "changed.txt",
+            "kept.txt",
+            "sub",
+        ]
+        assert (data / "changed.txt").read_text() == "after"
+        assert (data / "sub" / "deep.txt").read_text() == "after"
+        assert notes.read_text() == "before"
+        packed = [
+            argv[argv.index("-C") + 1]
+            for argv, _ in fake.sandboxes[0].execs
+            if argv[0] == "tar" and "-cf" in argv
+        ]
+        assert "/root/.karotte_mounts/1" not in packed
+
+    def test_a_mount_that_fails_to_come_back_is_left_alone(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        """An archive that never arrived must not read as everything deleted."""
+        data = tmp_path / "data"
+        data.mkdir()
+        (data / "kept.txt").write_text("before")
+        fake.failing_tars.add("/root/.karotte_mounts/0")
+
+        def build(tar: tarfile.TarFile) -> None:
+            _add_file(tar, "./transcript.json", b"{}")
+
+        fake.out_tar = _out_tar(build)
+
+        transcript = self._run(env_dir, tmp_path, mounts=[f"{data}:/workdir/data"])
+
+        assert (data / "kept.txt").read_text() == "before"
+        assert transcript.exists()
 
     def test_a_failed_run_still_copies_out_and_terminates(
         self, fake: FakeModal, env_dir: Path, tmp_path: Path
