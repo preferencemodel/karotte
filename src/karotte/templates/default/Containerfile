@@ -183,6 +183,14 @@ RUN echo -e "\033[34mStudent uses $(python --version)\033[0m"
 RUN chmod 0700 ${ROOT_WORKDIR} /root_data /intermediate_data
 
 {% for t in templates %}{% include t ~ "/partials/Containerfile.jinja" ignore missing %}{% endfor %}
+
+# Remove trust in the emSign roots and AAA Certificate Services from the OS trust
+# store and from every certifi and httplib2 bundle in the image. This runs after
+# every dnf install and Python package install, partials included, because a
+# reinstall of certifi brings the roots back. It fails the build if any are still
+# trusted. It must run as root.
+COPY scripts/distrust_roots.sh /tmp/distrust_roots.sh
+RUN bash /tmp/distrust_roots.sh && rm -f /tmp/distrust_roots.sh
 RUN . ${ROOT_WORKDIR}/.venv/bin/activate && karotte check
 
 WORKDIR ${STUDENT_WORKDIR}

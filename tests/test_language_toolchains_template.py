@@ -113,6 +113,55 @@ class TestDefaultSeams:
             )
 
 
+def _instructions(containerfile: str) -> list[tuple[str, str]]:
+    lines = containerfile.splitlines()
+    text = "\n".join(line for line in lines if not line.lstrip().startswith("#"))
+    return [
+        (keyword.upper(), rest)
+        for keyword, _, rest in (
+            line.strip().partition(" ")
+            for line in text.replace("\\\n", " ").splitlines()
+            if line.strip()
+        )
+    ]
+
+
+@pytest.mark.parametrize("env", ["default_env", "toolchains_env"])
+def test_root_distrust_runs_as_root_after_the_last_install(
+    env: str, request: pytest.FixtureRequest
+):
+    """An install of certifi after the distrust step brings the roots back, and
+    the script needs root to edit the trust store."""
+    env_dir: Path = request.getfixturevalue(env)
+    assert (env_dir / "scripts/distrust_roots.sh").is_file()
+    instructions = _instructions((env_dir / "Containerfile").read_text())
+    final_stage = max(i for i, (k, _) in enumerate(instructions) if k == "FROM")
+    instructions = instructions[final_stage:]
+    distrust = [
+        i
+        for i, (k, rest) in enumerate(instructions)
+        if k == "RUN" and "/tmp/distrust_roots.sh" in rest
+    ]
+    assert len(distrust) == 1
+    (step,) = distrust
+    assert instructions[step - 1] == (
+        "COPY",
+        "scripts/distrust_roots.sh /tmp/distrust_roots.sh",
+    )
+    installs = [
+        i
+        for i, (k, rest) in enumerate(instructions)
+        if k == "RUN"
+        and any(
+            word in rest
+            for word in ("dnf ", "uv sync", "uv pip", "build_venvs", "agents install")
+        )
+    ]
+    assert installs and max(installs) < step
+    users = [rest for k, rest in instructions[:step] if k == "USER"]
+    assert users[-1] == "root"
+
+
 class TestLanguageToolchainsTemplate:
     def test_manifest_records_both_templates(self, toolchains_env: Path):
         manifest = (toolchains_env / ".manifest.json").read_text()
