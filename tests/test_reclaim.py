@@ -64,6 +64,23 @@ def _grow_past_path_max(base: Path) -> tuple[int, int]:
     return fd, count
 
 
+def _chain(base: Path, depth: int, name: str = "d" * 255) -> int:
+    """Nest ``depth`` directories under ``base``; returns an fd on the deepest."""
+    fd = _open_dir(base)
+    try:
+        for _ in range(depth):
+            os.mkdir(name, dir_fd=fd)
+            nfd = _open_dir(name, fd)
+            os.close(fd)
+            fd = nfd
+    except OSError as e:
+        os.close(fd)
+        if e.errno != errno.ENAMETOOLONG:
+            raise
+        pytest.skip(f"filesystem caps path length (overlayfs?): {e}")
+    return fd
+
+
 @pytest.fixture(autouse=True)
 def no_real_segments(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Never touch the machine's actual SysV segments from a test: no listing
@@ -239,6 +256,68 @@ class TestDeletingFiles:
         assert removed == depth
         assert peak < 4 * 2**20
 
+    def test_a_deep_tree_hands_no_long_path_to_the_lexical_checks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A path built and compared per level makes the sweep quadratic in depth."""
+        os.close(_chain(tmp_path, 300))
+        longest = 0
+
+        def spy(owner: object, name: str) -> None:
+            real = getattr(owner, name)
+
+            def wrapper(*args: object) -> object:
+                nonlocal longest
+                longest = max(longest, *(len(a) for a in args if isinstance(a, str)), 0)
+                return real(*args)
+
+            monkeypatch.setattr(owner, name, wrapper)
+
+        spy(reclaim, "_child_path")
+        spy(reclaim, "_is_excluded")
+        for method in ("point", "at", "under"):
+            spy(reclaim._Mounts, method)  # pyright: ignore[reportPrivateUsage]
+
+        assert delete_files(os.getuid(), (tmp_path,)) == 300
+        assert longest < 4096
+
+    @not_root
+    def test_a_failure_deep_down_is_named_without_its_full_path(
+        self, tmp_path: Path
+    ) -> None:
+        fd = _chain(tmp_path, 300)
+        os.mkdir("sealed", dir_fd=fd)
+        os.chmod("sealed", 0o000, dir_fd=fd)
+
+        try:
+            with pytest.raises(ReclaimError) as caught:
+                delete_files(os.getuid(), (tmp_path,))
+        finally:
+            os.chmod("sealed", 0o700, dir_fd=fd)
+            os.close(fd)
+
+        message = str(caught.value)
+        assert f"{tmp_path}/…(+300 levels)/sealed" in message
+        assert len(message) < 4096
+
+    @not_root
+    def test_it_counts_every_failure_but_names_only_some(self, tmp_path: Path) -> None:
+        sealed = [tmp_path / f"sealed{i}" for i in range(25)]
+        for path in sealed:
+            path.mkdir()
+            path.chmod(0o000)
+
+        try:
+            with pytest.raises(ReclaimError) as caught:
+                delete_files(os.getuid(), (tmp_path,))
+        finally:
+            for path in sealed:
+                path.chmod(0o700)
+
+        message = str(caught.value)
+        assert "Could not delete 25 path(s)" in message
+        assert message.endswith(", and 15 more")
+
     def test_an_unstattable_entry_fails_the_reclaim(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -372,6 +451,18 @@ class TestExcludingPaths:
 
         assert delete_files(os.getuid(), (tmp_path,)) == 3
         assert list(tmp_path.iterdir()) == []
+
+    def test_an_exclude_deep_in_a_tree_still_survives(self, tmp_path: Path) -> None:
+        fd = _chain(tmp_path, 3)
+        _create_file("keep", fd)
+        _create_file("junk", fd)
+        os.close(fd)
+        keep = tmp_path.joinpath(*["d" * 255] * 3, "keep")
+
+        _ = delete_files(os.getuid(), (tmp_path,), extend_exclude=(keep,))
+
+        assert os.path.exists(keep)
+        assert os.listdir(keep.parent) == ["keep"]
 
     def test_a_missing_exclude_changes_nothing(self, tmp_path: Path) -> None:
         (tmp_path / "junk").write_text("x")
@@ -526,6 +617,17 @@ class TestMountSkips:
 
         assert delete_files(os.getuid(), (swept,)) == 1
         assert shm.is_dir()
+
+    def test_a_mount_deep_in_a_tree_is_still_spared(
+        self, tmp_path: Path, swept: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        os.close(_chain(swept, 3))
+        data = swept.joinpath(*["d" * 255] * 3)
+        (data / "file").write_text("x")
+        self.mounts(monkeypatch, tmp_path, f"squash {data} squashfs ro 0 0\n")
+
+        assert delete_files(os.getuid(), (swept,)) == 0
+        assert (data / "file").exists()
 
     @not_root
     def test_an_unopenable_dir_on_an_unsweepable_mount_is_not_missed(

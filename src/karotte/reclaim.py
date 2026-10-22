@@ -34,6 +34,8 @@ timeout that would otherwise fail the run as infra."""
 
 _CAP_IPC_OWNER = 15
 
+_SHOWN_FAILURES = 10
+
 MOUNTS_PATH = Path("/proc/self/mounts")
 STATUS_PATH = Path("/proc/self/status")
 
@@ -171,12 +173,12 @@ def delete_files(
     removed += _remove_sysv_segments(uid)
     if removed:
         logger.info(f"Deleted {removed} thing(s) owned by uid {uid}")
-    if failed:
-        shown = ", ".join(failed[:10])
-        if len(failed) > 10:
-            shown += f", and {len(failed) - 10} more"
+    if failed.count:
+        shown = ", ".join(failed.shown)
+        if failed.count > len(failed.shown):
+            shown += f", and {failed.count - len(failed.shown)} more"
         raise ReclaimError(
-            f"Could not delete {len(failed)} path(s) owned by uid {uid}: {shown}"
+            f"Could not delete {failed.count} path(s) owned by uid {uid}: {shown}"
         )
     return removed
 
@@ -186,8 +188,9 @@ _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
 
 @final
 class _Frame:
-    """A directory being swept. Only the top of the stack holds an open fd and
-    its path; a parent gets both back on the way out."""
+    """A directory being swept; only the top of the stack holds an open fd, and
+    a parent gets it back on the way out. ``path`` is ``None`` once it is
+    longer than any mount point or exclude, which nothing below can then be."""
 
     __slots__ = (
         "fd",
@@ -204,7 +207,7 @@ class _Frame:
     def __init__(
         self,
         fd: int,
-        path: str,
+        path: str | None,
         name: str,
         owned: bool,
         names: list[str],
@@ -222,29 +225,51 @@ class _Frame:
 
 
 @final
-class _Mounts:
-    """Which filesystem a path sits on and whether that one may be swept.
-    Read-only and virtual filesystems may not."""
+class _Failures:
+    """How many paths could not be deleted, and the first few of them."""
 
-    __slots__ = ("_sweepable", "_points")
+    __slots__ = ("count", "shown")
+
+    def __init__(self):
+        self.count = 0
+        self.shown: list[str] = []
+
+    def add(self, stack: list[_Frame], name: str | None = None) -> None:
+        self.count += 1
+        if len(self.shown) < _SHOWN_FAILURES:
+            self.shown.append(_describe(stack, name))
+
+
+@final
+class _Mounts:
+    """Which filesystem a path sits on and whether that one may be swept;
+    read-only and virtual filesystems may not. A ``None`` path lies too deep to
+    be or hold a mount point."""
+
+    __slots__ = ("_sweepable", "_points", "longest")
 
     def __init__(self, sweepable: dict[str, bool]):
         self._sweepable = sweepable
         self._points = tuple(point for point, ok in sweepable.items() if ok)
+        self.longest = max(map(len, sweepable), default=0)
 
-    def point(self, path: str) -> bool:
+    def point(self, path: str | None) -> bool:
         """Whether something is mounted exactly at ``path``, which makes it
         none of a sweep's business to remove."""
-        return path in self._sweepable
+        return path is not None and path in self._sweepable
 
-    def at(self, path: str, inherited: bool) -> bool:
+    def at(self, path: str | None, inherited: bool) -> bool:
         """Whether what sits at ``path`` may be swept: the mount there says so,
         or, with nothing mounted there, the filesystem it is part of."""
+        if path is None:
+            return inherited
         return self._sweepable.get(path, inherited)
 
-    def under(self, path: str) -> bool:
+    def under(self, path: str | None) -> bool:
         """Whether a sweepable filesystem is mounted somewhere below ``path``,
         which is reason enough to walk through a filesystem that is not."""
+        if path is None:
+            return False
         prefix = path if path.endswith("/") else path + "/"
         return any(point.startswith(prefix) for point in self._points)
 
@@ -298,24 +323,39 @@ def _delete_owned(
     excluded: tuple[str, ...],
     mounts: _Mounts,
     deadline: _Deadline,
-) -> tuple[int, list[str]]:
+) -> tuple[int, _Failures]:
     removed = 0
-    failed: list[str] = []
+    failed = _Failures()
     for root in roots:
         removed += _sweep(uid, root, excluded, mounts, failed, deadline, removed)
     return removed, failed
 
 
-def _is_excluded(path: str, excluded: tuple[str, ...]) -> bool:
-    return any(path == e or path.startswith(e + "/") for e in excluded)
+def _is_excluded(path: str | None, excluded: tuple[str, ...]) -> bool:
+    return path is not None and any(
+        path == e or path.startswith(e + "/") for e in excluded
+    )
 
 
 def _child_path(parent: str, name: str) -> str:
     return f"/{name}" if parent == "/" else f"{parent}/{name}"
 
 
-def _parent_path(frame: _Frame) -> str:
-    return frame.path[: -len(frame.name) - 1] or "/"
+def _describe(stack: list[_Frame], name: str | None = None) -> str:
+    """The path of ``name`` in the top frame, or of the top frame itself, with
+    the levels whose path is not kept elided."""
+    top = anchor = len(stack) - 1
+    while (path := stack[anchor].path) is None:
+        anchor -= 1
+    elided = top - anchor
+    if name is None:
+        if not elided:
+            return path
+        name = stack[top].name
+        elided -= 1
+    if not elided:
+        return _child_path(path, name)
+    return f"{_child_path(path, '…')}(+{elided:,} levels)/{name}"
 
 
 def _sweep(
@@ -323,12 +363,13 @@ def _sweep(
     root: str,
     excluded: tuple[str, ...],
     mounts: _Mounts,
-    failed: list[str],
+    failed: _Failures,
     deadline: _Deadline,
     already_removed: int = 0,
 ) -> int:
     """Delete with dir-fd-relative syscalls only: each component is bounded by
     NAME_MAX, so a deep tree cannot push a call past PATH_MAX."""
+    tracked = max(mounts.longest, *map(len, excluded), 0)
     try:
         fd = os.open(root, _DIR_FLAGS)
     except OSError:
@@ -346,13 +387,13 @@ def _sweep(
             if deadline.passed():
                 done = already_removed + removed
                 raise ReclaimError(
-                    f"Sweeping what uid {uid} owns took longer than {deadline}; deleted {done} thing(s) before giving up at {frame.path}"
+                    f"Sweeping what uid {uid} owns took longer than {deadline}; deleted {done} thing(s) before giving up at {_describe(stack)}"
                 )
             if frame.next < len(frame.names):
                 name = frame.names[frame.next]
                 frame.next += 1
                 removed += _sweep_entry(
-                    uid, frame, name, stack, excluded, mounts, failed
+                    uid, frame, name, stack, excluded, mounts, failed, tracked
                 )
                 continue
             stack.pop()
@@ -360,11 +401,10 @@ def _sweep(
                 os.close(frame.fd)
                 break
             parent = stack[-1]
-            parent.path = _parent_path(frame)
             try:
                 parent.fd = _reopen_parent(frame, parent)
             except OSError:
-                failed.append(parent.path)
+                failed.add(stack)
                 return removed
             if not frame.owned:
                 continue
@@ -373,7 +413,7 @@ def _sweep(
                 removed += 1
             except OSError as exc:
                 if exc.errno not in (errno.ENOENT, errno.ENOTEMPTY):
-                    failed.append(frame.path)
+                    failed.add(stack, frame.name)
     except BaseException:
         for frame in stack:
             if frame.fd >= 0:
@@ -390,9 +430,10 @@ def _sweep_entry(
     stack: list[_Frame],
     excluded: tuple[str, ...],
     mounts: _Mounts,
-    failed: list[str],
+    failed: _Failures,
+    tracked: int,
 ) -> int:
-    path = _child_path(frame.path, name)
+    path = None if frame.path is None else _child_path(frame.path, name)
     if _is_excluded(path, excluded):
         return 0
     try:
@@ -402,10 +443,10 @@ def _sweep_entry(
     except OSError:
         if not frame.sweepable:
             return 0
-        failed.append(path)
+        failed.add(stack, name)
         return 0
     if stat.S_ISDIR(st.st_mode):
-        return _enter(uid, frame, name, path, stack, mounts, failed)
+        return _enter(uid, frame, name, path, stack, mounts, failed, tracked)
     if st.st_uid != uid or not mounts.at(path, frame.sweepable):
         return 0
     try:
@@ -414,7 +455,7 @@ def _sweep_entry(
     except FileNotFoundError:
         return 0
     except OSError:
-        failed.append(path)
+        failed.add(stack, name)
         return 0
 
 
@@ -422,10 +463,11 @@ def _enter(
     uid: int,
     parent: _Frame,
     name: str,
-    path: str,
+    path: str | None,
     stack: list[_Frame],
     mounts: _Mounts,
-    failed: list[str],
+    failed: _Failures,
+    tracked: int,
 ) -> int:
     """Descend even into other uids' dirs: uid files can live there. A dir we
     cannot see into might hold the uid's files, so it fails the reclaim. A
@@ -440,7 +482,7 @@ def _enter(
         return 0
     except OSError:
         if sweepable:
-            failed.append(path)
+            failed.add(stack, name)
         return 0
     entry_uid = os.fstat(fd).st_uid
     try:
@@ -448,13 +490,14 @@ def _enter(
     except OSError:
         os.close(fd)
         if sweepable:
-            failed.append(path)
+            failed.add(stack, name)
         return 0
     owned = sweepable and entry_uid == uid and not mounts.point(path)
+    if path is not None and len(path) > tracked:
+        path = None
     child = _Frame(fd, path, name, owned, names, sweepable)
     os.close(parent.fd)
     parent.fd = -1
-    parent.path = ""
     stack.append(child)
     return 0
 
