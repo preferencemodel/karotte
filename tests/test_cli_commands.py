@@ -102,7 +102,7 @@ class TestAgents:
         agents = {a["name"]: a for a in json.loads(result.stdout)}
 
         assert agents["external"]["providers"] is None
-        assert agents["claude-code"]["providers"] == ["anthropic"]
+        assert agents["claude-code"]["providers"] == ["anthropic", "hosted_vllm"]
         assert agents["grok-build"]["providers"] == ["xai"]
         assert agents["mistral-vibe"]["providers"] == ["mistral"]
         assert agents["codex"]["providers"] == ["openai"]
