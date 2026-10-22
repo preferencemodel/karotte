@@ -36,7 +36,11 @@ fi
 bundles() {
     if command -v find >/dev/null; then
         # find exits non-zero on any unreadable path; that is not a failure here.
-        find / -xdev \( -path '*/certifi/cacert.pem' -o -path '*/httplib2/cacerts.txt' \) -type f 2>/dev/null || true
+        # Container image stores are skipped: editing their unpacked layers in place
+        # changes images behind the runtime's back.
+        find / -xdev \( -path /var/lib/containerd -o -path /var/lib/buildkit -o -path /var/lib/docker \
+            -o -path /var/lib/containers \) -prune -o \
+            \( -path '*/certifi/cacert.pem' -o -path '*/httplib2/cacerts.txt' \) -type f -print 2>/dev/null || true
     else
         # Minimal images (amazonlinux) ship without findutils.
         local top f
