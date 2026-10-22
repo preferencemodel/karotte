@@ -150,6 +150,20 @@ jobs:
             .venv/bin/karotte run --config run_config.json --no-ui --no-proxy --runtime firecracker
           uv run python "$GITHUB_WORKSPACE/tests/check_transcript.py" out/transcript.json
 
+  all-tests-pass:
+    name: All tests pass
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    needs: [lint, core-tests, root-tests, default-template, firecracker-template]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi
+
   build:
     name: Build
     needs: [lint, core-tests, root-tests, default-template, firecracker-template]
