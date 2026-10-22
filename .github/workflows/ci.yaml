@@ -13,7 +13,7 @@ concurrency:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Check out code
@@ -44,7 +44,7 @@ jobs:
 
   root-tests:
     name: Root Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - name: Check out code
@@ -92,7 +92,7 @@ jobs:
   # GitHub's hosted Ubuntu runners provide.
   firecracker-template:
     name: Firecracker Template Test (${{ matrix.mode }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -124,7 +124,7 @@ jobs:
         with:
           path: ~/.cache/karotte/firecracker
           key: firecracker-${{ runner.arch }}-${{ hashFiles('src/karotte/firecracker/artifacts.py') }}
-      # Ubuntu 24.04 confines unprivileged user namespaces with AppArmor, and
+      # Ubuntu confines unprivileged user namespaces with AppArmor, and
       # its passt package has no profile that lets pasta create one. The
       # jailed run needs no user namespace.
       - name: Let pasta create user namespaces
@@ -152,7 +152,7 @@ jobs:
 
   all-tests-pass:
     name: All tests pass
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     needs: [lint, core-tests, root-tests, default-template, firecracker-template]
     if: always()
@@ -168,7 +168,7 @@ jobs:
     name: Build
     needs: [lint, core-tests, root-tests, default-template, firecracker-template]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -199,7 +199,7 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     environment:
       name: pypi

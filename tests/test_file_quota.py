@@ -30,6 +30,12 @@ def quota_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(file_quota, "QUOTA_DIR", directory)
     monkeypatch.setattr(file_quota, "trusted_binary", str)
     monkeypatch.setattr(os, "geteuid", lambda: 0)
+
+    # Sparse, so the GiB-sized images don't fill a tmpfs /tmp.
+    def sparse_fallocate(fd: int, offset: int, length: int) -> None:
+        os.ftruncate(fd, offset + length)
+
+    monkeypatch.setattr(os, "posix_fallocate", sparse_fallocate, raising=False)
     return directory
 
 
