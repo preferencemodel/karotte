@@ -132,6 +132,12 @@ class CliAgent(abc.ABC):
         """Events the step's parser still holds when the CLI's output ends."""
         return ()
 
+    def _reported_error(self) -> str | None:
+        """The error the CLI reported in its own output on the last step, if any.
+        A non-zero exit quotes it instead of stderr, which can end in unrelated
+        warnings."""
+        return None
+
     def _prompt_text(self, instructions: str) -> str:
         """What the CLI reads from the prompt file."""
         return instructions
@@ -347,8 +353,11 @@ class CliAgent(abc.ABC):
                 msg = f"Time limit of {time_limit_seconds}s reached."
                 raise StepTimeLimitReachedError(msg)
         elif proc.returncode != 0:
-            stderr = stderr_b.decode("utf-8", errors="replace")[-2000:]
-            msg = f"{cli} exited {proc.returncode} on step {step}: {stderr}"
+            detail = (
+                self._reported_error()
+                or stderr_b.decode("utf-8", errors="replace")[-2000:]
+            )
+            msg = f"{cli} exited {proc.returncode} on step {step}: {detail}"
             raise CliAgentExitedError(msg)
 
 

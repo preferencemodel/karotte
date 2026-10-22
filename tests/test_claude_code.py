@@ -188,6 +188,22 @@ class TestClaudeCodeAgent:
         assert hosted["MAX_THINKING_TOKENS"] == "0"
         assert "MAX_THINKING_TOKENS" not in claude
 
+    def test_reports_the_error_claude_ended_the_step_with(self):
+        agent = _agent()
+        parse = agent._line_parser("hi")  # pyright: ignore[reportPrivateUsage]
+        assert agent._reported_error() is None  # pyright: ignore[reportPrivateUsage]
+        result = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": True,
+            "result": "API Error: 400 thinking is not supported",
+        }
+        _ = list(parse(json.dumps(result), 0))
+        assert (
+            agent._reported_error()  # pyright: ignore[reportPrivateUsage]
+            == "API Error: 400 thinking is not supported"
+        )
+
     def test_end_of_output_keeps_the_unfinished_response_and_its_results(self):
         agent = _agent()
         parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]

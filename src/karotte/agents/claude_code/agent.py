@@ -166,3 +166,8 @@ class ClaudeCodeAgent(CliAgent):
 
     def _output_ended(self) -> Iterable[Event]:
         return () if self._parser is None else self._parser.flush()
+
+    def _reported_error(self) -> str | None:
+        # Claude Code's stderr can end in a warning such as
+        # `[claude-code:unrecognized_model]`, printed for any non-Claude model.
+        return None if self._parser is None else self._parser.error

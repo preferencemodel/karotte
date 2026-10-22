@@ -43,6 +43,8 @@ class StreamParser:
         self._usage: dict[str, Any] = {}
         self._in_response: bool = False
         self._held_results: list[Event] = []
+        self.error: str | None = None
+        """What Claude Code's ``result`` line reported, if the run ended in an error."""
 
     def __call__(self, line: str, i: int) -> Iterator[Event]:
         record = parse_json_line(line, i, "claude")
@@ -62,7 +64,8 @@ class StreamParser:
                 else:
                     yield from events
             case "result" if record.get("is_error"):
-                logger.warning("claude reported an error: {}", record.get("result"))
+                self.error = str(record.get("result"))
+                logger.warning("claude reported an error: {}", self.error)
             case _:
                 pass
 
