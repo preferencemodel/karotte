@@ -276,6 +276,8 @@ CLI agents differ from `builtin` in a few ways:
 - It sends `reasoning_effort` when the run config sets it.
   It can't send `temperature`, so a run config that sets it is rejected.
 - On an Anthropic model, the transcript's reasoning is Anthropic's summary of the model's thinking; the raw thinking isn't available.
+- On a `hosted_vllm` model, Claude Code doesn't ask for thinking, since SGLang refuses that request from a server without a reasoning parser.
+  Whether the model thinks is up to its chat template; a Qwen3.5+ model thinks by default.
 
 `codex` specifics:
 

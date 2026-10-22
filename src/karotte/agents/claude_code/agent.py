@@ -120,6 +120,11 @@ class ClaudeCodeAgent(CliAgent):
             # The aliases name Claude models, which only Anthropic serves.
             model = resolve_model(self._config.model, None).model
             env |= dict.fromkeys(_MODEL_ALIAS_ENVS, model)
+            # Claude Code asks for `thinking: {"type": "adaptive"}` on every
+            # call, which SGLang refuses unless the server runs a reasoning
+            # parser. With 0 it leaves `thinking` out, and the model's chat
+            # template decides whether it thinks.
+            env["MAX_THINKING_TOKENS"] = "0"
         return env
 
     def _argv(self, instructions: str, prompt_file: Path | None) -> list[str]:

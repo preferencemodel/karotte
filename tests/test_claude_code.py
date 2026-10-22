@@ -178,6 +178,16 @@ class TestClaudeCodeAgent:
         assert hosted["CLAUDE_CODE_SUBAGENT_MODEL"] == "Qwen/Qwen3-8B"
         assert "ANTHROPIC_DEFAULT_HAIKU_MODEL" not in claude
 
+    def test_only_a_self_hosted_model_is_called_without_a_thinking_request(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        monkeypatch.delenv("MAX_THINKING_TOKENS", raising=False)
+        hosted = _agent(model=_SELF_HOSTED)._env()  # pyright: ignore[reportPrivateUsage]
+        claude = _agent()._env()  # pyright: ignore[reportPrivateUsage]
+        assert hosted["MAX_THINKING_TOKENS"] == "0"
+        assert "MAX_THINKING_TOKENS" not in claude
+
     def test_end_of_output_keeps_the_unfinished_response_and_its_results(self):
         agent = _agent()
         parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
