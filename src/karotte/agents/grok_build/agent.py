@@ -80,7 +80,10 @@ class GrokBuildAgent(CliAgent):
         """Grok's config: model endpoint, MCP server, features.
 
         Model traffic goes through the proxy's OpenAI-compatible route when
-        ``KAROTTE_PROXY_URL`` is set, else through the forwarder to xAI.
+        ``KAROTTE_PROXY_URL`` is set, else through the forwarder to xAI. It
+        uses the Responses API: xAI carries reasoning over to the next turn
+        only there (as encrypted content), and on Chat Completions it drops the
+        reasoning the CLI sends back, so every turn starts without it.
         Features that call xAI's backend on their own (telemetry, remote model
         catalog, backend web search, media generation) are turned off, and
         session titles use the run's model rather than Grok's default."""
@@ -109,7 +112,7 @@ class GrokBuildAgent(CliAgent):
             f"model = {model}\n"
             f"base_url = {toml_string(f'{self.model_url}/v1')}\n"
             f"env_key = {toml_string(_KEY_ENV)}\n"
-            'api_backend = "chat_completions"\n'
+            'api_backend = "responses"\n'
             f"{self._sampling_config()}\n"
             "[mcp_servers.karotte]\n"
             f"url = {toml_string(self.mcp_url)}\n"

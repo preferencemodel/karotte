@@ -107,6 +107,7 @@ class TestGrokBuildAgent:
         model = config["model"]["grok-4.7"]  # pyright: ignore[reportIndexIssue]
         assert model["base_url"] == "https://api.x.ai/v1"
         assert model["env_key"] == "XAI_API_KEY"
+        assert model["api_backend"] == "responses"
         assert config["models"]["session_summary"] == "grok-4.7"  # pyright: ignore[reportIndexIssue]
         assert config["features"]["telemetry"] == "off"  # pyright: ignore[reportIndexIssue]
         assert "url" in config["mcp_servers"]["karotte"]  # pyright: ignore[reportIndexIssue]
