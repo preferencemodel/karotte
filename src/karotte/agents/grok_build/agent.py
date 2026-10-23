@@ -9,6 +9,7 @@ Steps share one Grok session (created on the first step, resumed after), so a
 later step sees the conversation of the earlier ones, as with the builtin loop.
 """
 
+import os
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -80,10 +81,8 @@ class GrokBuildAgent(CliAgent):
         """Grok's config: model endpoint, MCP server, features.
 
         Model traffic goes through the proxy's OpenAI-compatible route when
-        ``KAROTTE_PROXY_URL`` is set, else through the forwarder to xAI. It
-        uses the Responses API: xAI carries reasoning over to the next turn
-        only there (as encrypted content), and on Chat Completions it drops the
-        reasoning the CLI sends back, so every turn starts without it.
+        ``KAROTTE_PROXY_URL`` is set, else through the forwarder to xAI; see
+        :meth:`_api_backend` for which API that traffic uses.
         Features that call xAI's backend on their own (telemetry, remote model
         catalog, backend web search, media generation) are turned off, and
         session titles use the run's model rather than Grok's default."""
@@ -112,12 +111,28 @@ class GrokBuildAgent(CliAgent):
             f"model = {model}\n"
             f"base_url = {toml_string(f'{self.model_url}/v1')}\n"
             f"env_key = {toml_string(_KEY_ENV)}\n"
-            'api_backend = "responses"\n'
+            f"api_backend = {toml_string(self._api_backend())}\n"
             f"{self._sampling_config()}\n"
             "[mcp_servers.karotte]\n"
             f"url = {toml_string(self.mcp_url)}\n"
         )
         return {"config.toml": config}
+
+    def _api_backend(self) -> str:
+        """Which xAI API Grok talks to for the model.
+
+        xAI carries a reasoning model's thoughts over to the next turn on the
+        Responses API only (``reasoning.encrypted_content``, which Grok
+        requests with ``store = false``). On Chat Completions the
+        ``reasoning_content`` Grok sends back with each earlier assistant turn
+        is discarded by the server, so the model starts every tool call
+        without its own earlier reasoning (verified 2026-10-23: the prompt
+        size grows by the tool result alone). The proxy's OpenAI-compatible
+        route speaks Chat Completions, so that stays when ``KAROTTE_PROXY_URL``
+        is set; otherwise the forwarder relays any path to xAI."""
+        if os.environ.get("KAROTTE_PROXY_URL"):
+            return "chat_completions"
+        return "responses"
 
     def _sampling_config(self) -> str:
         """Temperature and reasoning-effort lines for the model's config table.
