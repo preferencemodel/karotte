@@ -255,6 +255,29 @@ class TestVertexForwarder:
         assert credentials.refreshes == 1
 
     @pytest.mark.asyncio
+    async def test_calls_a_substitute_for_a_model_the_agent_asks_for(
+        self, upstream: str
+    ):
+        forwarder = VertexForwarder(
+            "proj",
+            "global",
+            _as_credentials(_Credentials()),
+            upstream=upstream,
+            substitutes={"gemini-lite-preview": "gemini-3.8-flash"},
+        )
+        url = await forwarder.start()
+        try:
+            swapped = await _post(
+                f"{url}/v1beta/models/gemini-lite-preview:generateContent"
+            )
+            kept = await _post(f"{url}/v1beta/models/gemini-4-argon:generateContent")
+        finally:
+            await forwarder.stop()
+        models = "/v1/projects/proj/locations/global/publishers/google/models"
+        assert swapped["path_qs"] == f"{models}/gemini-3.8-flash:generateContent"
+        assert kept["path_qs"] == f"{models}/gemini-4-argon:generateContent"
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("method", "path"),
         [

@@ -14,6 +14,7 @@ import json
 import os
 import re
 import socket
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -160,7 +161,11 @@ _GEMINI_API_GENERATE: Final = re.compile(
 
 class VertexForwarder(ModelForwarder):
     """Turns Gemini API calls into Vertex AI calls, authorized with the
-    harness's own Google credentials."""
+    harness's own Google credentials.
+
+    ``substitutes`` maps a model the agent asks for to the model to call in its
+    place, for an agent that calls a fixed model the project may not have.
+    """
 
     def __init__(
         self,
@@ -169,6 +174,7 @@ class VertexForwarder(ModelForwarder):
         credentials: "Credentials",
         *,
         upstream: str | None = None,
+        substitutes: Mapping[str, str] | None = None,
     ) -> None:
         host = (
             "https://aiplatform.googleapis.com"
@@ -179,6 +185,7 @@ class VertexForwarder(ModelForwarder):
         self.project: str = project
         self.location: str = location
         self._credentials: Credentials = credentials
+        self.substitutes: dict[str, str] = dict(substitutes or {})
         self._refreshing: asyncio.Lock = asyncio.Lock()
 
     def _target(self, request: web.Request) -> str | None:
@@ -187,6 +194,7 @@ class VertexForwarder(ModelForwarder):
         if request.method != "POST" or match is None:
             return None
         model, method = match.groups()
+        model = self.substitutes.get(model, model)
         query = request.rel_url.raw_query_string
         location = f"/v1/projects/{self.project}/locations/{self.location}"
         target = f"{self.upstream}{location}/publishers/google/models/{model}:{method}"
@@ -203,9 +211,10 @@ class VertexForwarder(ModelForwarder):
         return headers
 
 
-def vertex_forwarder() -> VertexForwarder:
+def vertex_forwarder(substitutes: Mapping[str, str] | None = None) -> VertexForwarder:
     """A forwarder with the credentials, project and location litellm would use
-    for Vertex AI, except that the location defaults to ``global``."""
+    for Vertex AI, except that the location defaults to ``global``.
+    ``substitutes`` is :class:`VertexForwarder`'s."""
     try:
         import google.auth
     except ImportError as e:
@@ -229,4 +238,4 @@ def vertex_forwarder() -> VertexForwarder:
         or os.environ.get("VERTEX_LOCATION")
         or "global"
     )
-    return VertexForwarder(project, location, credentials)
+    return VertexForwarder(project, location, credentials, substitutes=substitutes)
