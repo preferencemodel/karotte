@@ -43,6 +43,10 @@ async def _echo(request: web.Request) -> web.Response:
     )
 
 
+async def _accept_encoding(request: web.Request) -> web.Response:
+    return web.json_response(request.headers.get("Accept-Encoding"))
+
+
 async def _endless(request: web.Request) -> web.StreamResponse:
     response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
     await response.prepare(request)
@@ -68,6 +72,7 @@ async def _stream(request: web.Request) -> web.StreamResponse:
 async def upstream() -> AsyncIterator[str]:
     app = web.Application()
     app.router.add_route("*", "/v1/echo", _echo)
+    app.router.add_get("/v1/accept-encoding", _accept_encoding)
     app.router.add_route("*", "/v1beta/{tail:.*}", _echo)
     app.router.add_route("*", "/v1/projects/{tail:.*}", _echo)
     app.router.add_get("/v1/stream", _stream)
@@ -138,6 +143,20 @@ class TestModelForwarder:
             async with session.get(f"{forwarder.url}/v1/stream") as response:
                 assert response.status == 200
         assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("sent", [None, "br"])
+    async def test_asks_upstream_only_for_the_agents_encodings(
+        self, forwarder: ModelForwarder, sent: str | None
+    ):
+        headers = {} if sent is None else {"Accept-Encoding": sent}
+        async with aiohttp.ClientSession(
+            skip_auto_headers=("Accept-Encoding",)
+        ) as session:
+            async with session.get(
+                f"{forwarder.url}/v1/accept-encoding", headers=headers
+            ) as response:
+                assert await response.json() == sent
 
     @pytest.mark.asyncio
     async def test_passes_upstream_errors_through(self, forwarder: ModelForwarder):

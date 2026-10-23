@@ -66,9 +66,13 @@ class ModelForwarder:
 
     async def start(self) -> str:
         """Listen on an unused loopback port; returns the forwarder's URL."""
-        # Bodies pass through byte for byte, compressed or not.
+        # Bodies pass through byte for byte, compressed or not, so the agent
+        # alone says which encodings it accepts. aiohttp would otherwise ask
+        # for gzip itself, and an agent that never asked can't decode it.
         self._session = aiohttp.ClientSession(
-            auto_decompress=False, timeout=aiohttp.ClientTimeout(total=None)
+            auto_decompress=False,
+            skip_auto_headers=("Accept-Encoding",),
+            timeout=aiohttp.ClientTimeout(total=None),
         )
         app = web.Application(client_max_size=0)
         app.router.add_route("*", "/{tail:.*}", self._forward)
