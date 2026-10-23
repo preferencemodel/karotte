@@ -278,6 +278,8 @@ CLI agents differ from `builtin` in a few ways:
 - On an Anthropic model, the transcript's reasoning is Anthropic's summary of the model's thinking; the raw thinking isn't available.
 - On a `hosted_vllm` model, Claude Code doesn't ask for thinking, since SGLang refuses that request from a server without a reasoning parser.
   Whether the model thinks is up to its chat template; a Qwen3.5+ model thinks by default.
+- On a `hosted_vllm` model, Claude Code doesn't send a reasoning effort either.
+  SGLang hands it to the model's chat template, and some templates refuse efforts they don't define (Qwen3.8 takes only `xhigh`, `medium` and `low`), so the template's own default applies.
 
 `codex` specifics:
 
