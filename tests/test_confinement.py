@@ -150,6 +150,64 @@ def test_firecracker_is_the_older_name_for_vm(
     assert Sandbox.FIRECRACKER is Sandbox.VM
 
 
+@pytest.mark.parametrize(
+    (
+        "sandbox",
+        "host_kernel",
+        "vm",
+        "real_cgroups",
+        "iptables",
+        "uid_maps",
+        "commands",
+    ),
+    [
+        (
+            Sandbox.RUNC,
+            True,
+            False,
+            True,
+            True,
+            True,
+            ("iptables", "ip6tables", "REJECT"),
+        ),
+        (
+            Sandbox.GVISOR,
+            False,
+            False,
+            False,
+            False,
+            False,
+            ("iptables-legacy", "ip6tables-legacy", "DROP"),
+        ),
+        (
+            Sandbox.VM,
+            False,
+            True,
+            True,
+            True,
+            True,
+            ("iptables", "ip6tables", "REJECT"),
+        ),
+    ],
+)
+def test_each_sandbox_says_what_it_offers(
+    sandbox: Sandbox,
+    host_kernel: bool,
+    vm: bool,
+    real_cgroups: bool,
+    iptables: bool,
+    uid_maps: bool,
+    commands: tuple[str, str, str],
+) -> None:
+    assert sandbox.uses_host_kernel is host_kernel
+    assert sandbox.is_vm is vm
+    assert sandbox.has_real_cgroups is real_cgroups
+    assert sandbox.enforces_iptables is iptables
+    assert sandbox.maps_user_ids is uid_maps
+    assert sandbox.firewall_commands == commands
+    assert Sandbox.FIRECRACKER.label == Sandbox.VM.label == "VM"
+
+
 def test_unknown_sandbox_falls_back_to_sniffing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
