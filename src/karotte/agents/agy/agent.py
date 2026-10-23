@@ -32,6 +32,13 @@ _SHA256: dict[str, str] = {
 }
 
 
+# agy's `search_web` tool asks this model, with Google Search grounding, to
+# search and summarize the results. It's a preview model that not every Vertex
+# AI project can call, so on Vertex the forwarder calls a catalog model instead.
+_SEARCH_MODEL = "gemini-3.1-flash-lite-preview"
+_VERTEX_SEARCH_MODEL = "gemini-3.8-flash"
+
+
 @final
 @register_cli_agent
 class AgyAgent(CliAgent):
@@ -111,7 +118,7 @@ class AgyAgent(CliAgent):
 
     def _make_forwarder(self) -> ModelForwarder | None:
         if self._provider == "vertex_ai":
-            return vertex_forwarder()
+            return vertex_forwarder({_SEARCH_MODEL: _VERTEX_SEARCH_MODEL})
         if key := self._config.model_api_key:
             return GeminiForwarder(self.provider_url, key)
         return None

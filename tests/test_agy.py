@@ -3,6 +3,7 @@
 two-step log (tests/resources/agy/)."""
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -145,9 +146,19 @@ class TestAgyAgent:
         self, monkeypatch: pytest.MonkeyPatch
     ):
         made = object()
-        monkeypatch.setattr("karotte.agents.agy.agent.vertex_forwarder", lambda: made)
+        substitutes: list[Mapping[str, str] | None] = []
+
+        def vertex_forwarder(subs: Mapping[str, str] | None = None) -> object:
+            substitutes.append(subs)
+            return made
+
+        monkeypatch.setattr(
+            "karotte.agents.agy.agent.vertex_forwarder", vertex_forwarder
+        )
         agent = _agent(model="vertex_ai/gemini-4-argon", model_api_key=None)
         assert agent._make_forwarder() is made  # pyright: ignore[reportPrivateUsage]
+        # The search tool's own model goes to one in karotte's catalog.
+        assert substitutes == [{"gemini-3.1-flash-lite-preview": "gemini-3.8-flash"}]
 
     def test_a_forwarded_agent_gets_a_placeholder_key(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
