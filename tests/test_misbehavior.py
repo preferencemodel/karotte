@@ -1,11 +1,15 @@
+import os
 from collections.abc import AsyncGenerator, Iterable
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from karotte import reclaim
 from karotte.evaluation_runner import EvaluationRunner
 from karotte.judges.judge import Judge
 from karotte.process_utils import UnreapableCohortError
+from karotte.reclaim import delete_files
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.http_mcp_server_config import HttpMcpServerConfig
 from karotte.schemas.scoring import Scoring
@@ -192,3 +196,28 @@ async def test_regular_exceptions_still_propagate():
     with pytest.raises(RuntimeError, match="env bug"):
         async for _ in runner._execute_step(BrokenStep(runner.config), 0):  # pyright: ignore[reportPrivateUsage]
             pass
+
+
+@pytest.mark.asyncio
+async def test_the_sweeps_of_one_scoring_share_one_allowance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Otherwise a hook that sweeps twice hands the uid two allowances."""
+    monkeypatch.setattr(reclaim, "SWEEP_ENTRY_BUDGET", 30)
+    trees = [tmp_path / "a", tmp_path / "b"]
+    for tree in trees:
+        tree.mkdir()
+        for i in range(20):
+            (tree / f"f{i}").write_text("x")
+
+    class SweepingStep(FakeStep):
+        def pre_scoring_hook(self) -> None:
+            for tree in trees:
+                _ = delete_files(os.getuid(), (tree,))
+
+    runner = _make_runner()
+
+    scoring = await _scoring_from_step(runner, SweepingStep(runner.config))
+
+    assert scoring.score == 0.0
+    assert "directory entries" in scoring.metadata["misbehavior"]
