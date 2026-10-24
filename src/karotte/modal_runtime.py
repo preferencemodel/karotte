@@ -15,6 +15,7 @@ import tarfile
 import tempfile
 import threading
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import IO, Any, final
 from urllib.parse import urlsplit
@@ -35,6 +36,14 @@ from karotte.forwarded_env import sandbox_env
 from karotte.hardware import vm_size
 from karotte.load_tasks import load_task
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
+from karotte.staged_mounts import (
+    STAGED_MOUNTS_DIR,
+    STAGED_MOUNTS_ENV_VAR,
+    StagedMount,
+    apply_copy_back,
+    encode,
+    plain_entries,
+)
 
 APP_NAME = "karotte"
 RUN_ID_TAG = "karotte_run_id"
@@ -43,6 +52,8 @@ OWNER_TAG = "karotte_owner"
 KAROTTE_BIN = "/root/.venv/bin/karotte"
 CONFIG_PATH = "/root/.karotte_run_config.json"
 OUT_TAR = "/tmp/karotte_out.tar"
+TRANSFER_DIR = "/root/.karotte_transfer"
+"""Root-only, for the archives mounts travel in: the student shares the sandbox."""
 
 TIMEOUT_SECONDS = 24 * 60 * 60
 """Modal's longest sandbox lifetime."""
@@ -208,7 +219,6 @@ def _proxy_problem(proxy_url: str) -> str | None:
 def modal_problems(
     *,
     required_hardware: str | None,
-    mounts: Sequence[str] | None,
     dev: bool,
     keep_containers: bool,
     prepare_only: bool,
@@ -223,7 +233,6 @@ def modal_problems(
     except ValueError as e:
         problems.append(str(e))
     for flag, used in (
-        ("--mount", bool(mounts)),
         ("--dev", dev),
         ("--keep-containers", keep_containers),
         ("--prepare-only", prepare_only),
@@ -344,6 +353,7 @@ def run_modal(
     *,
     log_file: Path | None = None,
     build_context: str = ".",
+    mounts: Sequence[str] | None = None,
     proxy_url: str | None = None,
 ) -> None:
     """Run one evaluation in a Modal VM sandbox. Raises ``CalledProcessError``
@@ -364,6 +374,7 @@ def run_modal(
             update={"transcript_file": f"/out/{transcript.name}"}
         )
 
+    uploads = _plan_uploads(mounts)
     port = run_config.websocket_config.port
     argv = [KAROTTE_BIN, "run", "--no-containerized", "--config", CONFIG_PATH]
     relay = WebsocketRelay(port)
@@ -387,6 +398,11 @@ def run_modal(
         )
         sandbox.filesystem.make_directory("/out")
         sandbox.filesystem.write_text(run_config.model_dump_json(), CONFIG_PATH)
+        if uploads:
+            for root_only in (TRANSFER_DIR, STAGED_MOUNTS_DIR):
+                _exec_checked(sandbox, "mkdir", "-p", "-m", "0700", root_only)
+            for index, upload in enumerate(uploads):
+                _upload(sandbox, upload, index)
         token = sandbox.create_connect_token(port=port)
         relay.connect_to(token.url, token.token)
 
@@ -395,6 +411,8 @@ def run_modal(
             disk_bytes=size.disk_bytes,
             proxy_url=proxy_url,
         )
+        if uploads:
+            env[STAGED_MOUNTS_ENV_VAR] = encode([u.staged for u in uploads])
         process = sandbox.exec("sh", "-c", 'exec "$0" "$@" 2>&1', *argv, env=env)
         with (
             open(log_file, "w")
@@ -404,6 +422,9 @@ def run_modal(
             _stream(process.stdout, out)
         returncode = process.wait()
 
+        for index, upload in enumerate(uploads):
+            if upload.writable:
+                _bring_back(sandbox, upload, index)
         if host_out is not None:
             _copy_out(sandbox, host_out)
         if returncode != 0:
@@ -415,6 +436,117 @@ def run_modal(
         if sandbox is not None:
             with contextlib.suppress(Exception):
                 sandbox.terminate()
+
+
+@dataclass(frozen=True)
+class _Upload:
+    """A ``--mount`` path and where it's staged in the guest."""
+
+    source: Path
+    target: str
+    writable: bool
+    staging: str
+    copied: list[Path]
+    """What a writable directory held, so copy-back can tell what the student
+    deleted from what the host added during the run."""
+
+    @property
+    def staged(self) -> StagedMount:
+        if self.source.is_dir():
+            return StagedMount(self.staging, self.target, self.writable)
+        return StagedMount(
+            f"{self.staging}/{self.source.name}", self.target, self.writable
+        )
+
+
+def _plan_uploads(mounts: Sequence[str] | None) -> list[_Upload]:
+    uploads: list[_Upload] = []
+    for index, spec in enumerate(mounts or []):
+        parts = spec.split(":")
+        # tarfile stores a link as a link; a bind mount would follow it.
+        source = Path(parts[0]).resolve()
+        writable = not (len(parts) == 3 and parts[2] == "ro")
+        try:
+            copied = plain_entries(source) if writable and source.is_dir() else []
+        except OSError as e:
+            raise ModalError(f"Cannot read the mount {parts[0]}: {e}") from e
+        uploads.append(
+            _Upload(source, parts[1], writable, f"{STAGED_MOUNTS_DIR}/{index}", copied)
+        )
+    return uploads
+
+
+def _exec_checked(sandbox: Any, *argv: str) -> None:
+    if (code := sandbox.exec(*argv).wait()) != 0:
+        raise ModalError(f"`{' '.join(argv)}` failed in the sandbox (exit {code})")
+
+
+def _upload(sandbox: Any, upload: _Upload, index: int) -> None:
+    remote = f"{TRANSFER_DIR}/mount-{index}.tar"
+    with tempfile.TemporaryDirectory(prefix="karotte-modal-mount-") as tmp:
+        archive = Path(tmp) / "mount.tar"
+        try:
+            with tarfile.open(archive, "w") as tar:
+                name = "." if upload.source.is_dir() else upload.source.name
+                tar.add(upload.source, arcname=name)
+        except OSError as e:
+            raise ModalError(f"Cannot pack the mount {upload.source}: {e}") from e
+        sandbox.filesystem.copy_from_local(archive, remote)
+    _exec_checked(sandbox, "mkdir", "-p", upload.staging)
+    _exec_checked(
+        sandbox, "tar", "-xf", remote, "-C", upload.staging, "--no-same-owner"
+    )
+    _exec_checked(sandbox, "rm", "-f", remote)
+
+
+def _bring_back(sandbox: Any, upload: _Upload, index: int) -> None:
+    """Copy a writable mount back over its host path. The guest has already
+    copied the student's changes to the staging directory. A mount that fails
+    to come back is left as it was on the host, and the others still come
+    back: an archive that never arrived must not read as everything deleted."""
+    remote = f"{TRANSFER_DIR}/mount-{index}-back.tar"
+    try:
+        # A hard link would be left out on the host and so read as deleted.
+        _exec_checked(
+            sandbox,
+            "tar",
+            "--hard-dereference",
+            "-cf",
+            remote,
+            "-C",
+            upload.staging,
+            ".",
+        )
+        with tempfile.TemporaryDirectory(prefix="karotte-modal-mount-") as tmp:
+            # Copy-back distrusts links above its source, such as macOS's /var.
+            local = Path(tmp).resolve()
+            sandbox.filesystem.copy_to_local(remote, local / "back.tar")
+            with tarfile.open(local / "back.tar") as archive:
+                archive.extractall(local / "back", filter=_plain_member)
+            skipped = apply_copy_back(local / "back", upload.source, upload.copied)
+    except Exception as e:  # noqa: BLE001 - one mount mustn't cost the others or /out
+        logger.warning(f"Could not copy mount {upload.target} back: {e}")
+        return
+    if skipped:
+        logger.warning(
+            f"Mount {upload.target}: skipped {skipped} links and special files on copy-back"
+        )
+
+
+def _plain_member(member: tarfile.TarInfo, dest: str) -> tarfile.TarInfo | None:
+    """Regular files and directories only, with their mode bits, which
+    copy-back writes onto the host files."""
+    if not (member.isfile() or member.isdir()):
+        return None
+    try:
+        safe = tarfile.data_filter(member, dest)
+    except tarfile.FilterError:
+        return None
+    if safe.isdir():
+        # data_filter leaves a directory's mode unset, so it's ours to write in.
+        return safe
+    # Readable by us, so copy-back can read it.
+    return safe.replace(mode=(safe.mode or 0) | 0o400, deep=False)
 
 
 def _stream(lines: Any, out: IO[str]) -> None:
