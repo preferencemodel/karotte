@@ -9,7 +9,8 @@ license-files = ["LICENSE", "src/karotte/templates/LICENSE"]
 readme = "README.md"
 dependencies = [
     "fastmcp>=3,<4",
-    "litellm>=1.104.0",
+    # 1.106 imports mcp.types.CacheableResult (mcp 2.x); fastmcp 3 pins mcp<2
+    "litellm>=1.104.0,<1.106",
     "psutil>=7.2.1",
     "typer>=0.19.0",
     "websockets>=14.0",
