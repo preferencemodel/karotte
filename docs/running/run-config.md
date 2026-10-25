@@ -260,6 +260,7 @@ CLI agents differ from `builtin` in a few ways:
 `grok-build` specifics:
 
 - All steps of a run share one Grok session, so later steps see the earlier conversation.
+- A step ends when the model's turn ends. Grok runs with `--no-wait-for-background`, so background jobs still running then don't wake the model for more turns.
 - Grok doesn't list MCP tools to the model directly. The model finds the task's tools with `search_tool` and calls them through `use_tool` (as `karotte__<tool>`), and the transcript records those calls as `use_tool`.
 - Grok's web search, image editing, feedback and ask-the-user tools are turned off, along with its telemetry and update checks.
 - It sends `temperature` and `reasoning_effort` when the run config sets them.

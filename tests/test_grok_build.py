@@ -73,6 +73,7 @@ class TestGrokBuildAgent:
         assert first[first.index("-m") + 1] == "grok-4.7"
         assert first[first.index("--max-turns") + 1] == "7"
         assert "--always-approve" in first
+        assert "--no-wait-for-background" in first
         session_id = first[first.index("--session-id") + 1]
 
         agent._step_index = 1  # pyright: ignore[reportPrivateUsage]

@@ -170,6 +170,10 @@ class GrokBuildAgent(CliAgent):
             "--disable-web-search",
             "--disallowed-tools",
             ",".join(_DISALLOWED_TOOLS),
+            # Exit when the model's turn ends. Otherwise Grok waits for its
+            # background jobs and wakes the model for another turn as each one
+            # finishes, giving it work time past its final answer.
+            "--no-wait-for-background",
         ]
         if self._config.turn_limit is not None:
             argv += ["--max-turns", str(self._config.turn_limit)]
