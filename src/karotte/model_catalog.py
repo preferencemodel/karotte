@@ -59,6 +59,7 @@ CATALOG_MODEL_IDS: tuple[str, ...] = (
     "openai/gpt-6-sol",
     "openai/gpt-6-luna",
     "openai/gpt-6.1-sol",
+    "openai/gpt-6.1-terra",
     "openai/gpt-5.6",
     "openai/gpt-5.6-sol",
     "openai/gpt-5.6-terra",

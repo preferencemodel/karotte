@@ -234,6 +234,7 @@ def test_gpt_6_goes_through_the_responses_bridge():
         "openai/gpt-6-sol",
         "openai/gpt-6-luna",
         "openai/gpt-6.1-sol",
+        "openai/gpt-6.1-terra",
     ):
         params = _completion_params(model)
         assert params["model"] == model.replace("openai/", "openai/responses/")
