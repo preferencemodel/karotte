@@ -125,6 +125,13 @@ class ClaudeCodeAgent(CliAgent):
             # parser. With 0 it leaves `thinking` out, and the model's chat
             # template decides whether it thinks.
             env["MAX_THINKING_TOKENS"] = "0"
+            if self._config.applied_reasoning_effort is None:
+                # Likewise `output_config: {"effort": "high"}`, which SGLang
+                # passes to the chat template, and Qwen3.8's refuses anything
+                # but xhigh, medium or low. `unset` leaves it out, so the
+                # template's default applies. It overrides `--effort`, so only
+                # when the run config sets no effort.
+                env["CLAUDE_CODE_EFFORT_LEVEL"] = "unset"
         return env
 
     def _argv(self, instructions: str, prompt_file: Path | None) -> list[str]:

@@ -188,6 +188,17 @@ class TestClaudeCodeAgent:
         assert hosted["MAX_THINKING_TOKENS"] == "0"
         assert "MAX_THINKING_TOKENS" not in claude
 
+    def test_only_a_self_hosted_model_is_called_without_an_effort(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        monkeypatch.delenv("CLAUDE_CODE_EFFORT_LEVEL", raising=False)
+        hosted = _agent(model=_SELF_HOSTED)
+        claude = _agent(reasoning_effort="max")
+        assert hosted._env()["CLAUDE_CODE_EFFORT_LEVEL"] == "unset"  # pyright: ignore[reportPrivateUsage]
+        assert "--effort" not in hosted._argv("x", None)  # pyright: ignore[reportPrivateUsage]
+        assert "CLAUDE_CODE_EFFORT_LEVEL" not in claude._env()  # pyright: ignore[reportPrivateUsage]
+
     def test_reports_the_error_claude_ended_the_step_with(self):
         agent = _agent()
         parse = agent._line_parser("hi")  # pyright: ignore[reportPrivateUsage]
