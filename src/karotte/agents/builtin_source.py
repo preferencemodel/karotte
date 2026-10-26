@@ -458,6 +458,10 @@ class BuiltinSource:
             # Without a base URL litellm's openai route calls OpenAI itself.
             msg = "replay_reasoning needs the self-hosted server's URL: pass --proxy"
             raise ValueError(msg)
+        if self._replays_reasoning:
+            # The openai route's client retries a failed call twice on its own,
+            # which the hosted_vllm route doesn't; collect() does the retrying.
+            completion_params["max_retries"] = 0
 
         self._provider.apply_prompt_caching(
             self.config.run_id, serialized_messages, completion_params

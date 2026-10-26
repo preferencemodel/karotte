@@ -15,7 +15,7 @@ from litellm.types.utils import ModelResponseStream, StreamingChoices, Usage
 from karotte.agents.builtin_source import BuiltinSource
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
-from karotte.schemas.transcript import MessageAddedEvent
+from karotte.schemas.transcript import MessageAddedEvent, MessageChunkResetEvent
 
 _SIGNATURE = "EqQBCkgIARABGAIiQL+opaque/signature=="
 _SUMMARY = "Let me list the files first."
@@ -727,6 +727,35 @@ async def test_a_full_context_window_with_no_reasoning_left_to_drop_fails(
     first = await _turn(source, [user])
     with pytest.raises(litellm.exceptions.BadRequestError, match="context length"):
         await _turn(source, [user, _stored(first), _read_result("call_1")])
+
+
+@pytest.mark.asyncio
+async def test_a_failed_self_hosted_call_is_retried_by_karotte_alone(
+    self_hosted_server: ServeReplies, monkeypatch: pytest.MonkeyPatch
+):
+    def no_wait(*_: object) -> float:
+        return 0
+
+    monkeypatch.setattr("karotte.agents.builtin_source._retry_wait", no_wait)
+    bodies = self_hosted_server(
+        [
+            (500, b'{"error": {"message": "overloaded"}}'),
+            _thinks_then_reads_a_file("I should read a.txt.", "call_1"),
+        ]
+    )
+    source = BuiltinSource(_self_hosted_config(replay_reasoning=True))
+
+    events = [
+        event
+        async for event in source.collect(
+            [Message(role="user", content="Read a.txt.")], [_READ_FILE]
+        )
+    ]
+
+    # One request per attempt: the 500 reaches karotte, which retries it once,
+    # rather than the HTTP client answering it out of sight.
+    assert len(bodies) == 2
+    assert sum(isinstance(e, MessageChunkResetEvent) for e in events) == 1
 
 
 def test_replaying_reasoning_needs_the_servers_url(monkeypatch: pytest.MonkeyPatch):
