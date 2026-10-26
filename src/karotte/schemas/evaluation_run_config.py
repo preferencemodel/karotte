@@ -43,6 +43,11 @@ class EvaluationRunConfig(BaseModel):
     temperature: float | None = None
     """Sampling temperature, or None to leave the agent's or provider's default."""
 
+    replay_reasoning: bool = False
+    """Whether to send a self-hosted (``hosted_vllm/``) model the reasoning of
+    its earlier turns, so its chat template can show the model what it thought
+    before. Applied by the builtin agent only."""
+
     turn_limit: int | None = None
     """Maximum number of turns (model responses) allowed before terminating the run."""
 
@@ -238,6 +243,18 @@ class EvaluationRunConfig(BaseModel):
             raise ValueError(msg)
         if not spec_for(self.model).supports_sampling_params:
             msg = f"{self.model} takes no temperature"
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_replay_reasoning(self) -> Self:
+        if not self.replay_reasoning or self.use_fake_model:
+            return self
+        if self.resolved_agent != "builtin":
+            msg = f"replay_reasoning is applied by the builtin agent only, not {self.resolved_agent}"
+            raise ValueError(msg)
+        if spec_for(self.model).provider != "hosted_vllm":
+            msg = f"replay_reasoning is for self-hosted (hosted_vllm/) models, not {self.model}"
             raise ValueError(msg)
         return self
 

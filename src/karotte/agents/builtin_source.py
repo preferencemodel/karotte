@@ -82,11 +82,31 @@ _IMAGES_REJECTED_RE = re.compile(
     r"multimodal[ _]not[ _]supported|does not support image inputs", re.IGNORECASE
 )
 
+# How SGLang and vLLM word a 400 for a prompt that, with the requested output,
+# doesn't fit the model's context window.
+_CONTEXT_WINDOW_FULL_RE = re.compile(r"context length", re.IGNORECASE)
+
+_SELF_HOSTED_PREFIX = "hosted_vllm/"
+
 
 def _rejects_images(exc: Exception) -> bool:
     return isinstance(exc, litellm.exceptions.BadRequestError) and bool(
         _IMAGES_REJECTED_RE.search(str(exc))
     )
+
+
+def _context_window_full(exc: Exception) -> bool:
+    # litellm maps only some of the ways servers word a full context window to
+    # ContextWindowExceededError; SGLang's "Requested token count exceeds the
+    # model's maximum context length" arrives as a plain 400.
+    return isinstance(exc, litellm.exceptions.ContextWindowExceededError) or (
+        isinstance(exc, litellm.exceptions.BadRequestError)
+        and bool(_CONTEXT_WINDOW_FULL_RE.search(str(exc)))
+    )
+
+
+def _has_reasoning(messages: list[Message]) -> bool:
+    return any(m.role == "assistant" and m.reasoning_content for m in messages)
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -254,6 +274,11 @@ class BuiltinSource:
         self._service_tier: str | None = None
         # Sticky for the run, so later turns don't pay for another 400.
         self._omit_images = False
+        self._replays_reasoning = config.replay_reasoning
+        # Messages before this index go without their reasoning: the context
+        # window filled up while they were the whole conversation. Sticky for
+        # the run, so the history the model sees changes once, not every turn.
+        self._reasoning_dropped_before = 0
 
     async def collect(
         self,
@@ -290,6 +315,20 @@ class BuiltinSource:
                         model=self.config.model,
                     )
                     self._omit_images = True
+                    yield MessageChunkResetEvent()
+                    continue
+                if (
+                    self._replays_reasoning
+                    and _context_window_full(e)
+                    and _has_reasoning(messages[self._reasoning_dropped_before :])
+                    and attempt < LLM_RETRY_MAX_ATTEMPTS
+                ):
+                    logger.warning(
+                        "{model}'s context window is full; leaving out the reasoning of the {n} messages so far",
+                        model=self.config.model,
+                        n=len(messages),
+                    )
+                    self._reasoning_dropped_before = len(messages)
                     yield MessageChunkResetEvent()
                     continue
                 if (
@@ -385,11 +424,13 @@ class BuiltinSource:
         self._provider.adapt_messages(spec, serialized_messages)
         if self._omit_images:
             serialized_messages = [_without_images(m) for m in serialized_messages]
+        for message in serialized_messages[: self._reasoning_dropped_before]:
+            message["reasoning_content"] = None
 
         completion_params: dict[str, Any] = {
             "stream": True,
             "stream_options": {"include_usage": True},
-            "model": spec.litellm_model,
+            "model": self._litellm_model(),
             "messages": serialized_messages,
             "tools": tools,
             "tool_choice": "auto" if tools else None,
@@ -413,6 +454,10 @@ class BuiltinSource:
 
         if api_base := proxy_api_base(self._provider):
             completion_params["api_base"] = api_base
+        elif self._replays_reasoning:
+            # Without a base URL litellm's openai route calls OpenAI itself.
+            msg = "replay_reasoning needs the self-hosted server's URL: pass --proxy"
+            raise ValueError(msg)
 
         self._provider.apply_prompt_caching(
             self.config.run_id, serialized_messages, completion_params
@@ -429,6 +474,14 @@ class BuiltinSource:
         )
 
         return completion_params
+
+    def _litellm_model(self) -> str:
+        if self._replays_reasoning:
+            # litellm's hosted_vllm route strips reasoning_content from every
+            # assistant message it sends; its generic OpenAI-compatible route
+            # sends the messages as given, to the same server.
+            return "openai/" + self.config.model.removeprefix(_SELF_HOSTED_PREFIX)
+        return self._spec.litellm_model
 
     def _serialize_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Serializes transcript messages to dicts."""

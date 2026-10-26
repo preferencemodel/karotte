@@ -147,6 +147,20 @@ Providers don't agree on what the levels are called or how many there are, so Ka
 The run config is rejected if it's set for the `external` agent, for a CLI agent that can't send one, or for a model that takes no temperature, such as Claude Opus 5.
 Unset, Karotte sends none and the agent or provider picks.
 
+## Reasoning history
+
+`replay_reasoning` sends a self-hosted model (`hosted_vllm/...`) the reasoning of its earlier turns, so its chat template can show the model what it thought before.
+Without it, those turns go back without their reasoning: litellm's `hosted_vllm` route removes it from every assistant message.
+With it, Karotte calls the same server through litellm's generic OpenAI-compatible route, which sends the messages as given.
+Whether the model then sees the reasoning is up to its chat template.
+
+The reasoning fills the context window faster.
+When the server refuses a request because the window is full, Karotte leaves out the reasoning of every turn so far, retries, and goes on sending the reasoning of later turns.
+If the request still doesn't fit, the run fails as it would without `replay_reasoning`.
+
+Only the builtin agent applies it, and only to a `hosted_vllm` model; the run config is rejected otherwise.
+The run needs `--proxy`, or a plugin's proxy URL, pointing at the server.
+
 ## Limits
 
 Use these fields to limit how much work the student can do:
