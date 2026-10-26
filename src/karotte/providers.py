@@ -62,12 +62,25 @@ class Provider:
     replays_reasoning_items: bool = False
     """Whether assistant turns are sent back with their Responses API reasoning items."""
 
+    replays_reasoning_content: bool = False
+    """Whether assistant turns are sent back with their reasoning as plain text. It counts
+    against the context window, so the builtin agent drops it from the turns so far when
+    the window fills."""
+
     stores_conversations: bool = False
     """Whether the API keeps conversations unless told not to."""
 
     def request_params(self, _spec: ModelSpec, auth: ProviderAuth) -> dict[str, Any]:
         """Provider-specific params, chiefly how the call authenticates."""
         return {"api_key": auth.api_key}
+
+    def chat_model(self, spec: ModelSpec) -> str:
+        """The litellm model a conversation with ``spec`` goes through."""
+        return spec.litellm_model
+
+    def api_base(self) -> str | None:
+        """Where a conversation's calls go, or None for litellm's default."""
+        return proxy_api_base(self)
 
     def adapt_messages(self, _spec: ModelSpec, _messages: list[dict[str, Any]]) -> None:
         """Reshape serialized messages for the provider's API."""
@@ -130,6 +143,40 @@ class AnthropicProvider(Provider):
         _params: dict[str, Any],
     ) -> None:
         _add_inline_cache_control(messages)
+
+
+class SelfHostedProvider(Provider):
+    """A model on an OpenAI-compatible server of the user's own (``hosted_vllm/``)."""
+
+    replays_reasoning_content: bool = True
+
+    @override
+    def chat_model(self, spec: ModelSpec) -> str:
+        # litellm's hosted_vllm route strips reasoning_content from every assistant
+        # message it sends, so the model would see none of its earlier reasoning. Its
+        # generic OpenAI-compatible route sends the messages as given, to the same server.
+        return "openai/" + spec.litellm_model.removeprefix("hosted_vllm/")
+
+    @override
+    def request_params(self, _spec: ModelSpec, auth: ProviderAuth) -> dict[str, Any]:
+        # The key the hosted_vllm route would send: the openai route refuses to send
+        # none, and a server that needs no key ignores it. That route's client also
+        # retries a failed call twice on its own, which the hosted_vllm route doesn't;
+        # the caller's retry policy is the one that applies.
+        api_key = (
+            auth.api_key or os.environ.get("HOSTED_VLLM_API_KEY") or "fake-api-key"
+        )
+        return {"api_key": api_key, "max_retries": 0}
+
+    @override
+    def api_base(self) -> str:
+        # Without a base URL the openai route would call OpenAI itself. The variable is
+        # the one litellm's hosted_vllm route reads.
+        base = proxy_api_base(self) or os.environ.get("HOSTED_VLLM_API_BASE")
+        if not base:
+            msg = "a hosted_vllm model needs its server's URL: pass --proxy"
+            raise ValueError(msg)
+        return base
 
 
 class OpenAIProvider(Provider):
@@ -265,6 +312,7 @@ class FireworksProvider(Provider):
 
 _PROVIDERS: Final[dict[str, Provider]] = {
     "anthropic": AnthropicProvider(),
+    "hosted_vllm": SelfHostedProvider(),
     "openai": OpenAIProvider(),
     "xai": XaiProvider(),
     "meta": MetaProvider(),

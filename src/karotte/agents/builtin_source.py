@@ -25,7 +25,6 @@ from karotte.providers import (
     ProviderAuth,
     cache_tokens,
     provider_for,
-    proxy_api_base,
     repair_tool_calls,
     service_tier_mode,
     vertex_served_tier,
@@ -85,8 +84,6 @@ _IMAGES_REJECTED_RE = re.compile(
 # How SGLang and vLLM word a 400 for a prompt that, with the requested output,
 # doesn't fit the model's context window.
 _CONTEXT_WINDOW_FULL_RE = re.compile(r"context length", re.IGNORECASE)
-
-_SELF_HOSTED_PREFIX = "hosted_vllm/"
 
 
 def _rejects_images(exc: Exception) -> bool:
@@ -274,7 +271,6 @@ class BuiltinSource:
         self._service_tier: str | None = None
         # Sticky for the run, so later turns don't pay for another 400.
         self._omit_images = False
-        self._replays_reasoning = config.replay_reasoning
         # Messages before this index go without their reasoning: the context
         # window filled up while they were the whole conversation. Sticky for
         # the run, so the history the model sees changes once, not every turn.
@@ -318,7 +314,7 @@ class BuiltinSource:
                     yield MessageChunkResetEvent()
                     continue
                 if (
-                    self._replays_reasoning
+                    self._provider.replays_reasoning_content
                     and _context_window_full(e)
                     and _has_reasoning(messages[self._reasoning_dropped_before :])
                     and attempt < LLM_RETRY_MAX_ATTEMPTS
@@ -430,7 +426,7 @@ class BuiltinSource:
         completion_params: dict[str, Any] = {
             "stream": True,
             "stream_options": {"include_usage": True},
-            "model": self._litellm_model(),
+            "model": self._provider.chat_model(spec),
             "messages": serialized_messages,
             "tools": tools,
             "tool_choice": "auto" if tools else None,
@@ -452,16 +448,8 @@ class BuiltinSource:
             self._provider.request_params(spec, _provider_auth(self.config))
         )
 
-        if api_base := proxy_api_base(self._provider):
+        if api_base := self._provider.api_base():
             completion_params["api_base"] = api_base
-        elif self._replays_reasoning:
-            # Without a base URL litellm's openai route calls OpenAI itself.
-            msg = "replay_reasoning needs the self-hosted server's URL: pass --proxy"
-            raise ValueError(msg)
-        if self._replays_reasoning:
-            # The openai route's client retries a failed call twice on its own,
-            # which the hosted_vllm route doesn't; collect() does the retrying.
-            completion_params["max_retries"] = 0
 
         self._provider.apply_prompt_caching(
             self.config.run_id, serialized_messages, completion_params
@@ -478,14 +466,6 @@ class BuiltinSource:
         )
 
         return completion_params
-
-    def _litellm_model(self) -> str:
-        if self._replays_reasoning:
-            # litellm's hosted_vllm route strips reasoning_content from every
-            # assistant message it sends; its generic OpenAI-compatible route
-            # sends the messages as given, to the same server.
-            return "openai/" + self.config.model.removeprefix(_SELF_HOSTED_PREFIX)
-        return self._spec.litellm_model
 
     def _serialize_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Serializes transcript messages to dicts."""

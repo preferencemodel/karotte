@@ -433,32 +433,3 @@ def test_resolved_rubric_judge_model(fields: dict[str, Any], expected: str | Non
     config = EvaluationRunConfig(run_id="r", task_id="t", **fields)
 
     assert config.resolved_rubric_judge_model == expected
-
-
-def test_replay_reasoning_is_accepted_for_a_self_hosted_model():
-    config = EvaluationRunConfig(
-        run_id="r", task_id="t", model="hosted_vllm/qwen", replay_reasoning=True
-    )
-    assert config.replay_reasoning
-
-
-def test_replay_reasoning_is_rejected_for_a_hosted_api_model():
-    with pytest.raises(ValidationError, match="self-hosted"):
-        EvaluationRunConfig(
-            run_id="r",
-            task_id="t",
-            model="openai/gpt-5.5",
-            model_api_key="k",
-            replay_reasoning=True,
-        )
-
-
-def test_replay_reasoning_is_rejected_for_a_cli_agent():
-    with pytest.raises(ValidationError, match="builtin agent only"):
-        EvaluationRunConfig(
-            run_id="r",
-            task_id="t",
-            model="hosted_vllm/qwen",
-            agent="claude-code",
-            replay_reasoning=True,
-        )

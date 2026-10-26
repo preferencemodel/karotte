@@ -13,6 +13,7 @@ from litellm.types.utils import Delta as LiteLlmDelta
 from litellm.types.utils import ModelResponseStream, StreamingChoices, Usage
 
 from karotte.agents.builtin_source import BuiltinSource
+from karotte.model_spec import spec_for
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import MessageAddedEvent, MessageChunkResetEvent
@@ -618,13 +619,12 @@ def self_hosted_server(monkeypatch: pytest.MonkeyPatch) -> Iterator[ServeReplies
         server.shutdown()
 
 
-def _self_hosted_config(*, replay_reasoning: bool) -> EvaluationRunConfig:
+def _self_hosted_config() -> EvaluationRunConfig:
     return EvaluationRunConfig(
         run_id="run",
         task_id="task",
         model="hosted_vllm/qwen",
         model_api_key="test_key",
-        replay_reasoning=replay_reasoning,
     )
 
 
@@ -640,7 +640,7 @@ def _read_result(call_id: str) -> Message:
 
 
 @pytest.mark.asyncio
-async def test_a_self_hosted_model_is_sent_its_earlier_reasoning_when_asked(
+async def test_a_self_hosted_model_is_sent_its_earlier_reasoning(
     self_hosted_server: ServeReplies,
 ):
     bodies = self_hosted_server(
@@ -649,7 +649,7 @@ async def test_a_self_hosted_model_is_sent_its_earlier_reasoning_when_asked(
             _thinks_then_reads_a_file("It says hello.", "call_2"),
         ]
     )
-    source = BuiltinSource(_self_hosted_config(replay_reasoning=True))
+    source = BuiltinSource(_self_hosted_config())
     user = Message(role="user", content="Read a.txt.")
 
     first = await _turn(source, [user])
@@ -660,26 +660,6 @@ async def test_a_self_hosted_model_is_sent_its_earlier_reasoning_when_asked(
     replayed = bodies[1]["messages"][1]
     assert replayed["role"] == "assistant"
     assert replayed["reasoning_content"] == "I should read a.txt."
-
-
-@pytest.mark.asyncio
-async def test_a_self_hosted_model_is_sent_no_reasoning_by_default(
-    self_hosted_server: ServeReplies,
-):
-    bodies = self_hosted_server(
-        [
-            _thinks_then_reads_a_file("I should read a.txt.", "call_1"),
-            _thinks_then_reads_a_file("It says hello.", "call_2"),
-        ]
-    )
-    source = BuiltinSource(_self_hosted_config(replay_reasoning=False))
-    user = Message(role="user", content="Read a.txt.")
-
-    first = await _turn(source, [user])
-    await _turn(source, [user, _stored(first), _read_result("call_1")])
-
-    assert bodies[1]["model"] == "qwen"
-    assert "reasoning_content" not in bodies[1]["messages"][1]
 
 
 @pytest.mark.asyncio
@@ -694,7 +674,7 @@ async def test_a_full_context_window_drops_the_reasoning_so_far_and_keeps_later_
             _thinks_then_reads_a_file("Both say hello.", "call_3"),
         ]
     )
-    source = BuiltinSource(_self_hosted_config(replay_reasoning=True))
+    source = BuiltinSource(_self_hosted_config())
     history = [Message(role="user", content="Read a.txt and b.txt.")]
 
     first = await _turn(source, history)
@@ -721,7 +701,7 @@ async def test_a_full_context_window_with_no_reasoning_left_to_drop_fails(
             _CONTEXT_WINDOW_FULL,
         ]
     )
-    source = BuiltinSource(_self_hosted_config(replay_reasoning=True))
+    source = BuiltinSource(_self_hosted_config())
     user = Message(role="user", content="Read a.txt.")
 
     first = await _turn(source, [user])
@@ -743,7 +723,7 @@ async def test_a_failed_self_hosted_call_is_retried_by_karotte_alone(
             _thinks_then_reads_a_file("I should read a.txt.", "call_1"),
         ]
     )
-    source = BuiltinSource(_self_hosted_config(replay_reasoning=True))
+    source = BuiltinSource(_self_hosted_config())
 
     events = [
         event
@@ -758,9 +738,78 @@ async def test_a_failed_self_hosted_call_is_retried_by_karotte_alone(
     assert sum(isinstance(e, MessageChunkResetEvent) for e in events) == 1
 
 
-def test_replaying_reasoning_needs_the_servers_url(monkeypatch: pytest.MonkeyPatch):
+def test_a_self_hosted_model_needs_its_servers_url(monkeypatch: pytest.MonkeyPatch):
+    """Without one, litellm's openai route would send the conversation to OpenAI."""
     monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
-    source = BuiltinSource(_self_hosted_config(replay_reasoning=True))
+    monkeypatch.delenv("HOSTED_VLLM_API_BASE", raising=False)
+    source = BuiltinSource(_self_hosted_config())
 
     with pytest.raises(ValueError, match="--proxy"):
         source.get_completion_params([Message(role="user", content="Go.")], [])
+
+
+@pytest.mark.parametrize(
+    ("configured", "env", "sent"),
+    [
+        ("test_key", None, "test_key"),
+        (None, "env_key", "env_key"),
+        (None, None, "fake-api-key"),
+    ],
+)
+def test_a_self_hosted_model_is_sent_the_key_the_hosted_vllm_route_would_send(
+    monkeypatch: pytest.MonkeyPatch,
+    configured: str | None,
+    env: str | None,
+    sent: str,
+):
+    """The openai route refuses to send no key; a server that needs none ignores it."""
+    monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+    if env is None:
+        monkeypatch.delenv("HOSTED_VLLM_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("HOSTED_VLLM_API_KEY", env)
+    config = EvaluationRunConfig(
+        run_id="run", task_id="task", model="hosted_vllm/qwen", model_api_key=configured
+    )
+
+    params = BuiltinSource(config).get_completion_params(
+        [Message(role="user", content="Go.")], []
+    )
+
+    assert params["api_key"] == sent
+
+
+def test_a_self_hosted_server_can_be_named_by_litellms_own_variable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
+    monkeypatch.setenv("HOSTED_VLLM_API_BASE", "http://vllm:8000/v1")
+    source = BuiltinSource(_self_hosted_config())
+
+    params = source.get_completion_params([Message(role="user", content="Go.")], [])
+
+    assert params["api_base"] == "http://vllm:8000/v1"
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "claude-sonnet-5-5",
+        "openai/gpt-5.6-sol",
+        "xai/grok-4.7",
+        "together_ai/moonshotai/Kimi-K3",
+    ],
+)
+def test_only_a_self_hosted_conversation_changes_route(model: str):
+    """Every other provider's conversation goes where its model spec says."""
+    params = BuiltinSource(_config(model)).get_completion_params(
+        [Message(role="user", content="Go.")], []
+    )
+
+    assert params["model"] == spec_for(model).litellm_model
+    assert "max_retries" not in params
+
+
+def test_a_self_hosted_rubric_judge_keeps_the_hosted_vllm_route():
+    """A judge's call is one turn, with no reasoning history to send back."""
+    assert spec_for("hosted_vllm/qwen").litellm_model == "hosted_vllm/qwen"

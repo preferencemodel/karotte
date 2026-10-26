@@ -149,17 +149,14 @@ Unset, Karotte sends none and the agent or provider picks.
 
 ## Reasoning history
 
-`replay_reasoning` sends a self-hosted model (`hosted_vllm/...`) the reasoning of its earlier turns, so its chat template can show the model what it thought before.
-Without it, those turns go back without their reasoning: litellm's `hosted_vllm` route removes it from every assistant message.
-With it, Karotte calls the same server through litellm's generic OpenAI-compatible route, which sends the messages as given.
-Whether the model then sees the reasoning is up to its chat template.
+A self-hosted model (`hosted_vllm/...`) is sent the reasoning of its earlier turns, as Claude, OpenAI and xAI models are sent theirs.
+Whether the model sees it is up to its chat template.
+litellm's `hosted_vllm` route removes the reasoning from every assistant message, so the builtin agent calls the same server through litellm's generic OpenAI-compatible route instead.
+The run needs `--proxy` pointing at the server, or litellm's `HOSTED_VLLM_API_BASE`.
 
 The reasoning fills the context window faster.
 When the server refuses a request because the window is full, Karotte leaves out the reasoning of every turn so far, retries, and goes on sending the reasoning of later turns.
-If the request still doesn't fit, the run fails as it would without `replay_reasoning`.
-
-Only the builtin agent applies it, and only to a `hosted_vllm` model; the run config is rejected otherwise.
-The run needs `--proxy`, or a plugin's proxy URL, pointing at the server.
+If the request still doesn't fit, the run fails.
 
 ## Limits
 
