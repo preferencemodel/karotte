@@ -109,12 +109,15 @@ The run reads its config from a file in the sandbox, so the API key isn't on any
 The terminal UI reaches the run's websocket through a Modal connect token, so nobody without the token can read the run's events.
 When the run ends, Karotte copies `/out` back next to the transcript, keeping only regular files and directories.
 
+`--mount` paths aren't shared live.
+They're copied into the sandbox when the run starts, and read-write ones are copied back when it ends, keeping only regular files and directories.
+
 Model calls go out from the sandbox, so a model proxy has to be on a public address.
 Karotte refuses a proxy on localhost or a private address.
 
 Modal doesn't filter the network around the sandbox the way `firecracker` does on the host, so only the student firewall inside the sandbox applies.
 
-The `modal` runtime doesn't support `--mount`, `--dev`, `--keep-containers` or `--prepare-only` yet.
+The `modal` runtime doesn't support `--dev`, `--keep-containers` or `--prepare-only` yet.
 It can't run hardware a plugin marks `passthrough`, such as a GPU, because Modal's VM runtime has no GPUs.
 
 ### docker, podman, nerdctl
