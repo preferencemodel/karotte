@@ -67,8 +67,8 @@ class ModelSpec(BaseModel, frozen=True):
     max_output_tokens: int
 
     min_reasoning_effort: str | None
-    """The provider's name for this model's lowest effort, or None where the
-    model takes no effort parameter."""
+    """The provider's name for this model's lowest effort that still reasons, or
+    None where the model takes no effort parameter."""
 
     max_reasoning_effort: str | None
     """The provider's name for this model's highest effort, or None where the
@@ -198,6 +198,7 @@ _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
         "gpt-6-sol",
         "gpt-6-luna",
         "gpt-6.1-sol",
+        "gpt-6.1-terra",
         "DeepSeek-V4-Pro-0813",
         "GLM-5.3",
         "glm-5p3",
@@ -215,6 +216,7 @@ _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
 # it into budget_tokens thinking those models do not run with today.
 _REASONING_EFFORT_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
     # max is Responses API only; Chat Completions answers 400 to it.
+    ("gpt-6.1-terra", ("none", "low", "medium", "high", "xhigh", "max")),
     ("gpt-6", ("low", "medium", "high", "xhigh", "max")),
     ("gpt-5.6", ("low", "medium", "high", "xhigh", "max")),
     ("gpt-5.5", ("low", "medium", "high", "xhigh")),
@@ -249,7 +251,7 @@ def spec_for(model: str) -> ModelSpec:
         provider_display_name=_provider_display_name(provider),
         litellm_model=_litellm_model(model),
         max_output_tokens=_max_output_tokens(name),
-        min_reasoning_effort=levels[0] if levels else None,
+        min_reasoning_effort=next((level for level in levels if level != "none"), None),
         max_reasoning_effort=levels[-1] if levels else None,
         reasoning_effort_levels=levels,
         reasoning_request=_reasoning_request(name),
