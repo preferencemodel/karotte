@@ -117,6 +117,21 @@ def test_extra_artifact_paths_rejects_wrong_type():
         _config_with_extra({"not": "a list"})
 
 
+def test_agent_env_defaults_to_empty():
+    assert _config_with_instr_extra({}).agent_env == {}
+
+
+def test_agent_env_reads_names_to_strings():
+    env = {"BASH_DEFAULT_TIMEOUT_MS": "3600000"}
+    assert _config_with_instr_extra({"agent_env": env}).agent_env == env
+
+
+@pytest.mark.parametrize("bad", [["A=1"], {"A": 1}, {"A": None}])
+def test_agent_env_rejects_anything_but_names_to_strings(bad: object):
+    with pytest.raises(ValidationError, match="map names to strings"):
+        _config_with_instr_extra({"agent_env": bad})
+
+
 def _config_with_instr_extra(extra: dict[Any, Any]) -> EvaluationRunConfig:
     return EvaluationRunConfig(
         run_id="test_run",

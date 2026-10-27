@@ -14,6 +14,7 @@ import os
 import shutil
 import signal
 import tempfile
+import time
 from collections.abc import AsyncGenerator, Callable, Iterable, Mapping
 from pathlib import Path
 from typing import ClassVar, Literal
@@ -93,6 +94,10 @@ class CliAgent(abc.ABC):
         self._ctx: RunContext
         self._forwarder: ModelForwarder | None = None
         self._step_index: int = 0
+        # The running step's limits, for an agent that passes them on to its CLI.
+        self._step_deadline: float | None = None
+        """When the step's time limit runs out, as a ``time.time()`` timestamp."""
+        self._step_context_window_limit: int | None = None
         self._home: Path = Path(os.environ.get("KAROTTE_WORKDIR", ".")) / self.home_dir
         self._step_dir: Path | None = None
 
@@ -217,6 +222,8 @@ class CliAgent(abc.ABC):
     def _env(self) -> dict[str, str]:
         # Only what the student may see; the model key is added on purpose below.
         env = scrub_harness_secrets(os.environ)
+        # The run's own variables first, so that everything karotte sets wins.
+        env.update(self._config.agent_env)
         env["HOME"] = os.environ.get("KAROTTE_WORKDIR", str(Path.home()))
         env["USER"] = "student"
         env["LOGNAME"] = "student"
@@ -241,15 +248,21 @@ class CliAgent(abc.ABC):
         instructions: str,
         time_limit_seconds: float | None = None,
         on_time_limit: Literal["error", "score"] = "error",
-        context_window_limit: int | None = None,  # pyright: ignore[reportUnusedParameter]
+        context_window_limit: int | None = None,
         on_context_window_limit: Literal["error", "score"] = "error",  # pyright: ignore[reportUnusedParameter]
     ) -> AsyncGenerator[Event]:
         """Run the CLI once, yielding transcript events as it writes each line.
 
         Past `time_limit_seconds` the CLI and its children are killed: `error`
-        raises after yielding the output so far, `score` keeps it."""
+        raises after yielding the output so far, `score` keeps it. The base
+        class enforces no `context_window_limit`; an agent may pass it on to
+        its CLI."""
         yield MessageAddedEvent(message=Message(role="user", content=instructions))
 
+        self._step_deadline = (
+            None if time_limit_seconds is None else time.time() + time_limit_seconds
+        )
+        self._step_context_window_limit = context_window_limit
         step = self._step_index
         cli = Path(self.binary).name
         steps = self._step_files()
