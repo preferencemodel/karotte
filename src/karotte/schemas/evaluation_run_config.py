@@ -114,6 +114,25 @@ class EvaluationRunConfig(BaseModel):
         self._validate_str_or_str_list("extra_artifact_paths")
         return self
 
+    @property
+    def agent_env(self) -> dict[str, str]:
+        """Environment variables for a CLI agent's process, such as the CLI's own
+        settings. Read from `extra_config["agent_env"]`; a variable karotte sets
+        itself keeps karotte's value. The student can read them, so they are no
+        place for a secret."""
+        return (self.extra_config or {}).get("agent_env") or {}
+
+    @model_validator(mode="after")
+    def validate_agent_env(self) -> Self:
+        raw = (self.extra_config or {}).get("agent_env")
+        if raw is not None and not (
+            isinstance(raw, dict)
+            and all(isinstance(k, str) and isinstance(v, str) for k, v in raw.items())
+        ):
+            msg = f"extra_config['agent_env'] must map names to strings, got {raw!r}"
+            raise ValueError(msg)
+        return self
+
     @model_validator(mode="after")
     def validate_task_instructions(self) -> Self:
         self._validate_str_or_str_list("extra_task_instructions")

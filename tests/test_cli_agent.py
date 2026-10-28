@@ -61,6 +61,7 @@ class _EchoAgent(CliAgent):
     exit_code: int = 0
     held: str = ""
     reported: str | None = None
+    started_with: tuple[float | None, int | None] | None = None
 
     @classmethod
     def install(cls) -> list[str]:
@@ -76,6 +77,7 @@ class _EchoAgent(CliAgent):
         return {"ECHO_TELEMETRY": "0"}
 
     def _argv(self, instructions: str, prompt_file: Path | None) -> list[str]:
+        self.started_with = (self._step_deadline, self._step_context_window_limit)
         script = self._home / "fake_tool.py"
         script.write_text(_FAKE_TOOL)
         return [
@@ -165,6 +167,23 @@ class TestHomeAndEnv:
         assert env["ECHO_TELEMETRY"] == "0"
         assert env["ECHO_API_KEY"] == "sk-real"
         assert AGENTS_BIN_DIR in env["PATH"].split(":")
+
+    def test_a_runs_own_variables_reach_the_tool_under_karottes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent_env = {
+            "ECHO_TIMEOUT": "60",
+            "ECHO_TELEMETRY": "1",
+            "HOME": "/elsewhere",
+            "ECHO_API_KEY": "sk-other",
+        }
+        env = _agent(
+            tmp_path, monkeypatch, extra_config={"agent_env": agent_env}
+        )._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["ECHO_TIMEOUT"] == "60"
+        assert env["ECHO_TELEMETRY"] == "0"
+        assert env["HOME"] == str(tmp_path)
+        assert env["ECHO_API_KEY"] == "sk-real"
 
     def test_the_student_owns_every_config_dir_and_file(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -290,6 +309,28 @@ class TestRunStep:
         _ = [e async for e in agent.run_step("two")]
         assert (_step_dir(agent) / "step_1.prompt").read_text() == "two"
         assert (_step_dir(agent) / "step_1.ndjson").read_text() == "two\n"
+
+    @pytest.mark.asyncio
+    async def test_the_cli_is_started_knowing_its_steps_limits(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        (tmp_path / ".echo" / "gate").touch()
+        before = time.time()
+        _ = [
+            e
+            async for e in agent.run_step(
+                "timed", time_limit_seconds=30, context_window_limit=1000
+            )
+        ]
+        assert agent.started_with is not None
+        deadline, context_window_limit = agent.started_with
+        assert deadline is not None
+        assert before + 30 <= deadline <= time.time() + 30
+        assert context_window_limit == 1000
+
+        _ = [e async for e in agent.run_step("untimed")]
+        assert agent.started_with == (None, None)
 
     @pytest.mark.asyncio
     async def test_nonzero_exit_raises_after_yielding(
