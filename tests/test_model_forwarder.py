@@ -1,6 +1,7 @@
 """The loopback forwarder a CLI agent reaches its model provider through."""
 
 import asyncio
+import gzip
 import json
 import logging
 import socket
@@ -12,6 +13,7 @@ import aiohttp
 import pytest
 import pytest_asyncio
 from aiohttp import web
+from loguru import logger
 from yarl import URL
 
 if TYPE_CHECKING:
@@ -21,6 +23,7 @@ from karotte.model_forwarder import (
     GeminiForwarder,
     ModelForwarder,
     VertexForwarder,
+    _error_text,  # pyright: ignore[reportPrivateUsage]
     vertex_forwarder,
 )
 
@@ -40,6 +43,24 @@ async def _echo(request: web.Request) -> web.Response:
             "body": (await request.read()).decode(),
         },
         status=201,
+    )
+
+
+async def _accept_encoding(request: web.Request) -> web.Response:
+    return web.json_response(request.headers.get("Accept-Encoding"))
+
+
+async def _rate_limited(request: web.Request) -> web.Response:
+    del request
+    return web.json_response({"error": "slow down"}, status=429)
+
+
+async def _rate_limited_gzip(request: web.Request) -> web.Response:
+    del request
+    return web.Response(
+        body=gzip.compress(b'{"error": "slow down"}'),
+        status=429,
+        headers={"Content-Encoding": "gzip", "Content-Type": "application/json"},
     )
 
 
@@ -68,6 +89,9 @@ async def _stream(request: web.Request) -> web.StreamResponse:
 async def upstream() -> AsyncIterator[str]:
     app = web.Application()
     app.router.add_route("*", "/v1/echo", _echo)
+    app.router.add_get("/v1/accept-encoding", _accept_encoding)
+    app.router.add_post("/v1/limited", _rate_limited)
+    app.router.add_post("/v1/limited-gzip", _rate_limited_gzip)
     app.router.add_route("*", "/v1beta/{tail:.*}", _echo)
     app.router.add_route("*", "/v1/projects/{tail:.*}", _echo)
     app.router.add_get("/v1/stream", _stream)
@@ -140,10 +164,44 @@ class TestModelForwarder:
         assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("sent", [None, "br"])
+    async def test_asks_upstream_only_for_the_agents_encodings(
+        self, forwarder: ModelForwarder, sent: str | None
+    ):
+        headers = {} if sent is None else {"Accept-Encoding": sent}
+        async with aiohttp.ClientSession(
+            skip_auto_headers=("Accept-Encoding",)
+        ) as session:
+            async with session.get(
+                f"{forwarder.url}/v1/accept-encoding", headers=headers
+            ) as response:
+                assert await response.json() == sent
+
+    @pytest.mark.asyncio
     async def test_passes_upstream_errors_through(self, forwarder: ModelForwarder):
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{forwarder.url}/v1/missing") as response:
                 assert response.status == 404
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("path", ["/v1/limited", "/v1/limited-gzip"])
+    async def test_logs_why_upstream_refused(
+        self, forwarder: ModelForwarder, path: str
+    ):
+        warnings: list[str] = []
+        handler = logger.add(warnings.append, level="WARNING", format="{message}")
+        try:
+            async with aiohttp.ClientSession(auto_decompress=False) as session:
+                async with session.post(f"{forwarder.url}{path}") as response:
+                    assert response.status == 429
+                async with session.post(f"{forwarder.url}/v1/echo") as response:
+                    assert response.status == 201
+        finally:
+            logger.remove(handler)
+        reason = '{"error": "slow down"}'
+        assert warnings == [
+            f"Model forwarder: POST {path} got 429 Too Many Requests: {reason}\n"
+        ]
 
     @pytest.mark.asyncio
     async def test_unreachable_upstream_is_a_502(self):
@@ -160,6 +218,21 @@ class TestModelForwarder:
                     assert _KEY not in await response.text()
         finally:
             await forwarder.stop()
+
+
+@pytest.mark.parametrize(
+    ("body", "encoding", "text"),
+    [
+        (b"plain", None, "plain"),
+        # Without the gzip trailer, as when the log takes only the start.
+        (gzip.compress(b"cut short")[:-8], "gzip", "cut short"),
+        (b"not gzip", "gzip", "<8 bytes of gzip>"),
+        (b"\x8b\x00", "br", "<2 bytes of br>"),
+    ],
+    ids=["plain", "gzip-cut-short", "not-gzip", "br"],
+)
+def test_error_text(body: bytes, encoding: str | None, text: str):
+    assert _error_text(body, encoding) == text
 
 
 class _Credentials:
