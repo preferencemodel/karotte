@@ -76,6 +76,19 @@ class EvaluationRunConfig(BaseModel):
     step context-window limit is set. No effect without a limit, or for agents
     that run the step in one opaque subprocess (e.g. the Vibe CLI agent)."""
 
+    on_invalid_submission: Literal["restore_best"] | None = None
+    """What to do when a step's submission is missing or invalid as the step is
+    scored. None scores it as it is. "restore_best" first puts back the best
+    copy the task's `validate` tool graded as valid, if there is one. Needs the
+    `validate` tool."""
+
+    on_final_submission: Literal["keep_best"] | None = None
+    """None scores the submission the student left. "keep_best" scores the best
+    copy the `validate` tool graded as valid instead, even when the submission
+    the student left is valid too; with no such copy it scores the submission as
+    it is. Needs the `validate` tool. Off by default: it turns the task into one
+    of choosing among graded attempts."""
+
     mcp_server_config: HttpMcpServerConfig = HttpMcpServerConfig()
 
     websocket_config: WebSocketConfig = WebSocketConfig()

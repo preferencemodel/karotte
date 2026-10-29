@@ -5,6 +5,7 @@ import re
 import shutil
 import socket
 import sys
+import textwrap
 import time
 from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import closing
@@ -228,6 +229,74 @@ def fresh_confinement():
     current_sandbox.cache_clear()
     _confinement_for.cache_clear()
     _student_groups.clear()
+
+
+@pytest.fixture
+def karotte_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Move everything karotte keeps under `~/.config/karotte` (tool configs,
+    protected store, validation snapshots) into `tmp_path`, for this process and
+    for MCP server subprocesses started after the fixture. Returns that
+    directory.
+
+    The directories are bound as parameter defaults or module constants when
+    karotte is imported, so setting `HOME` is not enough in this process."""
+    from karotte import protected_store, tool_base, validation
+
+    home = tmp_path / "home"
+    state = home / ".config" / "karotte"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(tool_base, "CONFIGS_DIR", state / "tool_configs")
+    monkeypatch.setattr(
+        tool_base.ToolConfigWriter.__init__, "__defaults__", (state / "tool_configs",)
+    )
+    monkeypatch.setattr(
+        protected_store.ProtectedStore.__init__, "__defaults__", (state / "protected",)
+    )
+    monkeypatch.setattr(validation, "SNAPSHOTS_DIR", state / "validate_snapshots")
+    return state
+
+
+# A dev scorer in the contract `validate` documents: it gets the snapshot
+# directory and an output path as its last two arguments. What it reports
+# follows the submission's text, and every run is counted in the file named by
+# its first argument.
+_DEV_SCORER = textwrap.dedent(
+    """
+    import json, math, sys, time
+    from pathlib import Path
+
+    counter, live, snapshot, out = (Path(a) for a in (*sys.argv[1:3], *sys.argv[-2:]))
+    with counter.open("a") as f:
+        f.write("run\\n")
+    text = (snapshot / "answer.txt").read_text()
+    metadata = {"label": "SECRET-LABEL-7"}
+    if text.startswith("race "):
+        live.write_text("0.1")
+        text = (snapshot / "answer.txt").read_text().removeprefix("race ")
+    if text == "crash":
+        sys.exit(3)
+    if text == "garbage":
+        out.write_text("not json")
+    elif text == "hang":
+        time.sleep(60)
+    elif text.startswith("reject "):
+        out.write_text(json.dumps(
+            {"tier": "no_valid_output", "reason": text.removeprefix("reject "), "metadata": metadata}
+        ))
+    elif text.startswith("fail "):
+        out.write_text(json.dumps({"tier": "crash", "reason": text.removeprefix("fail ")}))
+    else:
+        out.write_text(json.dumps({"score": float(text), "metadata": metadata, "extra": "x"}))
+    """
+)
+
+
+@pytest.fixture
+def dev_scorer(tmp_path: Path) -> Path:
+    """A script for `ValidateConfig.dev_command` (run it with `sys.executable`)."""
+    path = tmp_path / "dev_scorer.py"
+    path.write_text(_DEV_SCORER)
+    return path
 
 
 @pytest.fixture(autouse=True)

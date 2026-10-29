@@ -201,6 +201,22 @@ Agents that run a step in their own process can only enforce the limits their CL
 
 [^ext]: The external agent doesn't report token usage, so its context counter, if on, always shows the full limit.
 
+## Submission fallbacks
+
+Two options let a run score a copy of the student's work from earlier in the step.
+Both use the copy with the best valid score from the task's [`validate` tool](../tasks/tools.md#validating-a-submission).
+Karotte refuses a run whose task doesn't use that tool, and scores a step that declares no `submission_paths` as it is.
+Both are off by default, and a run that sets them is not comparable with one that doesn't.
+
+| Field                   | Type                       | Meaning                                                                                                                                                                                |
+| ----------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `on_invalid_submission` | `"restore_best"` or `null` | When the submission is missing or doesn't grade as valid as the step is scored, put the best valid copy back first. A submission that is valid is left alone, even if it scores worse. |
+| `on_final_submission`   | `"keep_best"` or `null`    | Score the best valid copy even when the submission is valid. With no valid copy, score the submission as it is.                                                                        |
+
+Karotte stops the student's processes before it puts a copy back, and replaces whatever sits at the path without following a symlink.
+Restored files belong to root.
+The artifacts of `extra_artifact_paths` are saved before the copy goes back, so they hold what the student left.
+
 ## Agents
 
 The agent produces the student's messages and tool calls for each step.

@@ -1,0 +1,372 @@
+"""`on_invalid_submission` and `on_final_submission`, seen from a run: what is on
+disk when the step gets scored."""
+
+import os
+import sys
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import final, override
+
+import pytest
+
+from karotte import Step, Task, ToolConfigWriter, UnreapableCohortError
+from karotte.agents import BuiltinSource
+from karotte.evaluation_runner import EvaluationRunner
+from karotte.judges.judge import Judge
+from karotte.mcp_servers.http_mcp_server import HttpMcpServer
+from karotte.schemas.chat import Message
+from karotte.schemas.evaluation_run_config import EvaluationRunConfig
+from karotte.schemas.scoring import Scoring
+from karotte.schemas.transcript import (
+    Event,
+    MessageAddedEvent,
+    ScoringEvent,
+    Transcript,
+)
+from karotte.tools.validate import ValidateConfig, validate
+
+JUDGE_SCORE = 0.25
+
+Episode = Callable[[validate, Path], Awaitable[None]]
+
+
+class _FixedJudge(Judge):
+    @override
+    def evaluate(self, transcript: Transcript) -> Scoring:
+        return Scoring(JUDGE_SCORE, {}, True)
+
+
+@dataclass
+class Outcome:
+    on_disk_at_scoring: str | None
+    events: list[Event]
+    score: float | None
+
+
+async def run_episode(
+    *,
+    config: EvaluationRunConfig,
+    mcp_server: HttpMcpServer,
+    monkeypatch: pytest.MonkeyPatch,
+    dev_scorer: Path,
+    tmp_path: Path,
+    episode: Episode,
+) -> Outcome:
+    """Run a one-step task whose "model" is `episode`: it gets the validate tool
+    and the submission path, and may write files and call the tool."""
+    submission = tmp_path / "work" / "answer.txt"
+    submission.parent.mkdir()
+    seen: list[str | None] = []
+
+    class _Step(Step):
+        @property
+        @override
+        def instructions(self) -> str:
+            return "Write the answer."
+
+        @property
+        @override
+        def judge(self) -> Judge:
+            return _FixedJudge()
+
+        @property
+        @override
+        def submission_paths(self) -> tuple[Path, ...]:
+            return (submission,)
+
+        @override
+        def pre_scoring_hook(self) -> None:
+            seen.append(submission.read_text() if submission.is_file() else None)
+
+    @final
+    class _Task(Task):
+        id = "fallback-task"
+
+        @property
+        @override
+        def system_prompt(self) -> str | None:
+            return None
+
+        @property
+        @override
+        def tools(self) -> list[str]:
+            return ["validate"]
+
+        @property
+        @override
+        def steps(self) -> list[Step]:
+            return [_Step(config)]
+
+        @override
+        def configure_tools(self) -> None:
+            _ = ToolConfigWriter().write(
+                "validate",
+                ValidateConfig(
+                    dev_command=[
+                        sys.executable,
+                        str(dev_scorer),
+                        str(tmp_path / "counter"),
+                        str(submission),
+                    ],
+                    metric="accuracy",
+                    submission_paths=self.submission_paths,
+                    min_interval_s=0,
+                ),
+            )
+
+    async def collect(self: BuiltinSource, _messages: object, _tools: object):  # pyright: ignore[reportUnusedParameter]
+        await episode(validate(), submission)
+        yield MessageAddedEvent(message=Message(role="assistant", content="Done."))
+
+    monkeypatch.setattr(BuiltinSource, "collect", collect)
+    config.task_id = _Task.id
+    config.transcript_file = None
+    config.mcp_server_config.port = mcp_server.config.port
+
+    runner = EvaluationRunner(config, _Task(config))
+    events = [event async for event in runner.run()]
+    assert len(seen) == 1
+    return Outcome(seen[0], events, runner.run_state.score)
+
+
+@pytest.fixture
+def run(
+    sample_config: EvaluationRunConfig,
+    karotte_state: Path,  # pyright: ignore[reportUnusedParameter]
+    mcp_server: HttpMcpServer,
+    monkeypatch: pytest.MonkeyPatch,
+    dev_scorer: Path,
+    tmp_path: Path,
+) -> Callable[..., Awaitable[Outcome]]:
+    async def go(episode: Episode, **config: str) -> Outcome:
+        return await run_episode(
+            config=sample_config.model_copy(update=config),
+            mcp_server=mcp_server,
+            monkeypatch=monkeypatch,
+            dev_scorer=dev_scorer,
+            tmp_path=tmp_path,
+            episode=episode,
+        )
+
+    return go
+
+
+@pytest.mark.asyncio
+async def test_restore_best_puts_the_best_copy_back_when_the_submission_is_missing(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        os.unlink(submission)
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring == "0.7"
+
+
+@pytest.mark.asyncio
+async def test_restore_best_puts_the_best_copy_back_when_the_submission_is_rejected(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("reject not a number")
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring == "0.7"
+
+
+@pytest.mark.asyncio
+async def test_restore_best_leaves_a_valid_submission_alone_even_when_it_is_worse(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("0.3")
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring == "0.3"
+
+
+@pytest.mark.asyncio
+async def test_nothing_is_restored_unless_asked_for(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("reject not a number")
+
+    outcome = await run(episode)
+
+    assert outcome.on_disk_at_scoring == "reject not a number"
+
+
+@pytest.mark.asyncio
+async def test_restore_best_without_a_valid_copy_changes_nothing(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("reject not a number")
+        _ = await tool()
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring == "reject not a number"
+
+
+@pytest.mark.asyncio
+async def test_keep_best_scores_the_best_copy_even_when_the_submission_is_valid(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("0.3")
+
+    outcome = await run(episode, on_final_submission="keep_best")
+
+    assert outcome.on_disk_at_scoring == "0.7"
+
+
+@pytest.mark.asyncio
+async def test_keep_best_without_a_valid_copy_scores_the_submission_as_it_is(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(_tool: validate, submission: Path) -> None:
+        submission.write_text("0.3")
+
+    outcome = await run(episode, on_final_submission="keep_best")
+
+    assert outcome.on_disk_at_scoring == "0.3"
+
+
+@pytest.mark.asyncio
+async def test_validate_never_scores_the_step(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.9")
+        _ = await tool()
+        _ = await tool()
+
+    outcome = await run(episode)
+
+    scorings = [e for e in outcome.events if isinstance(e, ScoringEvent)]
+    assert [s.scoring.score for s in scorings] == [JUDGE_SCORE]
+    assert outcome.score == JUDGE_SCORE
+
+
+@pytest.mark.asyncio
+async def test_a_symlink_left_at_the_submission_path_is_replaced_not_followed(
+    run: Callable[..., Awaitable[Outcome]], tmp_path: Path
+):
+    elsewhere = tmp_path / "elsewhere.txt"
+    elsewhere.write_text("not the submission")
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.unlink()
+        submission.symlink_to(elsewhere)
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring == "0.7"
+    assert elsewhere.read_text() == "not the submission"
+
+
+@pytest.mark.asyncio
+async def test_the_student_is_stopped_before_the_copy_goes_back(
+    run: Callable[..., Awaitable[Outcome]],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    on_disk_when_stopped: list[tuple[int, bool]] = []
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "4242")
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.unlink()
+        monkeypatch.setattr(
+            "karotte.validation.kill_processes",
+            lambda uid: on_disk_when_stopped.append((uid, submission.exists())),  # pyright: ignore[reportUnknownLambdaType]
+        )
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert on_disk_when_stopped == [(4242, False)]
+    assert outcome.on_disk_at_scoring == "0.7"
+
+
+@pytest.mark.asyncio
+async def test_the_student_is_left_alone_when_nothing_is_restored(
+    run: Callable[..., Awaitable[Outcome]],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    stopped: list[int] = []
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "4242")
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        monkeypatch.setattr("karotte.validation.kill_processes", stopped.append)
+
+    _ = await run(episode, on_invalid_submission="restore_best")
+
+    assert stopped == []
+
+
+@pytest.mark.asyncio
+async def test_a_new_run_starts_without_the_snapshots_of_an_earlier_one(
+    run: Callable[..., Awaitable[Outcome]], karotte_state: Path
+):
+    stale = karotte_state / "validate_snapshots" / "tmpold" / "answer.txt"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("0.99")
+    left_over: list[bool] = []
+
+    async def episode(_tool: validate, _submission: Path) -> None:
+        left_over.append(stale.exists())
+
+    _ = await run(episode)
+
+    assert left_over == [False]
+
+
+def test_the_options_need_the_validate_tool(sample_config: EvaluationRunConfig):
+    from tests.conftest import TestTask
+
+    config = sample_config.model_copy(update={"on_invalid_submission": "restore_best"})
+
+    with pytest.raises(ValueError, match="need the validate tool"):
+        _ = EvaluationRunner(config, TestTask(config))
+
+
+@pytest.mark.asyncio
+async def test_a_student_that_cannot_be_stopped_is_scored_as_it_is(
+    run: Callable[..., Awaitable[Outcome]],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "4242")
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.unlink()
+
+        def cannot_stop(_uid: int) -> None:
+            raise UnreapableCohortError("processes survived")
+
+        monkeypatch.setattr("karotte.validation.kill_processes", cannot_stop)
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring is None
+    assert outcome.score == JUDGE_SCORE

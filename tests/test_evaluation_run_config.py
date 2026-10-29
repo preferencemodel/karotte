@@ -433,3 +433,31 @@ def test_resolved_rubric_judge_model(fields: dict[str, Any], expected: str | Non
     config = EvaluationRunConfig(run_id="r", task_id="t", **fields)
 
     assert config.resolved_rubric_judge_model == expected
+
+
+def test_submission_fallbacks_are_off_by_default():
+    config = EvaluationRunConfig(run_id="r", task_id="t", model="m")
+
+    assert config.on_invalid_submission is None
+    assert config.on_final_submission is None
+
+
+def test_submission_fallbacks_take_the_documented_values():
+    config = EvaluationRunConfig(
+        run_id="r",
+        task_id="t",
+        model="m",
+        on_invalid_submission="restore_best",
+        on_final_submission="keep_best",
+    )
+
+    assert config.on_invalid_submission == "restore_best"
+    assert config.on_final_submission == "keep_best"
+
+
+@pytest.mark.parametrize("field", ["on_invalid_submission", "on_final_submission"])
+def test_submission_fallbacks_reject_other_values(field: str):
+    with pytest.raises(ValidationError):
+        _ = EvaluationRunConfig.model_validate(
+            {"run_id": "r", "task_id": "t", "model": "m", field: "best"}
+        )

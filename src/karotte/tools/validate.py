@@ -1,0 +1,108 @@
+import asyncio
+import math
+import time
+from typing import Any, final
+
+from fastmcp.tools.tool import ToolResult
+from karotte import ToolBase
+from karotte.validation import (
+    ValidateConfig,
+    ValidationState,
+    grade_submission,
+    load_state,
+    record_grade,
+    save_state,
+)
+
+__all__ = ["ValidateConfig", "validate"]
+
+
+def _now() -> float:
+    return time.time()
+
+
+def _three_significant_figures(value: float | None) -> float | None:
+    return None if value is None else float(f"{value:.3g}")
+
+
+@final
+class validate(ToolBase[ValidateConfig]):
+    config_schema = ValidateConfig
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = asyncio.Lock()
+
+    async def __call__(self) -> ToolResult:
+        """Score your current submission on a dev split that is separate from the final test.
+
+        Takes no arguments: it grades the files you were told to hand in, as they are now. The result is a JSON object:
+        `tier` is `valid` (the dev score is in `dev_metric`), `no_valid_output` (the submission is missing or was rejected, see `reason`) or `crash` (it failed when it was run);
+        `metric` names the score and says which direction is better; `delta_vs_prev_valid` is the change since your last valid call; `best_dev_metric` is your best so far;
+        `calls_left` is how many calls remain.
+        The number of calls is limited and calls must be spaced apart. A call that is refused says why in `reason` and does not use up a call.
+        The dev score estimates, but is not, your final score.
+        """
+        async with self._lock:
+            state = load_state()
+            if state.calls >= self.config.max_calls:
+                return self._refused(state, "budget spent")
+            if state.last_call_at is not None:
+                wait = state.last_call_at + self.config.min_interval_s - _now()
+                if wait > 0:
+                    return self._refused(
+                        state,
+                        f"too soon: wait {math.ceil(wait)} s before calling again",
+                    )
+
+            grade = await grade_submission(self.config, self.config.submission_paths)
+            delta = (
+                None
+                if grade.dev_metric is None or state.last_valid_metric is None
+                else grade.dev_metric - state.last_valid_metric
+            )
+            state.calls += 1
+            state.last_call_at = _now()
+            record_grade(self.config, state, grade)
+            save_state(state)
+            return self._result(
+                state,
+                tier=grade.tier,
+                dev_metric=grade.dev_metric,
+                delta=delta,
+                reason=grade.reason,
+                elapsed_s=grade.elapsed_s,
+            )
+
+    def _refused(self, state: ValidationState, reason: str) -> ToolResult:
+        return self._result(
+            state,
+            tier=state.last_tier or "no_valid_output",
+            dev_metric=None,
+            delta=None,
+            reason=reason,
+            elapsed_s=0.0,
+        )
+
+    def _result(
+        self,
+        state: ValidationState,
+        *,
+        tier: str,
+        dev_metric: float | None,
+        delta: float | None,
+        reason: str | None,
+        elapsed_s: float,
+    ) -> ToolResult:
+        direction = "higher" if self.config.higher_is_better else "lower"
+        payload: dict[str, Any] = {
+            "tier": tier,
+            "dev_metric": _three_significant_figures(dev_metric),
+            "metric": f"{self.config.metric}, {direction} is better",
+            "reason": reason,
+            "delta_vs_prev_valid": _three_significant_figures(delta),
+            "best_dev_metric": _three_significant_figures(state.best_metric),
+            "elapsed_s": round(elapsed_s, 1),
+            "calls_left": max(self.config.max_calls - state.calls, 0),
+        }
+        return ToolResult(structured_content=payload)

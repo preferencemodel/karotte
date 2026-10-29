@@ -53,7 +53,9 @@ from karotte.schemas.transcript import (
 )
 from karotte.subprocess import ipc_namespace_available
 from karotte.text import escape_surrogates
+from karotte.tools.validate import validate
 from karotte.truncation import sanitize_metadata
+from karotte.validation import clear_snapshots, restore_best_submission
 
 
 class EvaluationRunner:
@@ -79,6 +81,12 @@ class EvaluationRunner:
             and not self._agent.supports_turn_limit
         ):
             msg = f"turn_limit can't be enforced by the {config.resolved_agent} agent"
+            raise ValueError(msg)
+        if (
+            config.on_invalid_submission is not None
+            or config.on_final_submission is not None
+        ) and "validate" not in task.tools:
+            msg = "on_invalid_submission and on_final_submission need the validate tool, which the task doesn't use"
             raise ValueError(msg)
 
     def _make_agent(self) -> Agent:
@@ -142,6 +150,7 @@ class EvaluationRunner:
         server, and register those tools."""
         ToolConfigWriter().clear()
         ProtectedStore().clear()
+        clear_snapshots()
         self.task.configure_tools()
         tools = [t for t in self.task.tools if t not in self._agent.native_tool_names]
         async with self._connect_to_mcp_server() as mcp_client:
@@ -265,6 +274,8 @@ class EvaluationRunner:
         # captures the file whenever it exists; runs after every step.
         _save_extra_artifacts(self.config)
 
+        await self._restore_validated_submission(step)
+
         if self.config.mcp_server_config.profile_tool_calls:
             async with ResourceSampler() as sampler:
                 scoring = await asyncio.to_thread(
@@ -279,6 +290,29 @@ class EvaluationRunner:
         )
 
         step.post_hook()
+
+    async def _restore_validated_submission(self, step: Step) -> None:
+        """Before scoring, put back the best copy the `validate` tool graded as
+        valid when the run's options ask for it. Runs after the artifacts are
+        saved, so those hold what the student left."""
+        if (
+            self.config.on_invalid_submission is None
+            and self.config.on_final_submission is None
+        ):
+            return
+        paths = step.submission_paths
+        if not paths:
+            logger.warning(
+                "The step declares no submission_paths, so there is nothing to restore"
+            )
+            return
+        # keep_best restores whatever the student left; restore_best only a submission that doesn't grade as valid.
+        unless_valid_under = (
+            None
+            if self.config.on_final_submission == "keep_best"
+            else validate().config
+        )
+        await restore_best_submission(paths, unless_valid_under=unless_valid_under)
 
     @asynccontextmanager
     async def _connect_to_mcp_server(self):

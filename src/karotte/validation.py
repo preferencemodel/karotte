@@ -1,0 +1,397 @@
+"""Grade a student's submission in the middle of an episode, on data the final
+judge does not use, and keep the best graded copy.
+
+The `validate` tool (`karotte.tools.validate`) and the runner's
+`on_invalid_submission` / `on_final_submission` options (see
+`karotte.schemas.evaluation_run_config`) share this module.
+
+A dev scorer is any executable. Karotte runs it as `dev_command` plus two
+arguments, a directory holding a copy of each submission path under its own
+name and the path of a JSON file to write. The JSON has the shape an
+`ExecutableJudge` script writes (`score`, `metadata`) and may also set `tier`
+(`valid`, `no_valid_output` or `crash`) and `reason`. Only `tier`, `score` and
+`reason` ever reach the student; `metadata` is never read.
+"""
+
+import asyncio
+import json
+import math
+import os
+import shutil
+import signal
+import stat
+import tempfile
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, ClassVar, Final, Literal
+
+from loguru import logger
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from karotte.container import demoted_uid_gid
+from karotte.demoted import drain_bounded
+from karotte.process_utils import kill_processes
+from karotte.protected_store import ProtectedStore, SecretNotFoundError
+from karotte.save_submission import save_submission
+from karotte.student_misbehavior import StudentMisbehaviorError
+from karotte.text import escape_surrogates
+from karotte.untrusted_paths import DIR_FLAGS, lstat_at, walk_to_parent
+
+STATE_NAME: Final = "validate_state"
+
+SNAPSHOTS_DIR: Final = Path("~/.config/karotte/validate_snapshots").expanduser()
+"""Root-only copies of graded submissions. Not inside the protected store, which
+holds files only."""
+
+Tier = Literal["crash", "no_valid_output", "valid"]
+
+_TIERS: Final = ("crash", "no_valid_output", "valid")
+_MAX_REASON_CHARS: Final = 300
+_MAX_RESULT_BYTES: Final = 1024 * 1024
+_MAX_LOGGED_STDERR_BYTES: Final = 4096
+_SCORER_NICENESS: Final = 10
+_PIPE_GRACE_S: Final = 2.0
+
+
+class SnapshotLimits(BaseModel):
+    """How much of a submission to copy, as `save_submission` takes it. Unset
+    limits keep its defaults."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    max_file_bytes: int | None = None
+    max_total_bytes: int | None = None
+    max_entries: int | None = None
+    max_depth: int | None = None
+
+
+class ValidateConfig(BaseModel):
+    """Configures the `validate` tool for a task."""
+
+    dev_command: list[str]
+    """The dev scorer's argv. Karotte appends the snapshot directory and the
+    path of the JSON file to write."""
+    metric: str
+    """Name of the dev metric, shown to the student."""
+    higher_is_better: bool = True
+    submission_paths: tuple[Path, ...]
+    """What gets graded: the absolute paths the step's student hands in. Use
+    the task's `submission_paths`."""
+    max_calls: int = 5
+    min_interval_s: float = 60.0
+    """Least time between two graded calls."""
+    timeout_s: float = 60.0
+    """Longest a dev scorer may run on one submission."""
+    snapshot_limits: SnapshotLimits = SnapshotLimits()
+    """Overrides for the limits on copying a submission. Use the ones the
+    step's final judge copies with."""
+
+    @model_validator(mode="after")
+    def _check(self) -> "ValidateConfig":
+        if not self.dev_command:
+            raise ValueError("dev_command must not be empty")
+        if not self.submission_paths:
+            raise ValueError("submission_paths must not be empty")
+        for path in self.submission_paths:
+            if not path.is_absolute():
+                raise ValueError(f"submission_paths must be absolute, got '{path}'")
+        names = [path.name for path in self.submission_paths]
+        if len(set(names)) != len(names):
+            raise ValueError(
+                "submission_paths must have distinct file names: the dev scorer "
+                + "finds each submission under its own name"
+            )
+        if self.max_calls < 0 or self.min_interval_s < 0 or self.timeout_s <= 0:
+            raise ValueError(
+                "max_calls and min_interval_s must not be negative and timeout_s must be positive"
+            )
+        return self
+
+
+@dataclass(frozen=True)
+class Grade:
+    tier: Tier
+    elapsed_s: float
+    dev_metric: float | None = None
+    reason: str | None = None
+    snapshot: Path | None = None
+    """The copy that was graded, kept only for a `valid` grade."""
+
+    def discard(self) -> None:
+        if self.snapshot is not None:
+            shutil.rmtree(self.snapshot, ignore_errors=True)
+
+
+class ValidationState(BaseModel):
+    """What the `validate` tool remembers between calls, in the protected store."""
+
+    calls: int = 0
+    """Graded calls so far."""
+    last_call_at: float | None = None
+    last_tier: Tier | None = None
+    last_valid_metric: float | None = None
+    best_metric: float | None = None
+    best_snapshot: Path | None = None
+    """The copy of the best valid submission."""
+
+
+def load_state() -> ValidationState:
+    try:
+        return ProtectedStore().read(STATE_NAME, ValidationState)
+    except SecretNotFoundError:
+        return ValidationState()
+
+
+def save_state(state: ValidationState) -> None:
+    ProtectedStore().write(STATE_NAME, state)
+
+
+def clear_snapshots() -> None:
+    """Delete every kept copy. The state that points at them is in the protected
+    store, which a run clears too."""
+    shutil.rmtree(SNAPSHOTS_DIR, ignore_errors=True)
+
+
+def record_grade(config: ValidateConfig, state: ValidationState, grade: Grade) -> None:
+    """Record `grade` in `state`. A valid grade that beats the best so far takes
+    over as the kept copy and the old one is deleted; any other copy is deleted."""
+    state.last_tier = grade.tier
+    if grade.dev_metric is None or grade.snapshot is None:
+        return
+    state.last_valid_metric = grade.dev_metric
+    best = state.best_metric
+    improved = best is None or (
+        grade.dev_metric > best if config.higher_is_better else grade.dev_metric < best
+    )
+    if not improved:
+        grade.discard()
+        return
+    if state.best_snapshot is not None:
+        shutil.rmtree(state.best_snapshot, ignore_errors=True)
+    state.best_metric = grade.dev_metric
+    state.best_snapshot = grade.snapshot
+
+
+async def grade_submission(config: ValidateConfig, paths: tuple[Path, ...]) -> Grade:
+    """Copy `paths` somewhere root-only and run the dev scorer on the copy,
+    leaving the student's processes alone."""
+    started = time.monotonic()
+    try:
+        snapshot = _take_snapshot(paths, config.snapshot_limits)
+    except _SubmissionRejectedError as e:
+        return Grade("no_valid_output", time.monotonic() - started, reason=str(e))
+
+    tier, score, reason = await _run_scorer(config, snapshot)
+    elapsed_s = time.monotonic() - started
+    if tier != "valid":
+        shutil.rmtree(snapshot, ignore_errors=True)
+        return Grade(tier, elapsed_s, reason=reason)
+    return Grade("valid", elapsed_s, dev_metric=score, snapshot=snapshot)
+
+
+class _SubmissionRejectedError(Exception):
+    pass
+
+
+def _take_snapshot(paths: tuple[Path, ...], limits: SnapshotLimits) -> Path:
+    SNAPSHOTS_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    SNAPSHOTS_DIR.chmod(0o700)
+    snapshot = Path(tempfile.mkdtemp(dir=SNAPSHOTS_DIR))
+    try:
+        for path in paths:
+            _ = save_submission(
+                path, snapshot / path.name, **limits.model_dump(exclude_none=True)
+            )
+            if not os.path.lexists(snapshot / path.name):
+                raise _SubmissionRejectedError(f"{path} does not exist")
+    except StudentMisbehaviorError as e:
+        shutil.rmtree(snapshot, ignore_errors=True)
+        raise _SubmissionRejectedError(_reason(str(e))) from e
+    except BaseException:
+        shutil.rmtree(snapshot, ignore_errors=True)
+        raise
+    return snapshot
+
+
+async def _run_scorer(
+    config: ValidateConfig, snapshot: Path
+) -> tuple[Tier, float | None, str | None]:
+    with tempfile.TemporaryDirectory(dir=SNAPSHOTS_DIR) as out_dir:
+        result_file = Path(out_dir) / "result.json"
+        # The stderr pipe is ours rather than asyncio's, whose `wait()` would not
+        # return while a child that left the process group still held the pipe.
+        read_fd, write_fd = os.pipe()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *config.dev_command,
+                str(snapshot),
+                str(result_file),
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=write_fd,
+                start_new_session=True,
+                preexec_fn=_lower_priority,
+            )
+        except OSError as e:
+            os.close(read_fd)
+            logger.error("Cannot start the dev scorer {}: {}", config.dev_command, e)
+            return "crash", None, "the dev scorer could not be started"
+        finally:
+            os.close(write_fd)
+        stderr = asyncio.StreamReader()
+        transport, _ = await asyncio.get_running_loop().connect_read_pipe(
+            lambda: asyncio.StreamReaderProtocol(stderr),
+            os.fdopen(read_fd, "rb", buffering=0),
+        )
+        stderr_task = asyncio.create_task(
+            drain_bounded(stderr, _MAX_LOGGED_STDERR_BYTES)
+        )
+        timed_out = False
+        try:
+            async with asyncio.timeout(config.timeout_s):
+                _ = await proc.wait()
+        except TimeoutError:
+            timed_out = True
+        finally:
+            _kill_group(proc.pid)
+            _ = await proc.wait()
+            _, undrained = await asyncio.wait({stderr_task}, timeout=_PIPE_GRACE_S)
+            _ = stderr_task.cancel()
+            transport.close()
+        if timed_out:
+            return (
+                "crash",
+                None,
+                f"the dev scorer did not finish within {config.timeout_s:g} s",
+            )
+        if proc.returncode != 0:
+            logged = b"" if undrained else stderr_task.result()
+            logger.warning(
+                "The dev scorer exited with {}: {}",
+                proc.returncode,
+                logged.decode(errors="replace"),
+            )
+            return "crash", None, f"the dev scorer failed (exit code {proc.returncode})"
+        return _interpret(result_file)
+
+
+def _lower_priority() -> None:
+    os.nice(_SCORER_NICENESS)
+
+
+def _kill_group(pgid: int) -> None:
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def _interpret(result_file: Path) -> tuple[Tier, float | None, str | None]:
+    """Read the scorer's result, taking only `tier`, `score` and `reason`."""
+    try:
+        raw: Any = json.loads(result_file.read_bytes()[:_MAX_RESULT_BYTES])
+    except (OSError, ValueError):
+        return "crash", None, "the dev scorer produced no result"
+    if not isinstance(raw, dict):
+        return "crash", None, "the dev scorer produced no result"
+    result: dict[str, Any] = raw
+    tier = result.get("tier", "valid")
+    if tier not in _TIERS:
+        return "crash", None, "the dev scorer reported an unknown tier"
+    if tier != "valid":
+        reason = result.get("reason")
+        default = (
+            "submission rejected" if tier == "no_valid_output" else "submission failed"
+        )
+        return tier, None, _reason(reason) if isinstance(reason, str) else default
+    score = result.get("score")
+    if isinstance(score, bool) or not isinstance(score, int | float):
+        return "crash", None, "the dev scorer produced no score"
+    if not math.isfinite(score):
+        return "crash", None, "the dev scorer produced a non-finite score"
+    return "valid", float(score), None
+
+
+def _reason(text: str) -> str:
+    return escape_surrogates(text)[:_MAX_REASON_CHARS]
+
+
+async def restore_best_submission(
+    paths: tuple[Path, ...], *, unless_valid_under: ValidateConfig | None = None
+) -> bool:
+    """Put the best copy a `validate` call graded as valid back over `paths`.
+
+    With `unless_valid_under`, the submission on disk is first graded with that
+    config (without using up a call) and left alone if it is valid. Stops the
+    student's processes before writing, so none can swap a path for a symlink
+    meanwhile. Returns False when there is no copy, the submission is valid or the
+    student could not be stopped.
+    """
+    best = load_state().best_snapshot
+    if best is None or not best.is_dir():
+        logger.info("No valid copy was graded, so there is nothing to restore")
+        return False
+    if unless_valid_under is not None:
+        grade = await grade_submission(unless_valid_under, paths)
+        grade.discard()
+        if grade.tier == "valid":
+            return False
+    return await asyncio.to_thread(_stop_student_and_restore, best, paths)
+
+
+def _stop_student_and_restore(snapshot: Path, paths: tuple[Path, ...]) -> bool:
+    uid = demoted_uid_gid()
+    if uid is not None:
+        try:
+            kill_processes(uid)
+        except StudentMisbehaviorError as e:
+            # Scoring runs the same kill and scores this as misbehavior.
+            logger.warning("Not restoring, the student could not be stopped: {}", e)
+            return False
+    for path in paths:
+        source = snapshot / path.name
+        if not os.path.lexists(source):
+            continue
+        try:
+            parent_fd, name = walk_to_parent(path)
+        except OSError as e:
+            logger.warning("Cannot restore {}: {}", path, e.strerror)
+            continue
+        try:
+            _remove_at(parent_fd, name)
+            _copy_into(source, parent_fd, name)
+        finally:
+            os.close(parent_fd)
+        logger.info("Restored the best valid copy of {}", path)
+    return True
+
+
+def _remove_at(dir_fd: int, name: str) -> None:
+    try:
+        mode = lstat_at(dir_fd, name).st_mode
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(mode):
+        shutil.rmtree(name, dir_fd=dir_fd)
+    else:
+        os.unlink(name, dir_fd=dir_fd)
+
+
+def _copy_into(source: Path, dir_fd: int, name: str) -> None:
+    """Copy the file or tree at `source`, which holds only regular files and
+    directories, to `name` inside `dir_fd`, without following anything there."""
+    if source.is_dir():
+        os.mkdir(name, 0o755, dir_fd=dir_fd)
+        child_fd = os.open(name, DIR_FLAGS, dir_fd=dir_fd)
+        try:
+            for entry in sorted(source.iterdir()):
+                _copy_into(entry, child_fd, entry.name)
+        finally:
+            os.close(child_fd)
+        return
+    fd = os.open(
+        name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=dir_fd
+    )
+    with source.open("rb") as src, os.fdopen(fd, "wb") as dest:
+        shutil.copyfileobj(src, dest)
