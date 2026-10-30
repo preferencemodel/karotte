@@ -25,6 +25,7 @@ def list_agents(
     import rich
 
     from karotte.agents import BuiltinAgent, ExternalAgent, cli_agent_types
+    from karotte.forwarder_plugins import plugin_providers
 
     agents = [
         {
@@ -46,7 +47,7 @@ def list_agents(
             "version": agent_type.version,
             "requires_install": True,
             "installed": agent_type.is_installed(),
-            "providers": list(agent_type.providers),
+            "providers": [*agent_type.providers, *plugin_providers(name)],
             "applies_reasoning_effort": agent_type.applies_reasoning_effort,
             "supports_temperature": agent_type.supports_temperature,
         }

@@ -16,6 +16,7 @@ Templates have their own entry point, which [Template packages](template-package
 | `karotte.default_hardware`         | a string                                           | The `required_hardware` of tasks that don't set one.                                                                  |
 | `karotte.hardware_limits`          | `f(hardware)` returning `HardwareLimits` or `None` | The memory, disk and CPUs a sandbox on that hardware gets.                                                            |
 | `karotte.container_run_args`       | `f(task, runtime) -> list[str]`                    | Extra arguments for the container engine's `run` command.                                                             |
+| `karotte.model_forwarders`         | an object with `agents`, `providers`, `forwarder`  | Serves a CLI agent's model calls for more providers.                                                                  |
 
 ## Registering a plugin
 
@@ -59,6 +60,7 @@ If the values add up, Karotte uses all of them.
 | `karotte.update_migrations`                                                                   | All of them run, in installation order (not sorted by name). For `tool`, the first one that doesn't return `None` wins. |
 | `karotte.default_hardware`, `karotte.hardware_limits`                                         | The first by name wins.                                                                                                 |
 | `karotte.container_run_args`                                                                  | All of them run, in entry point name order, and Karotte concatenates their arguments.                                   |
+| `karotte.model_forwarders`                                                                    | The first by name that returns a forwarder wins.                                                                        |
 
 ## When a plugin fails to load
 
@@ -183,3 +185,11 @@ def container_run_args(task, runtime: str) -> list[str]:
         raise RuntimeError("GPU tasks need --runtime docker")
     return ["--gpus", "all"]
 ```
+
+### `karotte.model_forwarders`
+
+The attribute has `agents` and `providers`, tuples of the CLI agent and provider names it serves, and `forwarder(config, files)`.
+When a CLI agent starts on one of those providers, Karotte calls `forwarder` with the run config and a directory for the forwarder's files, which the student can't write.
+It returns a [`ModelForwarder`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/model_forwarder.py), or `None` to leave the run to the agent.
+The forwarder's `cli_env()` is added to the agent's environment, and the files from its `step_artifacts()` are saved after each step.
+`karotte agents list` includes the plugin's providers.

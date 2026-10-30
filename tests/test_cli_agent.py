@@ -25,7 +25,7 @@ from karotte.agents.cli_agent import (
     install_release,
     toml_string,
 )
-from karotte.model_forwarder import GeminiForwarder
+from karotte.model_forwarder import GeminiForwarder, ModelForwarder
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -260,6 +260,59 @@ class TestForwarder:
         await agent.stop()
         assert threads
         assert threads != [threading.get_ident()]
+
+
+class _PluginForwarder(ModelForwarder):
+    def __init__(self, files: Path) -> None:
+        super().__init__("https://plugin.example", "sk-plugin")
+        self.files: Path = files
+
+    def cli_env(self) -> dict[str, str]:
+        return {"ECHO_WINDOW": "1000"}
+
+    def step_artifacts(self) -> list[Path]:
+        return [self.files / "calls.jsonl"]
+
+
+class TestPluginForwarder:
+    @pytest.mark.asyncio
+    async def test_a_plugin_forwarder_serves_the_agent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        # Even with a proxy, a plugin that serves the run's provider wins.
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://proxy:4000/")
+        made: list[tuple[str, str]] = []
+
+        def plugin_forwarder(
+            agent_name: str, provider: str, _config: object, files: Path
+        ):
+            made.append((agent_name, provider))
+            return _PluginForwarder(files)
+
+        monkeypatch.setattr(
+            "karotte.agents.cli_agent.plugin_forwarder", plugin_forwarder
+        )
+        saved: list[str] = []
+        monkeypatch.setattr(
+            "karotte.agents.cli_agent.save_artifact",
+            lambda _config, path: saved.append(path.name),  # pyright: ignore[reportUnknownLambdaType]
+        )
+        await agent.start(MagicMock())
+        try:
+            assert made == [("echo", "mistral")]
+            forwarder = agent._forwarder  # pyright: ignore[reportPrivateUsage]
+            assert isinstance(forwarder, _PluginForwarder)
+            assert forwarder.files == _step_dir(agent)
+            assert agent.model_url == forwarder.url
+            env = agent._env()  # pyright: ignore[reportPrivateUsage]
+            assert env["ECHO_WINDOW"] == "1000"
+            assert env["ECHO_API_KEY"] == PROXY_PLACEHOLDER_KEY
+            (tmp_path / ".echo" / "gate").touch()
+            _ = [e async for e in agent.run_step("one")]
+            assert saved == ["step_0.ndjson", "calls.jsonl"]
+        finally:
+            await agent.stop()
 
 
 class TestRunStep:

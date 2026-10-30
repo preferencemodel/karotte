@@ -102,6 +102,14 @@ class ModelForwarder:
             await self._session.close()
             self._session = None
 
+    def cli_env(self) -> dict[str, str]:
+        """Extra environment for the CLI agent this forwarder serves."""
+        return {}
+
+    def step_artifacts(self) -> list[Path]:
+        """Files to save as artifacts after each step."""
+        return []
+
     def _target(self, request: web.Request) -> str | None:
         """Where ``request`` goes upstream, or None to refuse it."""
         return self.upstream + request.rel_url.path_qs

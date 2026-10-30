@@ -25,7 +25,9 @@ from karotte.agents.agent import (
     RunContext,
     StepTimeLimitReachedError,
 )
+from karotte.forwarder_plugins import plugin_forwarder
 from karotte.model_forwarder import ModelForwarder
+from karotte.model_spec import spec_for
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.save_artifact import save_artifact
 from karotte.schemas.chat import Message
@@ -152,12 +154,20 @@ class CliAgent(abc.ABC):
 
     async def start(self, ctx: RunContext) -> None:
         self._ctx = ctx
-        if self.proxy_via_forwarder or not os.environ.get("KAROTTE_PROXY_URL"):
-            # Making one may block, e.g. to look up cloud credentials.
+        # Making one may block, e.g. to look up cloud credentials.
+        self._forwarder = await asyncio.to_thread(self._plugin_forwarder)
+        if self._forwarder is None and (
+            self.proxy_via_forwarder or not os.environ.get("KAROTTE_PROXY_URL")
+        ):
             self._forwarder = await asyncio.to_thread(self._make_forwarder)
-            if self._forwarder is not None:
-                _ = await self._forwarder.start()
+        if self._forwarder is not None:
+            _ = await self._forwarder.start()
         self._write_config()
+
+    def _plugin_forwarder(self) -> ModelForwarder | None:
+        """A plugin's forwarder for this agent and the run's provider, if any."""
+        provider = spec_for(self._config.model).provider
+        return plugin_forwarder(self.name, provider, self._config, self._step_files())
 
     async def stop(self) -> None:
         if self._forwarder is not None:
@@ -232,6 +242,8 @@ class CliAgent(abc.ABC):
         env["PATH"] = ":".join([*path_parts, env.get("PATH", "")])
 
         env.update(self._extra_env())
+        if self._forwarder is not None:
+            env.update(self._forwarder.cli_env())
         if (api_key := self.model_api_key) is not None:
             env[self._key_env()] = api_key
         return env
@@ -344,6 +356,9 @@ class CliAgent(abc.ABC):
             except TimeoutError:
                 stderr_b = b""
             save_artifact(self._config, log_path)
+            if self._forwarder is not None:
+                for path in self._forwarder.step_artifacts():
+                    save_artifact(self._config, path)
 
         if timed_out:
             logger.warning(
