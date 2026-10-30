@@ -22,9 +22,9 @@ import signal
 import stat
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, ClassVar, Final, Literal
+from typing import Any, ClassVar, Final, Literal, get_args
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -46,7 +46,8 @@ holds files only."""
 
 Tier = Literal["crash", "no_valid_output", "valid"]
 
-_TIERS: Final = ("crash", "no_valid_output", "valid")
+Doubt = Literal["scorer_timed_out", "scorer_failed"]
+
 _MAX_REASON_CHARS: Final = 300
 _MAX_RESULT_BYTES: Final = 1024 * 1024
 _MAX_LOGGED_STDERR_BYTES: Final = 4096
@@ -112,11 +113,15 @@ class ValidateConfig(BaseModel):
 @dataclass(frozen=True)
 class Grade:
     tier: Tier
-    elapsed_s: float
+    elapsed_s: float = 0.0
     dev_metric: float | None = None
     reason: str | None = None
     snapshot: Path | None = None
     """The copy that was graded, kept only for a `valid` grade."""
+    doubt: Doubt | None = None
+    """Set when `tier` may say nothing about the submission itself: the dev
+    scorer ran out of time or failed on its own. A scorer that reports a bad
+    submission is not in doubt."""
 
     def discard(self) -> None:
         if self.snapshot is not None:
@@ -182,12 +187,12 @@ async def grade_submission(config: ValidateConfig, paths: tuple[Path, ...]) -> G
     except _SubmissionRejectedError as e:
         return Grade("no_valid_output", time.monotonic() - started, reason=str(e))
 
-    tier, score, reason = await _run_scorer(config, snapshot)
-    elapsed_s = time.monotonic() - started
-    if tier != "valid":
+    grade = await _run_scorer(config, snapshot)
+    if grade.tier == "valid":
+        grade = replace(grade, snapshot=snapshot)
+    else:
         shutil.rmtree(snapshot, ignore_errors=True)
-        return Grade(tier, elapsed_s, reason=reason)
-    return Grade("valid", elapsed_s, dev_metric=score, snapshot=snapshot)
+    return replace(grade, elapsed_s=time.monotonic() - started)
 
 
 class _SubmissionRejectedError(Exception):
@@ -214,9 +219,7 @@ def _take_snapshot(paths: tuple[Path, ...], limits: SnapshotLimits) -> Path:
     return snapshot
 
 
-async def _run_scorer(
-    config: ValidateConfig, snapshot: Path
-) -> tuple[Tier, float | None, str | None]:
+async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
     with tempfile.TemporaryDirectory(dir=SNAPSHOTS_DIR) as out_dir:
         result_file = Path(out_dir) / "result.json"
         # The stderr pipe is ours rather than asyncio's, whose `wait()` would not
@@ -236,7 +239,7 @@ async def _run_scorer(
         except OSError as e:
             os.close(read_fd)
             logger.error("Cannot start the dev scorer {}: {}", config.dev_command, e)
-            return "crash", None, "the dev scorer could not be started"
+            return _scorer_failed("the dev scorer could not be started")
         finally:
             os.close(write_fd)
         stderr = asyncio.StreamReader()
@@ -260,10 +263,10 @@ async def _run_scorer(
             _ = stderr_task.cancel()
             transport.close()
         if timed_out:
-            return (
+            return Grade(
                 "crash",
-                None,
-                f"the dev scorer did not finish within {config.timeout_s:g} s",
+                reason=f"the dev scorer did not finish within {config.timeout_s:g} s",
+                doubt="scorer_timed_out",
             )
         if proc.returncode != 0:
             logged = b"" if undrained else stderr_task.result()
@@ -272,7 +275,9 @@ async def _run_scorer(
                 proc.returncode,
                 logged.decode(errors="replace"),
             )
-            return "crash", None, f"the dev scorer failed (exit code {proc.returncode})"
+            return _scorer_failed(
+                f"the dev scorer failed (exit code {proc.returncode})"
+            )
         return _interpret(result_file)
 
 
@@ -287,30 +292,36 @@ def _kill_group(pgid: int) -> None:
         pass
 
 
-def _interpret(result_file: Path) -> tuple[Tier, float | None, str | None]:
+def _scorer_failed(reason: str) -> Grade:
+    return Grade("crash", reason=reason, doubt="scorer_failed")
+
+
+def _interpret(result_file: Path) -> Grade:
     """Read the scorer's result, taking only `tier`, `score` and `reason`."""
     try:
         raw: Any = json.loads(result_file.read_bytes()[:_MAX_RESULT_BYTES])
     except (OSError, ValueError):
-        return "crash", None, "the dev scorer produced no result"
+        return _scorer_failed("the dev scorer produced no result")
     if not isinstance(raw, dict):
-        return "crash", None, "the dev scorer produced no result"
+        return _scorer_failed("the dev scorer produced no result")
     result: dict[str, Any] = raw
     tier = result.get("tier", "valid")
-    if tier not in _TIERS:
-        return "crash", None, "the dev scorer reported an unknown tier"
+    if tier not in get_args(Tier):
+        return _scorer_failed("the dev scorer reported an unknown tier")
     if tier != "valid":
         reason = result.get("reason")
         default = (
             "submission rejected" if tier == "no_valid_output" else "submission failed"
         )
-        return tier, None, _reason(reason) if isinstance(reason, str) else default
+        return Grade(
+            tier, reason=_reason(reason) if isinstance(reason, str) else default
+        )
     score = result.get("score")
     if isinstance(score, bool) or not isinstance(score, int | float):
-        return "crash", None, "the dev scorer produced no score"
+        return _scorer_failed("the dev scorer produced no score")
     if not math.isfinite(score):
-        return "crash", None, "the dev scorer produced a non-finite score"
-    return "valid", float(score), None
+        return _scorer_failed("the dev scorer produced a non-finite score")
+    return Grade("valid", dev_metric=float(score))
 
 
 def _reason(text: str) -> str:
@@ -318,37 +329,59 @@ def _reason(text: str) -> str:
 
 
 async def restore_best_submission(
-    paths: tuple[Path, ...], *, unless_valid_under: ValidateConfig | None = None
+    paths: tuple[Path, ...], config: ValidateConfig, *, only_if_invalid: bool
 ) -> bool:
     """Put the best copy a `validate` call graded as valid back over `paths`.
 
-    With `unless_valid_under`, the submission on disk is first graded with that
-    config (without using up a call) and left alone if it is valid. Stops the
-    student's processes before writing, so none can swap a path for a symlink
-    meanwhile. Returns False when there is no copy, the submission is valid or the
-    student could not be stopped.
+    Stops the student's processes first, so none can swap a path for a symlink
+    or rewrite a file while it is being checked or replaced. Returns False when
+    there is no copy, the student could not be stopped, or (with
+    `only_if_invalid`) the submission on disk is to stay: see
+    `_submission_stays`.
     """
     best = load_state().best_snapshot
     if best is None or not best.is_dir():
         logger.info("No valid copy was graded, so there is nothing to restore")
         return False
-    if unless_valid_under is not None:
-        grade = await grade_submission(unless_valid_under, paths)
-        grade.discard()
-        if grade.tier == "valid":
-            return False
-    return await asyncio.to_thread(_stop_student_and_restore, best, paths)
+    if not await asyncio.to_thread(_stop_student):
+        return False
+    if only_if_invalid and await _submission_stays(config, paths):
+        return False
+    return await asyncio.to_thread(_put_back, best, paths)
 
 
-def _stop_student_and_restore(snapshot: Path, paths: tuple[Path, ...]) -> bool:
+async def _submission_stays(config: ValidateConfig, paths: tuple[Path, ...]) -> bool:
+    """Whether the submission on disk is left as it is: the dev scorer grades it
+    valid, or cannot say. A timeout, a crash of the scorer itself or a result it
+    never wrote is not evidence against the submission, and replacing a good
+    submission because of one would lose it. The grade is not recorded and does
+    not count as a call, and the student is already stopped, so nothing is
+    reported or observable."""
+    grade = await grade_submission(config, paths)
+    grade.discard()
+    if grade.doubt is not None:
+        logger.warning(
+            "Keeping the submission as it is: the dev scorer could not say whether it is valid ({})",
+            grade.reason,
+        )
+        return True
+    return grade.tier == "valid"
+
+
+def _stop_student() -> bool:
     uid = demoted_uid_gid()
-    if uid is not None:
-        try:
-            kill_processes(uid)
-        except StudentMisbehaviorError as e:
-            # Scoring runs the same kill and scores this as misbehavior.
-            logger.warning("Not restoring, the student could not be stopped: {}", e)
-            return False
+    if uid is None:
+        return True
+    try:
+        kill_processes(uid)
+    except StudentMisbehaviorError as e:
+        # Scoring runs the same kill and scores this as misbehavior.
+        logger.warning("Not restoring, the student could not be stopped: {}", e)
+        return False
+    return True
+
+
+def _put_back(snapshot: Path, paths: tuple[Path, ...]) -> bool:
     for path in paths:
         source = snapshot / path.name
         if not os.path.lexists(source):

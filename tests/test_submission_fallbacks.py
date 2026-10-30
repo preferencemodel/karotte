@@ -6,7 +6,7 @@ import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import final, override
+from typing import Any, final, override
 
 import pytest
 
@@ -25,6 +25,7 @@ from karotte.schemas.transcript import (
     Transcript,
 )
 from karotte.tools.validate import ValidateConfig, validate
+from karotte.validation import load_state
 
 JUDGE_SCORE = 0.25
 
@@ -52,6 +53,7 @@ async def run_episode(
     dev_scorer: Path,
     tmp_path: Path,
     episode: Episode,
+    validate_settings: dict[str, Any],
 ) -> Outcome:
     """Run a one-step task whose "model" is `episode`: it gets the validate tool
     and the submission path, and may write files and call the tool."""
@@ -100,20 +102,18 @@ async def run_episode(
 
         @override
         def configure_tools(self) -> None:
-            _ = ToolConfigWriter().write(
-                "validate",
-                ValidateConfig(
-                    dev_command=[
-                        sys.executable,
-                        str(dev_scorer),
-                        str(tmp_path / "counter"),
-                        str(submission),
-                    ],
-                    metric="accuracy",
-                    submission_paths=self.submission_paths,
-                    min_interval_s=0,
-                ),
-            )
+            settings: dict[str, Any] = {
+                "dev_command": [
+                    sys.executable,
+                    str(dev_scorer),
+                    str(tmp_path / "counter"),
+                    str(submission),
+                ],
+                "metric": "accuracy",
+                "submission_paths": self.submission_paths,
+                "min_interval_s": 0,
+            } | validate_settings
+            _ = ToolConfigWriter().write("validate", ValidateConfig(**settings))
 
     async def collect(self: BuiltinSource, _messages: object, _tools: object):  # pyright: ignore[reportUnusedParameter]
         await episode(validate(), submission)
@@ -139,7 +139,11 @@ def run(
     dev_scorer: Path,
     tmp_path: Path,
 ) -> Callable[..., Awaitable[Outcome]]:
-    async def go(episode: Episode, **config: str) -> Outcome:
+    async def go(
+        episode: Episode,
+        validate_settings: dict[str, Any] | None = None,
+        **config: str,
+    ) -> Outcome:
         return await run_episode(
             config=sample_config.model_copy(update=config),
             mcp_server=mcp_server,
@@ -147,9 +151,15 @@ def run(
             dev_scorer=dev_scorer,
             tmp_path=tmp_path,
             episode=episode,
+            validate_settings=validate_settings or {},
         )
 
     return go
+
+
+def scorer_runs(tmp_path: Path) -> int:
+    counter = tmp_path / "counter"
+    return len(counter.read_text().splitlines()) if counter.exists() else 0
 
 
 @pytest.mark.asyncio
@@ -306,21 +316,126 @@ async def test_the_student_is_stopped_before_the_copy_goes_back(
 
 
 @pytest.mark.asyncio
-async def test_the_student_is_left_alone_when_nothing_is_restored(
+async def test_the_student_is_left_alone_when_there_is_no_copy_to_restore(
     run: Callable[..., Awaitable[Outcome]],
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ):
     stopped: list[int] = []
     monkeypatch.setenv("KAROTTE_DEMOTE_ID", "4242")
 
     async def episode(tool: validate, submission: Path) -> None:
-        submission.write_text("0.7")
+        submission.write_text("reject not a number")
         _ = await tool()
         monkeypatch.setattr("karotte.validation.kill_processes", stopped.append)
 
     _ = await run(episode, on_invalid_submission="restore_best")
 
     assert stopped == []
+    assert scorer_runs(tmp_path) == 1
+
+
+@pytest.mark.asyncio
+async def test_restore_best_keeps_a_valid_submission_when_the_check_times_out(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("hang")
+
+    outcome = await run(
+        episode,
+        validate_settings={"timeout_s": 0.5},
+        on_invalid_submission="restore_best",
+    )
+
+    assert outcome.on_disk_at_scoring == "hang"
+
+
+@pytest.mark.asyncio
+async def test_restore_best_keeps_the_submission_when_the_dev_scorer_crashes(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("crash")
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring == "crash"
+
+
+@pytest.mark.asyncio
+async def test_restore_best_keeps_the_submission_when_the_scorer_writes_no_result(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("garbage")
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring == "garbage"
+
+
+@pytest.mark.asyncio
+async def test_restore_best_replaces_a_submission_the_scorer_says_crashed(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("fail model did not load")
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring == "0.7"
+
+
+@pytest.mark.asyncio
+async def test_the_student_is_stopped_before_the_submission_is_checked(
+    run: Callable[..., Awaitable[Outcome]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    runs_when_stopped: list[int] = []
+    monkeypatch.setenv("KAROTTE_DEMOTE_ID", "4242")
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        monkeypatch.setattr(
+            "karotte.validation.kill_processes",
+            lambda _uid: runs_when_stopped.append(scorer_runs(tmp_path)),  # pyright: ignore[reportUnknownLambdaType]
+        )
+
+    _ = await run(episode, on_invalid_submission="restore_best")
+
+    assert runs_when_stopped == [1]
+    assert scorer_runs(tmp_path) == 2
+
+
+@pytest.mark.asyncio
+async def test_the_check_does_not_use_up_a_call_or_move_the_interval(
+    run: Callable[..., Awaitable[Outcome]],
+    tmp_path: Path,
+):
+    last_call_at: list[float | None] = []
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        last_call_at.append(load_state().last_call_at)
+
+    _ = await run(episode, on_invalid_submission="restore_best")
+
+    state_after_check = load_state()
+    assert scorer_runs(tmp_path) == 2
+    assert state_after_check.calls == 1
+    assert state_after_check.last_call_at == last_call_at[0]
 
 
 @pytest.mark.asyncio

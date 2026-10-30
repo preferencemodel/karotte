@@ -409,7 +409,7 @@ async def test_restore_puts_back_every_path_exactly_as_it_was_graded(env: Env):
     (extras / "sub" / "b.txt").write_text("changed")
     (extras / "junk.txt").write_text("junk")
 
-    restored = await restore_best_submission(paths)
+    restored = await restore_best_submission(paths, tool.config, only_if_invalid=False)
 
     assert restored
     assert env.submission.read_text() == "0.5"

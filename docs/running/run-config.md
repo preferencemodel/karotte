@@ -208,12 +208,20 @@ Both use the copy with the best valid score from the task's [`validate` tool](..
 Karotte refuses a run whose task doesn't use that tool, and scores a step that declares no `submission_paths` as it is.
 Both are off by default, and a run that sets them is not comparable with one that doesn't.
 
-| Field                   | Type                       | Meaning                                                                                                                                                                                |
-| ----------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `on_invalid_submission` | `"restore_best"` or `null` | When the submission is missing or doesn't grade as valid as the step is scored, put the best valid copy back first. A submission that is valid is left alone, even if it scores worse. |
-| `on_final_submission`   | `"keep_best"` or `null`    | Score the best valid copy even when the submission is valid. With no valid copy, score the submission as it is.                                                                        |
+| Field                   | Type                       | Meaning                                                                                                                                                                                     |
+| ----------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `on_invalid_submission` | `"restore_best"` or `null` | When the submission is missing or the dev scorer rejects it, put the best valid copy back before the step is scored. A submission that grades valid is left alone, even if it scores worse. |
+| `on_final_submission`   | `"keep_best"` or `null`    | Score the best valid copy even when the submission is valid. With no valid copy, score the submission as it is.                                                                             |
 
-Karotte stops the student's processes before it puts a copy back, and replaces whatever sits at the path without following a symlink.
+Whenever there is a copy to put back, karotte stops the student's processes before it does anything else, so no background job can change the files while they are checked or replaced.
+`restore_best` then grades the submission on disk with the dev scorer, as a `validate` call would.
+That extra run doesn't use up one of the student's calls, doesn't move the call interval, and its result is not recorded or shown to the student.
+The submission is replaced only when the dev scorer says it has no valid output or crashed on it, or when it is missing.
+It is left alone when it grades valid, and also when the dev scorer cannot say: it ran past its timeout, crashed or exited with an error, or wrote no usable result.
+Karotte logs a warning then, because a transient scorer failure should not cost the student a good submission.
+"Valid" is the dev scorer's verdict, not the final judge's: a submission that the dev scorer accepts but the judge rejects is not replaced.
+
+Karotte replaces whatever sits at the path without following a symlink.
 Restored files belong to root.
 The artifacts of `extra_artifact_paths` are saved before the copy goes back, so they hold what the student left.
 

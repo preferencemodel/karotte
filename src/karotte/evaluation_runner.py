@@ -306,13 +306,11 @@ class EvaluationRunner:
                 "The step declares no submission_paths, so there is nothing to restore"
             )
             return
-        # keep_best restores whatever the student left; restore_best only a submission that doesn't grade as valid.
-        unless_valid_under = (
-            None
-            if self.config.on_final_submission == "keep_best"
-            else validate().config
+        _ = await restore_best_submission(
+            paths,
+            validate().config,
+            only_if_invalid=self.config.on_final_submission != "keep_best",
         )
-        await restore_best_submission(paths, unless_valid_under=unless_valid_under)
 
     @asynccontextmanager
     async def _connect_to_mcp_server(self):
