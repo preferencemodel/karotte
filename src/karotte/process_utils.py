@@ -124,6 +124,16 @@ def kill_processes(
             )
 
 
+def kill_process_group(pgid: int) -> None:
+    """SIGKILL every member of process group ``pgid``, which a child started with
+    its own session or group leads. A group that is already gone, or that no
+    longer belongs to us, is not an error."""
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
 def _can_kill_from_within(uid: int) -> bool:
     """Whether this process could ever have run the in-cohort kill for ``uid``.
 

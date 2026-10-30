@@ -3,7 +3,6 @@ import io
 import json
 import os
 import select
-import signal
 import subprocess
 import sys
 import tempfile
@@ -13,6 +12,7 @@ from typing import Final, TextIO, override
 from loguru import logger
 
 from karotte.judges.judge import Judge
+from karotte.process_utils import kill_process_group
 from karotte.schemas.scoring import Scoring
 from karotte.schemas.transcript import Transcript
 
@@ -109,7 +109,7 @@ class ExecutableJudge(Judge):
                 try:
                     stdout, stderr = _read_output(process)
                 finally:
-                    _kill_process_group(process.pid)
+                    kill_process_group(process.pid)
                 return_code = process.wait()
                 if return_code != 0:
                     raise subprocess.CalledProcessError(
@@ -223,10 +223,3 @@ def _read_output(process: subprocess.Popen[str]) -> tuple[str, str]:
         if not any(reads):
             break
     return stdout.text(), stderr.text()
-
-
-def _kill_process_group(pgid: int) -> None:
-    try:
-        os.killpg(pgid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass

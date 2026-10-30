@@ -18,7 +18,6 @@ import json
 import math
 import os
 import shutil
-import signal
 import stat
 import tempfile
 import time
@@ -32,7 +31,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from karotte.container import demoted_uid_gid
 from karotte.demoted import drain_bounded
-from karotte.process_utils import kill_processes
+from karotte.process_utils import kill_process_group, kill_processes
 from karotte.protected_store import ProtectedStore, SecretNotFoundError
 from karotte.save_submission import save_submission
 from karotte.student_misbehavior import StudentMisbehaviorError
@@ -357,7 +356,7 @@ async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
         except TimeoutError:
             timed_out = True
         finally:
-            _kill_group(proc.pid)
+            kill_process_group(proc.pid)
             _ = await proc.wait()
             _, undrained = await asyncio.wait({stderr_task}, timeout=_PIPE_GRACE_S)
             _ = stderr_task.cancel()
@@ -378,13 +377,6 @@ async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
 
 def _lower_priority() -> None:
     os.nice(_SCORER_NICENESS)
-
-
-def _kill_group(pgid: int) -> None:
-    try:
-        os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
 
 
 def _scorer_failed(reason: str) -> Grade:
