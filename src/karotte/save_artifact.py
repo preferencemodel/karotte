@@ -227,26 +227,37 @@ def _gzip_stream(file_path: Path) -> Iterator[bytes]:
     yield buf.getvalue()
 
 
+@retry(
+    retry=retry_if_exception(_is_retryable),
+    stop=stop_after_delay(300),
+    wait=wait_exponential(multiplier=1, max=10),
+    reraise=True,
+)
+def _put(file_path: Path, presigned_url: str) -> None:
+    # Each attempt re-reads the file.
+    response = httpx.put(
+        presigned_url,
+        content=_gzip_stream(file_path),
+        headers={
+            "Content-Encoding": "gzip",
+        },
+        timeout=httpx.Timeout(
+            connect=30.0,
+            read=300.0,
+            write=300.0,
+            pool=30.0,
+        ),
+    )
+    response.raise_for_status()
+
+
 def _upload_file(file_path: Path, presigned_url: str) -> bool:
     """Stream a single file, gzipped, to a presigned URL.
 
     Returns True if successful, False otherwise.
     """
     try:
-        response = httpx.put(
-            presigned_url,
-            content=_gzip_stream(file_path),
-            headers={
-                "Content-Encoding": "gzip",
-            },
-            timeout=httpx.Timeout(
-                connect=30.0,
-                read=300.0,
-                write=300.0,
-                pool=30.0,
-            ),
-        )
-        response.raise_for_status()
+        _put(file_path, presigned_url)
         return True
 
     except httpx.HTTPStatusError as e:

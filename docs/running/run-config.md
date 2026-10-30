@@ -83,9 +83,10 @@ These keys have a built-in meaning:
 | `extra_task_instructions`    | string or list of strings | Appended to the step's instructions after a blank line. A string applies to every step; a list has one entry per step, and steps past its end are unchanged.     |
 | `task_instructions_override` | string or list of strings | Replaces the step's instructions. Same string-or-list rules. Wins over `extra_task_instructions`.                                                                |
 | `extra_artifact_paths`       | string or list of strings | Absolute paths saved as [artifacts](../tasks/artifacts-and-transcripts.md) after each step, before `pre_scoring_hook`. Missing paths are skipped with a warning. |
+| `max_output_tokens`          | positive integer          | Max output tokens per model call, for the builtin agent and `claude-code`. Defaults to the model's maximum (`karotte models list`).                              |
 
 The first two are read by the `default` template's `get_system_prompt()`, so they only work in tasks that use it.
-Karotte itself applies the latter three.
+Karotte itself applies the latter four.
 
 ## Models
 

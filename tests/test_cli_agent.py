@@ -13,15 +13,19 @@ import time
 import tomllib
 from collections.abc import Callable, Iterable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar, Literal, final
 from unittest.mock import MagicMock
 
 import pytest
 
+from karotte.agents import cli_agent
 from karotte.agents.agent import CliAgentExitedError, StepTimeLimitReachedError
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     CliAgent,
+    cli_agent_types,
+    get_cli_agent_type,
     install_release,
     toml_string,
 )
@@ -260,6 +264,67 @@ class TestForwarder:
         await agent.stop()
         assert threads
         assert threads != [threading.get_ident()]
+
+
+class TestStepArtifacts:
+    @pytest.mark.asyncio
+    async def test_the_agents_own_files_are_saved_after_each_step(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        own = tmp_path / "calls.jsonl"
+        monkeypatch.setattr(agent, "_step_artifacts", lambda: [own])
+        saved: list[str] = []
+        monkeypatch.setattr(
+            "karotte.agents.cli_agent.save_artifact",
+            lambda _config, path: saved.append(path.name),  # pyright: ignore[reportUnknownLambdaType]
+        )
+        (tmp_path / ".echo" / "gate").touch()
+        _ = [e async for e in agent.run_step("one")]
+        _ = [e async for e in agent.run_step("two")]
+        assert saved == ["step_0.ndjson", "calls.jsonl", "step_1.ndjson", "calls.jsonl"]
+
+
+class TestPluginAgents:
+    @pytest.fixture
+    def plugins(self, monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+        """Entry points to offer, by name; each value is what loading returns,
+        or an exception to raise."""
+        offered: dict[str, object] = {}
+
+        def load(value: object) -> object:
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+        def fake_entry_points(*, group: str) -> list[SimpleNamespace]:
+            assert group == "karotte.cli_agents"
+            return [
+                SimpleNamespace(name=name, load=lambda v=value: load(v))
+                for name, value in offered.items()
+            ]
+
+        monkeypatch.setattr(cli_agent, "entry_points", fake_entry_points)
+        monkeypatch.setattr(cli_agent, "_CLI_AGENTS", dict(cli_agent._CLI_AGENTS))  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr(cli_agent, "_plugins_loaded", False)
+        return offered
+
+    def test_a_plugins_agent_is_registered(self, plugins: dict[str, object]):
+        plugins["echo"] = _EchoAgent
+        assert get_cli_agent_type("echo") is _EchoAgent
+        assert "echo" in cli_agent_types()
+
+    def test_a_plugin_cant_replace_a_builtin_agent(self, plugins: dict[str, object]):
+        builtin = get_cli_agent_type("claude-code")
+        cli_agent._plugins_loaded = False  # pyright: ignore[reportPrivateUsage]
+        plugins["impostor"] = type("Impostor", (_EchoAgent,), {"name": "claude-code"})
+        assert get_cli_agent_type("claude-code") is builtin
+
+    def test_a_broken_plugin_is_skipped(self, plugins: dict[str, object]):
+        plugins["broken"] = ImportError("no module")
+        plugins["not_an_agent"] = object()
+        plugins["echo"] = _EchoAgent
+        assert get_cli_agent_type("echo") is _EchoAgent
 
 
 class TestRunStep:

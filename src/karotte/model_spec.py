@@ -127,6 +127,9 @@ _CLAUDE_ADAPTIVE_PREFIXES = (
     "claude-sonnet-4-6",
 )
 
+IMAGE_OMITTED_TEXT = "[image omitted: this model cannot take image input]"
+"""Sent in place of each image to a model that can't read images."""
+
 # Asking for more than a model allows is a hard 400, so unknown ids keep this.
 _DEFAULT_MAX_OUTPUT_TOKENS = 64000
 

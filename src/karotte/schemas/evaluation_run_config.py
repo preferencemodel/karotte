@@ -109,6 +109,22 @@ class EvaluationRunConfig(BaseModel):
             return []
         return [raw] if isinstance(raw, str) else raw
 
+    @property
+    def max_output_tokens(self) -> int | None:
+        """Max output tokens per model call, from `extra_config["max_output_tokens"]`.
+        None means the model's own maximum."""
+        return (self.extra_config or {}).get("max_output_tokens")
+
+    @model_validator(mode="after")
+    def validate_max_output_tokens(self) -> Self:
+        raw = (self.extra_config or {}).get("max_output_tokens")
+        if raw is not None and (
+            not isinstance(raw, int) or isinstance(raw, bool) or raw < 1
+        ):
+            msg = f"extra_config['max_output_tokens'] must be a positive integer, got {raw!r}"
+            raise ValueError(msg)
+        return self
+
     @model_validator(mode="after")
     def validate_extra_artifact_paths(self) -> Self:
         self._validate_str_or_str_list("extra_artifact_paths")

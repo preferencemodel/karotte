@@ -627,6 +627,46 @@ class TestArtifactUpload:
         else:
             assert "Authorization" not in presign.headers
 
+    def test_a_failed_upload_is_tried_again(
+        self,
+        sample_config: EvaluationRunConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        httpx_mock: HTTPXMock,
+    ):
+        import gzip
+        import importlib
+
+        from tenacity import wait_none
+
+        module = importlib.import_module("karotte.save_artifact")
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(module._put.retry, "wait", wait_none())
+        config = sample_config.model_copy(
+            update={"backend_uri": "http://localhost:8000"}
+        )
+        source_file = tmp_path / "test_file.txt"
+        source_file.write_text("test content")
+        httpx_mock.add_response(
+            method="POST",
+            url="http://localhost:8000/api/artifacts/presign",
+            json={"presigned_urls": {"test_file.txt": "https://s3.example/put"}},
+        )
+        httpx_mock.add_response(
+            method="PUT", url="https://s3.example/put", status_code=503
+        )
+        httpx_mock.add_response(
+            method="PUT", url="https://s3.example/put", status_code=200
+        )
+
+        save_artifact(config, source_file)
+
+        puts = [r for r in httpx_mock.get_requests() if r.method == "PUT"]
+        assert len(puts) == 2
+        # The retry resends the whole file.
+        assert gzip.decompress(puts[1].read()) == b"test content"
+
     def test_uploads_file_when_backend_uri_set(
         self,
         sample_config: EvaluationRunConfig,

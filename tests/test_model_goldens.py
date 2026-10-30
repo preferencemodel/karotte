@@ -27,11 +27,11 @@ from litellm.types.utils import Delta as LiteLlmDelta
 from litellm.types.utils import Function as LiteLlmFunction
 from litellm.utils import get_optional_params
 
-from karotte.agents.builtin_source import IMAGE_OMITTED_TEXT, BuiltinSource
+from karotte.agents.builtin_source import BuiltinSource
 from karotte.agents.models import resolve_model
 from karotte.judges.rubric_judge import RubricJudge
 from karotte.model_catalog import CATALOG_MODEL_IDS
-from karotte.model_spec import ReasoningEffort, spec_for
+from karotte.model_spec import IMAGE_OMITTED_TEXT, ReasoningEffort, spec_for
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import MessageAddedEvent
@@ -255,6 +255,23 @@ def test_builtin_sends_the_run_configs_temperature(model: str):
     source = BuiltinSource(_config(model, temperature=0.3))
     params = source.get_completion_params([Message(role="user", content="Go.")], [])
     assert params["temperature"] == 0.3
+
+
+def test_a_run_can_ask_for_fewer_output_tokens():
+    source = BuiltinSource(
+        _config(
+            "together_ai/Qwen/Qwen3.8-2.4T-A95B",
+            extra_config={"max_output_tokens": 64000},
+        )
+    )
+    params = source.get_completion_params([Message(role="user", content="Go.")], [])
+    assert params["max_tokens"] == 64000
+
+
+@pytest.mark.parametrize("value", [0, -1, "64000", True])
+def test_a_cap_that_is_not_a_positive_integer_is_refused(value: object):
+    with pytest.raises(ValueError, match="max_output_tokens"):
+        _ = _config("claude-opus-5-5", extra_config={"max_output_tokens": value})
 
 
 def test_together_effort_gets_past_litellms_param_check():
