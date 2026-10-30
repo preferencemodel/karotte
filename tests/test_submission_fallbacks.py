@@ -16,6 +16,7 @@ from karotte.agents import BuiltinSource
 from karotte.evaluation_runner import EvaluationRunner
 from karotte.judges.judge import Judge
 from karotte.mcp_servers.http_mcp_server import HttpMcpServer
+from karotte.save_submission import save_submission
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.scoring import Scoring
@@ -456,6 +457,32 @@ async def test_restore_best_keeps_the_submission_when_the_scorer_writes_no_resul
     outcome = await run(episode, on_invalid_submission="restore_best")
 
     assert outcome.on_disk_at_scoring == "garbage"
+
+
+@pytest.mark.asyncio
+async def test_restore_best_keeps_a_submission_that_changes_under_the_copy(
+    run: Callable[..., Awaitable[Outcome]],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("0.1")
+        copies: list[Path | str] = []
+
+        def copy_then_rewrite(
+            source: Path | str, dest: Path | str | None = None, **limits: Any
+        ):
+            saved = save_submission(source, dest, **limits)
+            copies.append(source)
+            submission.write_text(f"0.{len(copies) + 1}")
+            return saved
+
+        monkeypatch.setattr("karotte.validation.save_submission", copy_then_rewrite)
+
+    outcome = await run(episode, on_invalid_submission="restore_best")
+
+    assert outcome.on_disk_at_scoring == "0.3"
 
 
 @pytest.mark.asyncio

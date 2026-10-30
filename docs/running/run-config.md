@@ -218,7 +218,7 @@ Whenever there is a copy to put back, karotte stops the student's processes befo
 `restore_best` then grades the submission on disk with the dev scorer, as a `validate` call would.
 That extra run doesn't use up one of the student's calls, doesn't move the call interval, and its result is not recorded or shown to the student.
 The submission is replaced only when the dev scorer says it has no valid output or crashed on it, or when it is missing.
-It is left alone when it grades valid, and also when the dev scorer cannot say: it ran past its timeout, crashed or exited with an error, or wrote no usable result.
+It is left alone when it grades valid, and also when the dev scorer cannot say: it ran past its timeout, crashed or exited with an error, wrote no usable result, or the files kept changing while they were copied.
 Karotte logs a warning then, because a transient scorer failure should not cost the student a good submission.
 "Valid" is the dev scorer's verdict, not the final judge's: a submission that the dev scorer accepts but the judge rejects is not replaced.
 

@@ -132,16 +132,16 @@ It never scores the step, so the step's judge still decides the score.
 
 Each call copies the submission to a place only root can read, runs a _dev scorer_ on the copy as root, and returns one JSON object:
 
-| Field                 | Meaning                                                                                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `tier`                | `valid` (graded), `no_valid_output` (missing, or rejected by the scorer) or `crash` (the scorer failed on it). |
-| `dev_metric`          | The dev score to three significant figures, or `null` unless `tier` is `valid`.                                |
-| `metric`              | The metric's name and which direction is better.                                                               |
-| `reason`              | Why a call has no score, or `null`. Text from the scorer is cleaned and cut; see the scorer contract below.    |
-| `delta_vs_prev_valid` | `dev_metric` minus the last valid call's, both as shown to three significant figures, or `null`.               |
-| `best_dev_metric`     | The best `dev_metric` so far, or `null`.                                                                       |
-| `elapsed_s`           | How long the call took.                                                                                        |
-| `calls_left`          | Calls the student has left.                                                                                    |
+| Field                 | Meaning                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `tier`                | `valid` (graded), `no_valid_output` (missing, or rejected by the scorer) or `crash` (it failed, or kept changing while copied). |
+| `dev_metric`          | The dev score to three significant figures, or `null` unless `tier` is `valid`.                                                 |
+| `metric`              | The metric's name and which direction is better.                                                                                |
+| `reason`              | Why a call has no score, or `null`. Text from the scorer is cleaned and cut; see the scorer contract below.                     |
+| `delta_vs_prev_valid` | `dev_metric` minus the last valid call's, both as shown to three significant figures, or `null`.                                |
+| `best_dev_metric`     | The best `dev_metric` so far, or `null`.                                                                                        |
+| `elapsed_s`           | How long the call took.                                                                                                         |
+| `calls_left`          | Calls the student has left.                                                                                                     |
 
 A call is refused with `reason` set, and costs nothing, once `max_calls` calls have been made (`"budget spent"`) or when less than `min_interval_s` has passed since the last one.
 A refused call reports the tier of the last call and `dev_metric: null`.
@@ -196,7 +196,10 @@ The file has the shape an `ExecutableJudge` script writes, with two optional key
 
 A scorer that exits with an error, writes no usable file, or runs past `timeout_s` counts as a `crash`.
 Karotte starts it in its own process group at lower priority and kills the group when the call ends.
-It doesn't stop the student's processes.
+
+A call doesn't stop the student's processes, so a background job could change the files while they are copied, and the copy would mix two states.
+Karotte therefore compares the files with the copy once it is made, and copies again if they differ.
+If they differ a second time, the call is a `crash` whose `reason` says the submission kept changing; it uses up a call, and the copy is neither scored nor kept as the best one.
 
 Keep the dev split out of the final judge's data, and out of the student's reach.
 Otherwise repeated calls reveal the labels the final score depends on.

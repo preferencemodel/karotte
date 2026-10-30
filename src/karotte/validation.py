@@ -37,7 +37,13 @@ from karotte.protected_store import ProtectedStore, SecretNotFoundError
 from karotte.save_submission import save_submission
 from karotte.student_misbehavior import StudentMisbehaviorError
 from karotte.text import escape_surrogates
-from karotte.untrusted_paths import DIR_FLAGS, lstat_at, walk_to_parent
+from karotte.untrusted_paths import (
+    DIR_FLAGS,
+    FILE_FLAGS,
+    lstat_at,
+    open_at,
+    walk_to_parent,
+)
 
 STATE_NAME: Final = "validate_state"
 
@@ -47,13 +53,15 @@ holds files only."""
 
 Tier = Literal["crash", "no_valid_output", "valid"]
 
-Doubt = Literal["scorer_timed_out", "scorer_failed"]
+Doubt = Literal["scorer_timed_out", "scorer_failed", "submission_changed"]
 
 _MAX_REASON_CHARS: Final = 300
 _MAX_RESULT_BYTES: Final = 1024 * 1024
 _MAX_LOGGED_STDERR_BYTES: Final = 4096
 _SCORER_NICENESS: Final = 10
 _PIPE_GRACE_S: Final = 2.0
+_COPY_ATTEMPTS: Final = 2
+_COMPARE_CHUNK_BYTES: Final = 1 << 20
 
 
 class SnapshotLimits(BaseModel):
@@ -121,8 +129,8 @@ class Grade:
     """The copy that was graded, kept only for a `valid` grade."""
     doubt: Doubt | None = None
     """Set when `tier` may say nothing about the submission itself: the dev
-    scorer ran out of time or failed on its own. A scorer that reports a bad
-    submission is not in doubt."""
+    scorer ran out of time or failed on its own, or the submission changed while
+    it was copied. A scorer that reports a bad submission is not in doubt."""
 
     def discard(self) -> None:
         if self.snapshot is not None:
@@ -183,24 +191,54 @@ async def grade_submission(config: ValidateConfig, paths: tuple[Path, ...]) -> G
     """Copy `paths` somewhere root-only and run the dev scorer on the copy,
     leaving the student's processes alone."""
     started = time.monotonic()
+    grade = await _grade(config, paths)
+    return replace(grade, elapsed_s=time.monotonic() - started)
+
+
+async def _grade(config: ValidateConfig, paths: tuple[Path, ...]) -> Grade:
     try:
         snapshot = _take_snapshot(paths, config.snapshot_limits)
     except _SubmissionRejectedError as e:
-        return Grade("no_valid_output", time.monotonic() - started, reason=str(e))
-
+        return Grade("no_valid_output", reason=str(e))
+    except _SubmissionChangedError:
+        return Grade(
+            "crash",
+            reason="the submission kept changing while it was copied",
+            doubt="submission_changed",
+        )
     grade = await _run_scorer(config, snapshot)
     if grade.tier == "valid":
-        grade = replace(grade, snapshot=snapshot)
-    else:
-        shutil.rmtree(snapshot, ignore_errors=True)
-    return replace(grade, elapsed_s=time.monotonic() - started)
+        return replace(grade, snapshot=snapshot)
+    shutil.rmtree(snapshot, ignore_errors=True)
+    return grade
 
 
 class _SubmissionRejectedError(Exception):
     pass
 
 
+class _SubmissionChangedError(Exception):
+    pass
+
+
 def _take_snapshot(paths: tuple[Path, ...], limits: SnapshotLimits) -> Path:
+    """Copy `paths`, and check that they were not changing meanwhile.
+
+    The student's processes keep running, and the paths are copied one after the
+    other, so a copy can mix two states of the submission. Whatever it was
+    graded as would then be a state the student never had, and could become the
+    best copy. So the live files are compared with the copy once it is made. A
+    mismatch means a copy again, once; a second one raises
+    `_SubmissionChangedError`."""
+    for _ in range(_COPY_ATTEMPTS):
+        snapshot = _copy_paths(paths, limits)
+        if _live_matches(snapshot, paths):
+            return snapshot
+        shutil.rmtree(snapshot, ignore_errors=True)
+    raise _SubmissionChangedError
+
+
+def _copy_paths(paths: tuple[Path, ...], limits: SnapshotLimits) -> Path:
     SNAPSHOTS_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     SNAPSHOTS_DIR.chmod(0o700)
     snapshot = Path(tempfile.mkdtemp(dir=SNAPSHOTS_DIR))
@@ -218,6 +256,67 @@ def _take_snapshot(paths: tuple[Path, ...], limits: SnapshotLimits) -> Path:
         shutil.rmtree(snapshot, ignore_errors=True)
         raise
     return snapshot
+
+
+def _live_matches(snapshot: Path, paths: tuple[Path, ...]) -> bool:
+    """Whether every path still holds exactly what `snapshot` has for it."""
+    for path in paths:
+        try:
+            parent_fd, name = walk_to_parent(path)
+        except OSError:
+            return False
+        try:
+            if not _same_as_copy(snapshot / path.name, parent_fd, name):
+                return False
+        finally:
+            os.close(parent_fd)
+    return True
+
+
+def _same_as_copy(copy: Path, dir_fd: int, name: str) -> bool:
+    """Whether `name` in `dir_fd` is, with everything below it, what `copy`
+    holds. Opens nothing but regular files and directories and follows no
+    symlink, whatever the student swapped in. Any error counts as a difference."""
+    try:
+        mode = lstat_at(dir_fd, name).st_mode
+        if stat.S_ISDIR(mode):
+            return _same_directory(copy, dir_fd, name)
+        if stat.S_ISREG(mode):
+            return _same_file(copy, dir_fd, name)
+    except OSError:
+        pass
+    return False
+
+
+def _same_directory(copy: Path, dir_fd: int, name: str) -> bool:
+    if not copy.is_dir():
+        return False
+    fd = open_at(dir_fd, name, DIR_FLAGS)
+    try:
+        with os.scandir(fd) as entries:
+            live = sorted(entry.name for entry in entries)
+        if live != sorted(entry.name for entry in copy.iterdir()):
+            return False
+        return all(_same_as_copy(copy / child, fd, child) for child in live)
+    finally:
+        os.close(fd)
+
+
+def _same_file(copy: Path, dir_fd: int, name: str) -> bool:
+    if not copy.is_file():
+        return False
+    fd = open_at(dir_fd, name, FILE_FLAGS)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_size != copy.stat().st_size:
+            return False
+        with copy.open("rb") as saved:
+            while chunk := os.read(fd, _COMPARE_CHUNK_BYTES):
+                if saved.read(len(chunk)) != chunk:
+                    return False
+            return saved.read(1) == b""
+    finally:
+        os.close(fd)
 
 
 async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:

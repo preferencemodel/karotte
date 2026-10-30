@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, final
 
@@ -13,7 +14,9 @@ from mcp.types import TextContent
 
 from karotte import ToolConfigWriter
 from karotte.mcp_servers.mcp_server import McpServer
+from karotte.save_submission import save_submission
 from karotte.tools.validate import ValidateConfig, validate
+from karotte.validation import load_state
 
 
 @final
@@ -333,6 +336,110 @@ async def test_a_submission_changed_during_scoring_is_graded_as_it_was_copied(
 
     assert env.submission.read_text() == "0.1"
     assert payload["dev_metric"] == 0.9
+
+
+def after_each_copy(
+    monkeypatch: pytest.MonkeyPatch, change: Callable[[int], None]
+) -> None:
+    """Call `change(n)` right after the n-th copy of a submission path (counted
+    from 1), as a student process writing in the middle of a copy would."""
+    copies: list[Path | str] = []
+
+    def copy_then_change(
+        source: Path | str, dest: Path | str | None = None, **limits: Any
+    ):
+        saved = save_submission(source, dest, **limits)
+        copies.append(source)
+        change(len(copies))
+        return saved
+
+    monkeypatch.setattr("karotte.validation.save_submission", copy_then_change)
+
+
+@pytest.mark.asyncio
+async def test_a_submission_that_changes_while_it_is_copied_is_copied_again(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+):
+    tool = env.configure()
+    env.write("0.5")
+
+    def rewrite(n: int) -> None:
+        if n == 1:
+            env.write("0.1")
+
+    after_each_copy(monkeypatch, rewrite)
+
+    payload = await call(tool)
+
+    assert payload["tier"] == "valid"
+    assert payload["dev_metric"] == 0.1
+
+
+@pytest.mark.asyncio
+async def test_a_file_added_to_a_submission_directory_while_it_is_copied_is_noticed(
+    env: Env, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    extras = tmp_path / "extras"
+    extras.mkdir()
+    (extras / "a.txt").write_text("a")
+    tool = env.configure(submission_paths=(env.submission, extras))
+    env.write("0.5")
+
+    def add_file(n: int) -> None:
+        if n == 2:
+            _ = (extras / "late.txt").write_text("x")
+
+    after_each_copy(monkeypatch, add_file)
+
+    _ = await call(tool)
+
+    best = load_state().best_snapshot
+    assert best is not None
+    assert (best / "extras" / "late.txt").read_text() == "x"
+
+
+@pytest.mark.asyncio
+async def test_a_file_swapped_for_a_fifo_after_the_copy_does_not_block_the_check(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+):
+    tool = env.configure()
+    env.write("0.5")
+
+    def swap(n: int) -> None:
+        if n == 1:
+            env.submission.unlink()
+            os.mkfifo(env.submission)
+
+    after_each_copy(monkeypatch, swap)
+
+    payload = await asyncio.wait_for(call(tool), timeout=10)
+
+    assert payload["tier"] == "no_valid_output"
+    assert "not a regular file" in payload["reason"]
+
+
+@pytest.mark.asyncio
+async def test_a_submission_that_keeps_changing_is_a_crash_and_is_not_kept(
+    env: Env, monkeypatch: pytest.MonkeyPatch, karotte_state: Path
+):
+    tool = env.configure()
+    env.write("0.5")
+
+    def rewrite_every_time(n: int) -> None:
+        env.write(f"0.{n}")
+
+    after_each_copy(monkeypatch, rewrite_every_time)
+
+    payload = await call(tool)
+
+    assert payload["tier"] == "crash"
+    assert "changing while it was copied" in payload["reason"]
+    assert payload["dev_metric"] is None
+    assert payload["best_dev_metric"] is None
+    assert payload["calls_left"] == 4
+    assert env.scorer_runs == 0
+    assert load_state().best_snapshot is None
+    assert list((karotte_state / "validate_snapshots").iterdir()) == []
 
 
 @pytest.mark.asyncio
