@@ -6,6 +6,7 @@ from typing import Any, final
 from fastmcp.tools.tool import ToolResult
 from karotte import ToolBase
 from karotte.validation import (
+    Grade,
     ValidateConfig,
     ValidationState,
     grade_submission,
@@ -15,10 +16,6 @@ from karotte.validation import (
 )
 
 __all__ = ["ValidateConfig", "validate"]
-
-
-def _now() -> float:
-    return time.time()
 
 
 def _three_significant_figures(value: float | None) -> float | None:
@@ -59,7 +56,7 @@ class validate(ToolBase[ValidateConfig]):
             if state.calls >= self.config.max_calls:
                 return self._refused(state, "budget spent")
             if state.last_call_at is not None:
-                wait = state.last_call_at + self.config.min_interval_s - _now()
+                wait = state.last_call_at + self.config.min_interval_s - time.time()
                 if wait > 0:
                     return self._refused(
                         state,
@@ -67,7 +64,7 @@ class validate(ToolBase[ValidateConfig]):
                     )
 
             grade = await grade_submission(self.config, self.config.submission_paths)
-            state.last_call_at = _now()
+            state.last_call_at = time.time()
             if grade.doubt == "scorer_failed":
                 # The environment's fault: the call is not counted, and the
                 # student learns nothing but that validation did not run.
@@ -77,44 +74,25 @@ class validate(ToolBase[ValidateConfig]):
             state.calls += 1
             record_grade(self.config, state, grade)
             save_state(state)
-            return self._result(
-                state,
-                tier=grade.tier,
-                dev_metric=grade.dev_metric,
-                delta=delta,
-                reason=grade.reason,
-                elapsed_s=grade.elapsed_s,
-            )
+            return self._result(state, grade, delta)
 
     def _refused(self, state: ValidationState, reason: str) -> ToolResult:
         return self._result(
-            state,
-            tier=state.last_tier or "no_valid_output",
-            dev_metric=None,
-            delta=None,
-            reason=reason,
-            elapsed_s=0.0,
+            state, Grade(state.last_tier or "no_valid_output", reason=reason)
         )
 
     def _result(
-        self,
-        state: ValidationState,
-        *,
-        tier: str,
-        dev_metric: float | None,
-        delta: float | None,
-        reason: str | None,
-        elapsed_s: float,
+        self, state: ValidationState, grade: Grade, delta: float | None = None
     ) -> ToolResult:
         direction = "higher" if self.config.higher_is_better else "lower"
         payload: dict[str, Any] = {
-            "tier": tier,
-            "dev_metric": _three_significant_figures(dev_metric),
+            "tier": grade.tier,
+            "dev_metric": _three_significant_figures(grade.dev_metric),
             "metric": f"{self.config.metric}, {direction} is better",
-            "reason": reason,
+            "reason": grade.reason,
             "delta_vs_prev_valid": _three_significant_figures(delta),
             "best_dev_metric": _three_significant_figures(state.best_metric),
-            "elapsed_s": round(elapsed_s, 1),
+            "elapsed_s": round(grade.elapsed_s, 1),
             "calls_left": max(self.config.max_calls - state.calls, 0),
         }
         return ToolResult(structured_content=payload)

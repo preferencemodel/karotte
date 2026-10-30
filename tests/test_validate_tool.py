@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, final
@@ -176,7 +177,7 @@ async def test_an_unavailable_call_still_has_to_keep_to_the_interval(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ):
     now = [1000.0]
-    monkeypatch.setattr("karotte.tools.validate._now", lambda: now[0])
+    monkeypatch.setattr(time, "time", lambda: now[0])
     tool = env.configure(min_interval_s=60)
     env.write("crash")
 
@@ -223,7 +224,7 @@ async def test_calls_must_be_spaced_apart_and_a_refused_call_costs_nothing(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ):
     now = [1000.0]
-    monkeypatch.setattr("karotte.tools.validate._now", lambda: now[0])
+    monkeypatch.setattr(time, "time", lambda: now[0])
     tool = env.configure(min_interval_s=60)
     env.write("0.5")
 
