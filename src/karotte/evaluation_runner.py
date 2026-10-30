@@ -31,6 +31,7 @@ from karotte.container import is_containerized
 from karotte.durable_write import write_durably
 from karotte.mcp_servers.resource_sampler import ResourceSampler
 from karotte.protected_store import ProtectedStore
+from karotte.restore_submission import restore_best_submission
 from karotte.save_artifact import save_artifact
 from karotte.schemas import RunStatus
 from karotte.schemas.chat import Message
@@ -55,7 +56,7 @@ from karotte.subprocess import ipc_namespace_available
 from karotte.text import escape_surrogates
 from karotte.tools.validate import validate
 from karotte.truncation import sanitize_metadata
-from karotte.validation import clear_snapshots, restore_best_submission
+from karotte.validation import clear_snapshots
 
 
 class EvaluationRunner:

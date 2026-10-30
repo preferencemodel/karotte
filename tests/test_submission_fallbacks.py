@@ -16,6 +16,7 @@ from karotte.agents import BuiltinSource
 from karotte.evaluation_runner import EvaluationRunner
 from karotte.judges.judge import Judge
 from karotte.mcp_servers.http_mcp_server import HttpMcpServer
+from karotte.restore_submission import restore_best_submission
 from karotte.save_submission import save_submission
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -27,7 +28,7 @@ from karotte.schemas.transcript import (
     Transcript,
 )
 from karotte.tools.validate import ValidateConfig, validate
-from karotte.validation import load_state, restore_best_submission
+from karotte.validation import load_state
 
 JUDGE_SCORE = 0.25
 
@@ -383,7 +384,7 @@ async def test_the_student_is_stopped_before_the_copy_goes_back(
         _ = await tool()
         submission.unlink()
         monkeypatch.setattr(
-            "karotte.validation.kill_processes",
+            "karotte.restore_submission.kill_processes",
             lambda uid: on_disk_when_stopped.append((uid, submission.exists())),  # pyright: ignore[reportUnknownLambdaType]
         )
 
@@ -405,7 +406,7 @@ async def test_the_student_is_left_alone_when_there_is_no_copy_to_restore(
     async def episode(tool: validate, submission: Path) -> None:
         submission.write_text("reject not a number")
         _ = await tool()
-        monkeypatch.setattr("karotte.validation.kill_processes", stopped.append)
+        monkeypatch.setattr("karotte.restore_submission.kill_processes", stopped.append)
 
     _ = await run(episode, on_invalid_submission="restore_best")
 
@@ -512,7 +513,7 @@ async def test_the_student_is_stopped_before_the_submission_is_checked(
         submission.write_text("0.7")
         _ = await tool()
         monkeypatch.setattr(
-            "karotte.validation.kill_processes",
+            "karotte.restore_submission.kill_processes",
             lambda _uid: runs_when_stopped.append(scorer_runs(tmp_path)),  # pyright: ignore[reportUnknownLambdaType]
         )
 
@@ -620,7 +621,7 @@ async def test_a_student_that_cannot_be_stopped_is_scored_as_it_is(
         def cannot_stop(_uid: int) -> None:
             raise UnreapableCohortError("processes survived")
 
-        monkeypatch.setattr("karotte.validation.kill_processes", cannot_stop)
+        monkeypatch.setattr("karotte.restore_submission.kill_processes", cannot_stop)
 
     outcome = await run(episode, on_invalid_submission="restore_best")
 
