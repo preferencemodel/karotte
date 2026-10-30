@@ -257,6 +257,29 @@ async def test_a_long_reason_is_cut(env: Env):
 
 
 @pytest.mark.asyncio
+async def test_control_characters_are_stripped_from_a_reason(env: Env):
+    tool = env.configure()
+    env.write("reject bad \x1b[31mred\x00 line one\r\nline two\ttab\x7f")
+
+    payload = await call(tool)
+
+    assert payload["tier"] == "no_valid_output"
+    assert payload["reason"] == "bad [31mred line one line two tab"
+
+
+@pytest.mark.asyncio
+async def test_a_reason_that_is_only_control_characters_falls_back_to_the_default(
+    env: Env,
+):
+    tool = env.configure()
+    env.write("reject \x00\x1b\n")
+
+    payload = await call(tool)
+
+    assert payload["reason"] == "submission rejected"
+
+
+@pytest.mark.asyncio
 async def test_a_symlinked_submission_is_rejected_without_being_followed(
     env: Env, tmp_path: Path
 ):

@@ -137,7 +137,7 @@ Each call copies the submission to a place only root can read, runs a _dev score
 | `tier`                | `valid` (graded), `no_valid_output` (missing, or rejected by the scorer) or `crash` (the scorer failed on it). |
 | `dev_metric`          | The dev score to three significant figures, or `null` unless `tier` is `valid`.                                |
 | `metric`              | The metric's name and which direction is better.                                                               |
-| `reason`              | Why a call has no score, or `null`.                                                                            |
+| `reason`              | Why a call has no score, or `null`. Text from the scorer is cleaned and cut; see the scorer contract below.    |
 | `delta_vs_prev_valid` | `dev_metric` minus the last valid call's, both as shown to three significant figures, or `null`.               |
 | `best_dev_metric`     | The best `dev_metric` so far, or `null`.                                                                       |
 | `elapsed_s`           | How long the call took.                                                                                        |
@@ -186,7 +186,9 @@ The file has the shape an `ExecutableJudge` script writes, with two optional key
 ```
 
 - `score` is required when the tier is `valid`, which is the default.
-- `tier` may also be `no_valid_output` or `crash`; then `reason` is shown to the student, cut to 300 characters.
+- `tier` may also be `no_valid_output` or `crash`; then `reason` is shown to the student.
+  Karotte removes control characters from it, collapses runs of whitespace (line breaks included) into one space, and cuts it to 300 characters.
+  It is the only free text from the scorer that reaches the student, so never put labels, expected outputs or details of the dev split in it: say what is wrong with the submission, such as `expected 10 columns, found 8`.
 - Nothing else reaches the student: not `metadata`, and not the scorer's output.
 
 A scorer that exits with an error, writes no usable file, or runs past `timeout_s` counts as a `crash`.

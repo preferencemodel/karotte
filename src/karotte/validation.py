@@ -22,6 +22,7 @@ import signal
 import stat
 import tempfile
 import time
+import unicodedata
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, ClassVar, Final, Literal, get_args
@@ -314,7 +315,8 @@ def _interpret(result_file: Path) -> Grade:
             "submission rejected" if tier == "no_valid_output" else "submission failed"
         )
         return Grade(
-            tier, reason=_reason(reason) if isinstance(reason, str) else default
+            tier,
+            reason=(_reason(reason) if isinstance(reason, str) else "") or default,
         )
     score = result.get("score")
     if isinstance(score, bool) or not isinstance(score, int | float):
@@ -325,7 +327,15 @@ def _interpret(result_file: Path) -> Grade:
 
 
 def _reason(text: str) -> str:
-    return escape_surrogates(text)[:_MAX_REASON_CHARS]
+    """Make text that reaches the student safe to show: control characters go,
+    runs of whitespace (line breaks included) become one space, and it is cut
+    to `_MAX_REASON_CHARS`."""
+    printable = "".join(
+        char
+        for char in escape_surrogates(text)
+        if char.isspace() or unicodedata.category(char) != "Cc"
+    )
+    return " ".join(printable.split())[:_MAX_REASON_CHARS]
 
 
 async def restore_best_submission(
