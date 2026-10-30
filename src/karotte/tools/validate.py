@@ -25,6 +25,17 @@ def _three_significant_figures(value: float | None) -> float | None:
     return None if value is None else float(f"{value:.3g}")
 
 
+def _delta(current: float | None, previous: float | None) -> float | None:
+    """The change between two metrics as the student sees them. Taking it from
+    the rounded values means successive deltas add nothing finer than the
+    3 significant figures `dev_metric` already shows."""
+    shown_current = _three_significant_figures(current)
+    shown_previous = _three_significant_figures(previous)
+    if shown_current is None or shown_previous is None:
+        return None
+    return shown_current - shown_previous
+
+
 @final
 class validate(ToolBase[ValidateConfig]):
     config_schema = ValidateConfig
@@ -56,11 +67,7 @@ class validate(ToolBase[ValidateConfig]):
                     )
 
             grade = await grade_submission(self.config, self.config.submission_paths)
-            delta = (
-                None
-                if grade.dev_metric is None or state.last_valid_metric is None
-                else grade.dev_metric - state.last_valid_metric
-            )
+            delta = _delta(grade.dev_metric, state.last_valid_metric)
             state.calls += 1
             state.last_call_at = _now()
             record_grade(self.config, state, grade)

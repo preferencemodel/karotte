@@ -191,6 +191,23 @@ async def test_delta_is_against_the_previous_valid_call(env: Env):
 
 
 @pytest.mark.asyncio
+async def test_a_delta_never_shows_more_than_the_rounded_metrics_do(env: Env):
+    tool = env.configure()
+
+    env.write("0.82312")
+    _ = await call(tool)
+    env.write("0.82349")
+    barely_better = await call(tool)
+    env.write("0.82351")
+    over_the_rounding_edge = await call(tool)
+
+    assert barely_better["dev_metric"] == 0.823
+    assert barely_better["delta_vs_prev_valid"] == 0.0
+    assert over_the_rounding_edge["dev_metric"] == 0.824
+    assert over_the_rounding_edge["delta_vs_prev_valid"] == 0.001
+
+
+@pytest.mark.asyncio
 async def test_best_is_the_lowest_when_lower_is_better(env: Env):
     tool = env.configure(metric="loss", higher_is_better=False)
 

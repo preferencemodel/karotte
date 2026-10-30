@@ -138,7 +138,7 @@ Each call copies the submission to a place only root can read, runs a _dev score
 | `dev_metric`          | The dev score to three significant figures, or `null` unless `tier` is `valid`.                                |
 | `metric`              | The metric's name and which direction is better.                                                               |
 | `reason`              | Why a call has no score, or `null`.                                                                            |
-| `delta_vs_prev_valid` | `dev_metric` minus the last valid call's, or `null`.                                                           |
+| `delta_vs_prev_valid` | `dev_metric` minus the last valid call's, both as shown to three significant figures, or `null`.               |
 | `best_dev_metric`     | The best `dev_metric` so far, or `null`.                                                                       |
 | `elapsed_s`           | How long the call took.                                                                                        |
 | `calls_left`          | Calls the student has left.                                                                                    |
