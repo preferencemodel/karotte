@@ -145,6 +145,7 @@ Each call copies the submission to a place only root can read, runs a _dev score
 
 A call is refused with `reason` set, and costs nothing, once `max_calls` calls have been made (`"budget spent"`) or when less than `min_interval_s` has passed since the last one.
 A refused call reports the tier of the last call and `dev_metric: null`.
+A call that finds the dev scorer itself broken (see the scorer contract below) is reported the same way, with `reason: "validation is unavailable"`, and costs nothing either; the interval still applies.
 
 The tool keeps one state for the whole task: its calls, their spacing and the best copy.
 In a task with several steps it grades the same `submission_paths` whichever step the student is in, so give such a task one `ValidateConfig` that lists the paths of every step, and don't use the run config's [submission fallbacks](../running/run-config.md#submission-fallbacks), which refuse a task with more than one step.
@@ -194,8 +195,11 @@ The file has the shape an `ExecutableJudge` script writes, with two optional key
   It is the only free text from the scorer that reaches the student, so never put labels, expected outputs or details of the dev split in it: say what is wrong with the submission, such as `expected 10 columns, found 8`.
 - Nothing else reaches the student: not `metadata`, and not the scorer's output.
 
-A scorer that exits with an error, writes no usable file, or runs past `timeout_s` counts as a `crash`.
-Karotte starts it in its own process group at lower priority and kills the group when the call ends.
+A scorer that runs past `timeout_s` counts as a `crash`, because a submission can hang it.
+A scorer that can't be started, exits with an error or writes no usable file is broken, and says nothing about the submission.
+Karotte logs an error, does not count the call, does not record it as the student's last or best result, and tells the student only that validation is unavailable.
+So report a submission the scorer can't handle through `tier`, and exit with an error only for a bug of the scorer's own.
+Karotte starts the scorer in its own process group at lower priority and kills the group when the call ends.
 
 A call doesn't stop the student's processes, so a background job could change the files while they are copied, and the copy would mix two states.
 Karotte therefore compares the files with the copy once it is made, and copies again if they differ.

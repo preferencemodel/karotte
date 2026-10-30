@@ -10,6 +10,7 @@ from typing import Any, final
 
 import pytest
 from fastmcp import Client
+from loguru import logger
 from mcp.types import TextContent
 
 from karotte import ToolConfigWriter
@@ -98,8 +99,6 @@ async def test_missing_submission_is_no_valid_output_and_is_never_scored(env: En
     [
         ("reject need at least 10 rows", "no_valid_output", "need at least 10 rows"),
         ("fail model did not load", "crash", "model did not load"),
-        ("crash", "crash", "the dev scorer failed (exit code 3)"),
-        ("garbage", "crash", "the dev scorer produced no result"),
     ],
 )
 @pytest.mark.asyncio
@@ -115,6 +114,78 @@ async def test_scorer_outcome_picks_the_tier(
     assert payload["reason"] == reason
     assert payload["dev_metric"] is None
     assert payload["best_dev_metric"] is None
+
+
+UNAVAILABLE = "validation is unavailable"
+
+
+@pytest.mark.parametrize("text", ["crash", "garbage"])
+@pytest.mark.asyncio
+async def test_a_dev_scorer_that_fails_is_unavailable_and_costs_nothing(
+    env: Env, text: str
+):
+    tool = env.configure()
+    env.write("0.5")
+    _ = await call(tool)
+    env.write(text)
+
+    payload = await call(tool)
+
+    assert payload["reason"] == UNAVAILABLE
+    assert payload["tier"] == "valid"
+    assert payload["dev_metric"] is None
+    assert payload["delta_vs_prev_valid"] is None
+    assert payload["best_dev_metric"] == 0.5
+    assert payload["calls_left"] == 4
+    state = load_state()
+    assert state.calls == 1
+    assert state.last_tier == "valid"
+    assert state.last_valid_metric == 0.5
+
+
+@pytest.mark.asyncio
+async def test_a_dev_scorer_that_cannot_start_is_unavailable(env: Env):
+    tool = env.configure(dev_command=["/nonexistent/dev_scorer"])
+    env.write("0.5")
+
+    payload = await call(tool)
+
+    assert payload["tier"] == "no_valid_output"
+    assert payload["reason"] == UNAVAILABLE
+    assert payload["calls_left"] == 5
+
+
+@pytest.mark.asyncio
+async def test_a_dev_scorer_failure_is_logged_as_an_error_and_not_shown(env: Env):
+    messages: list[str] = []
+    handler = logger.add(lambda m: messages.append(str(m)), level="ERROR")
+    tool = env.configure()
+    env.write("crash")
+
+    try:
+        result = await tool()
+    finally:
+        logger.remove(handler)
+
+    assert any("exit" in m and "3" in m for m in messages)
+    assert "exit" not in result.content[0].text  # pyright: ignore[reportAttributeAccessIssue]
+
+
+@pytest.mark.asyncio
+async def test_an_unavailable_call_still_has_to_keep_to_the_interval(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+):
+    now = [1000.0]
+    monkeypatch.setattr("karotte.tools.validate._now", lambda: now[0])
+    tool = env.configure(min_interval_s=60)
+    env.write("crash")
+
+    _ = await call(tool)
+    now[0] += 20
+    too_soon = await call(tool)
+
+    assert too_soon["reason"] == "too soon: wait 40 s before calling again"
+    assert env.scorer_runs == 1
 
 
 @pytest.mark.asyncio
@@ -527,17 +598,6 @@ class TestValidateConfig:
     def test_nonsense_is_rejected(self, env: Env, overrides: dict[str, Any]):
         with pytest.raises(ValueError):
             _ = env.configure(**overrides)
-
-
-@pytest.mark.asyncio
-async def test_a_scorer_that_cannot_start_is_a_crash(env: Env):
-    tool = env.configure(dev_command=["/nonexistent/dev_scorer"])
-    env.write("0.5")
-
-    payload = await call(tool)
-
-    assert payload["tier"] == "crash"
-    assert payload["reason"] == "the dev scorer could not be started"
 
 
 @pytest.mark.asyncio

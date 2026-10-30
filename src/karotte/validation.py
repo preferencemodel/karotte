@@ -130,7 +130,8 @@ class Grade:
     doubt: Doubt | None = None
     """Set when `tier` may say nothing about the submission itself: the dev
     scorer ran out of time or failed on its own, or the submission changed while
-    it was copied. A scorer that reports a bad submission is not in doubt."""
+    it was copied. A scorer that reports a bad submission is not in doubt. For
+    `scorer_failed`, `reason` is for the log: it is not shown to the student."""
 
     def discard(self) -> None:
         if self.snapshot is not None:
@@ -338,8 +339,7 @@ async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
             )
         except OSError as e:
             os.close(read_fd)
-            logger.error("Cannot start the dev scorer {}: {}", config.dev_command, e)
-            return _scorer_failed("the dev scorer could not be started")
+            return _scorer_failed(f"cannot start {config.dev_command}: {e}")
         finally:
             os.close(write_fd)
         stderr = asyncio.StreamReader()
@@ -370,13 +370,8 @@ async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
             )
         if proc.returncode != 0:
             logged = b"" if undrained else stderr_task.result()
-            logger.warning(
-                "The dev scorer exited with {}: {}",
-                proc.returncode,
-                logged.decode(errors="replace"),
-            )
             return _scorer_failed(
-                f"the dev scorer failed (exit code {proc.returncode})"
+                f"the dev scorer exited with code {proc.returncode}: {logged.decode(errors='replace')}"
             )
         return _interpret(result_file)
 
@@ -393,6 +388,11 @@ def _kill_group(pgid: int) -> None:
 
 
 def _scorer_failed(reason: str) -> Grade:
+    """The dev scorer itself is broken, which says nothing about the submission:
+    it could not start, exited with an error or broke its contract. That is the
+    environment's fault, so it is logged as an error, and `reason` is for the log
+    only."""
+    logger.error("The dev scorer failed: {}", reason)
     return Grade("crash", reason=reason, doubt="scorer_failed")
 
 

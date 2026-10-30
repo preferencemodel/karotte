@@ -51,7 +51,7 @@ class validate(ToolBase[ValidateConfig]):
         `tier` is `valid` (the dev score is in `dev_metric`), `no_valid_output` (the submission is missing or was rejected, see `reason`) or `crash` (it failed when it was run);
         `metric` names the score and says which direction is better; `delta_vs_prev_valid` is the change since your last valid call; `best_dev_metric` is your best so far;
         `calls_left` is how many calls remain.
-        The number of calls is limited and calls must be spaced apart. A call that is refused says why in `reason` and does not use up a call.
+        The number of calls is limited and calls must be spaced apart. A call that is refused, or that finds validation unavailable, says why in `reason` and does not use up a call.
         The dev score estimates, but is not, your final score.
         """
         async with self._lock:
@@ -67,9 +67,14 @@ class validate(ToolBase[ValidateConfig]):
                     )
 
             grade = await grade_submission(self.config, self.config.submission_paths)
+            state.last_call_at = _now()
+            if grade.doubt == "scorer_failed":
+                # The environment's fault: the call is not counted, and the
+                # student learns nothing but that validation did not run.
+                save_state(state)
+                return self._refused(state, "validation is unavailable")
             delta = _delta(grade.dev_metric, state.last_valid_metric)
             state.calls += 1
-            state.last_call_at = _now()
             record_grade(self.config, state, grade)
             save_state(state)
             return self._result(
