@@ -11,13 +11,13 @@ from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, final, override
+from typing import Any, Final, final, override
 
 import pytest
 import pytest_asyncio
 
 import karotte.load_tasks
-from karotte import Step, Task
+from karotte import Step, Task, ToolConfigWriter
 from karotte.hardware import (
     CONTAINER_RUN_ARGS_ENTRY_POINT_GROUP,
     DEFAULT_HARDWARE_ENTRY_POINT_GROUP,
@@ -34,6 +34,7 @@ from karotte.subprocess import (
     PLATFORM_TOOLING_ENTRY_POINT_GROUP,
 )
 from karotte.tools.bash import _BashSession, bash  # pyright: ignore[reportPrivateUsage]
+from karotte.tools.validate import ValidateConfig, validate
 from karotte.update_env import INDEX_OVERRIDE_VARS
 
 # The characterization env is an `environment` package that only the MCP server
@@ -249,12 +250,21 @@ def karotte_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 # A dev scorer in the contract `validate` documents: it gets the snapshot
-# directory and an output path as its last two arguments. What it reports
-# follows the submission's text, and every run is counted in the file named by
-# its first argument.
+# directory and an output path as its last two arguments, and every run is
+# counted in the file named by its first argument. What it does follows the text
+# of the snapshot's `answer.txt`:
+#
+#   "0.82"             reports that score, with `metadata` and an extra field
+#   "reject <reason>"  reports tier `no_valid_output` with that reason
+#   "fail <reason>"    reports tier `crash` with that reason
+#   "crash"            exits with status 3
+#   "garbage"          writes a result that is not JSON
+#   "hang"             never finishes
+#   "race 0.9"         overwrites the live submission (its second argument)
+#                      with "0.1", then reports the score from the snapshot
 _DEV_SCORER = textwrap.dedent(
     """
-    import json, math, sys, time
+    import json, sys, time
     from pathlib import Path
 
     counter, live, snapshot, out = (Path(a) for a in (*sys.argv[1:3], *sys.argv[-2:]))
@@ -298,6 +308,77 @@ def dev_command(tmp_path: Path) -> DevCommand:
         return [sys.executable, str(script), str(counter), str(live_submission)]
 
     return build
+
+
+@final
+class ValidateEnv:
+    """The `validate` tool set up on the dev scorer script above: one submission
+    file, `answer.txt`, and a count of the scorer's runs."""
+
+    def __init__(self, tmp_path: Path, dev_command: DevCommand) -> None:
+        self.submission: Path = tmp_path / "work" / "answer.txt"
+        self.submission.parent.mkdir()
+        self.counter: Path = tmp_path / "counter"
+        self.dev_command: Final = dev_command(self.counter, self.submission)
+
+    @property
+    def scorer_runs(self) -> int:
+        if not self.counter.exists():
+            return 0
+        return len(self.counter.read_text().splitlines())
+
+    def write(self, text: str) -> None:
+        """Write the submission."""
+        self.submission.write_text(text)
+
+    def write_config(self, **overrides: Any) -> None:
+        """Write the `validate` tool's config, as a task does. `overrides` set
+        `ValidateConfig` fields; with none, the tool grades `answer.txt`, may be
+        called five times and has no wait between calls."""
+        settings: dict[str, Any] = {
+            "dev_command": self.dev_command,
+            "metric": "accuracy",
+            "submission_paths": (self.submission,),
+            "min_interval_s": 0,
+        } | overrides
+        _ = ToolConfigWriter().write("validate", ValidateConfig(**settings))
+
+    def configure(self, **overrides: Any) -> validate:
+        """`write_config`, then make the tool."""
+        self.write_config(**overrides)
+        return validate()
+
+
+@pytest.fixture
+def validate_env(
+    tmp_path: Path,
+    karotte_state: Path,  # pyright: ignore[reportUnusedParameter]
+    dev_command: DevCommand,
+) -> ValidateEnv:
+    return ValidateEnv(tmp_path, dev_command)
+
+
+@pytest.fixture
+def after_copying(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[Path, Callable[[], object]], None]:
+    """Returns a function `after_copying(path, change)`. From then on `change()`
+    runs right after every copy of `path` that the validation code takes, as a
+    student process writing in the middle of a copy would. Once per test."""
+    from karotte.save_submission import save_submission
+
+    def install(path: Path, change: Callable[[], object]) -> None:
+        def copy_then_change(
+            source: Path | str, dest: Path | str | None = None, **limits: Any
+        ) -> Path:
+            saved = save_submission(source, dest, **limits)
+            if Path(source) == path:
+                _ = change()
+            return saved
+
+        monkeypatch.setattr("karotte.validation.save_submission", copy_then_change)
+
+    return install
 
 
 @pytest.fixture(autouse=True)

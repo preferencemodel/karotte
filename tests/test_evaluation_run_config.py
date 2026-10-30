@@ -455,9 +455,21 @@ def test_submission_fallbacks_take_the_documented_values():
     assert config.on_final_submission == "keep_best"
 
 
-@pytest.mark.parametrize("field", ["on_invalid_submission", "on_final_submission"])
-def test_submission_fallbacks_reject_other_values(field: str):
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param("on_invalid_submission", "best", id="invalid-unknown-value"),
+        pytest.param(
+            "on_invalid_submission", "keep_best", id="invalid-takes-restore-best-only"
+        ),
+        pytest.param("on_final_submission", "best", id="final-unknown-value"),
+        pytest.param(
+            "on_final_submission", "restore_best", id="final-takes-keep-best-only"
+        ),
+    ],
+)
+def test_submission_fallbacks_reject_other_values(field: str, value: str):
     with pytest.raises(ValidationError):
         _ = EvaluationRunConfig.model_validate(
-            {"run_id": "r", "task_id": "t", "model": "m", field: "best"}
+            {"run_id": "r", "task_id": "t", "model": "m", field: value}
         )

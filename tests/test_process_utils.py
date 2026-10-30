@@ -21,6 +21,7 @@ They need Linux + root (to reap a separate uid without killing the test
 process); everywhere else they skip.
 """
 
+import contextlib
 import os
 import resource
 import shutil
@@ -1198,14 +1199,23 @@ def test_kill_processes_reaps_namespaces_before_verifying(
 
 def test_kill_process_group_kills_every_member() -> None:
     leader = subprocess.Popen(
-        ["sh", "-c", "sleep 60 & sleep 60 & wait"], start_new_session=True
+        ["sh", "-c", "sleep 60 & sleep 60 & echo started; wait"],
+        stdout=subprocess.PIPE,
+        start_new_session=True,
     )
     try:
+        assert leader.stdout is not None
+        assert leader.stdout.readline() == b"started\n", "the sleeps did not start"
+
         kill_process_group(leader.pid)
 
-        assert leader.wait(timeout=10) == -signal.SIGKILL
+        # Both sleeps inherited the pipe's write end, so it closes, and
+        # `communicate` returns, only once every member of the group is dead.
+        _ = leader.communicate(timeout=10)
+        assert leader.returncode == -signal.SIGKILL
     finally:
-        leader.kill()
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(leader.pid, signal.SIGKILL)
         _ = leader.wait()
 
 
