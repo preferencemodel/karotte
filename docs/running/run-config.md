@@ -201,31 +201,6 @@ Agents that run a step in their own process can only enforce the limits their CL
 
 [^ext]: The external agent doesn't report token usage, so its context counter, if on, always shows the full limit.
 
-## Submission fallbacks
-
-Two options let a run score a copy of the student's work from earlier in the step.
-Both use the copy with the best valid score from the task's [`validate` tool](../tasks/tools.md#validating-a-submission).
-Karotte refuses a run whose task doesn't use that tool, or has more than one step: the tool keeps one best copy for the whole task, so a later step could be given another step's files.
-It scores a step that declares no `submission_paths` as it is, and puts back only paths that the tool's `submission_paths` list.
-Both are off by default, and a run that sets them is not comparable with one that doesn't.
-
-| Field                   | Type                       | Meaning                                                                                                                                                                                     |
-| ----------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `on_invalid_submission` | `"restore_best"` or `null` | When the submission is missing or the dev scorer rejects it, put the best valid copy back before the step is scored. A submission that grades valid is left alone, even if it scores worse. |
-| `on_final_submission`   | `"keep_best"` or `null`    | Score the best valid copy even when the submission is valid. With no valid copy, score the submission as it is.                                                                             |
-
-Whenever there is a copy to put back, karotte stops the student's processes before it does anything else, so no background job can change the files while they are checked or replaced.
-`restore_best` then grades the submission on disk with the dev scorer, as a `validate` call would.
-That extra run doesn't use up one of the student's calls, doesn't move the call interval, and its result is not recorded or shown to the student.
-The submission is replaced only when the dev scorer says it has no valid output or crashed on it, or when it is missing.
-It is left alone when it grades valid, and also when the dev scorer cannot say: it ran past its timeout, crashed or exited with an error, wrote no usable result, or the files kept changing while they were copied.
-Karotte logs a warning then, because a transient scorer failure should not cost the student a good submission.
-"Valid" is the dev scorer's verdict, not the final judge's: a submission that the dev scorer accepts but the judge rejects is not replaced.
-
-Karotte replaces whatever sits at the path without following a symlink.
-Restored files belong to root.
-The artifacts of `extra_artifact_paths` are saved before the copy goes back, so they hold what the student left.
-
 ## Agents
 
 The agent produces the student's messages and tool calls for each step.

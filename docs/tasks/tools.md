@@ -7,13 +7,12 @@ Karotte serves them over the [Model Context Protocol](https://modelcontextprotoc
 
 Karotte ships these tools in `karotte.tools`:
 
-| Tool                 | What it does                                                                                                                            |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `bash`               | Runs a command in a persistent bash session as the student.                                                                             |
-| `view_lines_in_file` | Returns a range of lines from a file.                                                                                                   |
-| `replace_in_file`    | Replaces an exact string in a file and returns a diff.                                                                                  |
-| `view_image_file`    | Shows the model a `.jpeg`, `.png`, `.gif` or `.webp` image.                                                                             |
-| `validate`           | Scores the student's current submission on a dev split and reports how it did; see [Validating a submission](#validating-a-submission). |
+| Tool                 | What it does                                                |
+| -------------------- | ----------------------------------------------------------- |
+| `bash`               | Runs a command in a persistent bash session as the student. |
+| `view_lines_in_file` | Returns a range of lines from a file.                       |
+| `replace_in_file`    | Replaces an exact string in a file and returns a diff.      |
+| `view_image_file`    | Shows the model a `.jpeg`, `.png`, `.gif` or `.webp` image. |
 
 The file tools check permissions and read or write the file as the student, so the student can't use them to reach files it couldn't reach from `bash`.
 
@@ -124,92 +123,45 @@ A custom tool with the same name as a built-in one replaces it.
 `karotte check` lists every tool it finds and fails if one doesn't meet these rules.
 Make sure that the tool's dependencies are in the root venv (see [Python dependencies](data-and-dependencies.md#python-dependencies)).
 
-## Validating a submission
+### Validation tools
 
-The `validate` tool lets the student check its submission part-way through a step.
-It takes no arguments: it always grades the files in the step's `submission_paths`, as they are at that moment.
-It never scores the step, so the step's judge still decides the score.
+An environment can provide a custom validation tool so the student can check its submission and use the feedback to decide what to try next.
+The environment owns the scorer, the feedback it exposes, and the safeguards needed to run it during a step.
 
-Each call copies the submission to a place only root can read, runs a _dev scorer_ on the copy as root, and returns one JSON object:
-
-| Field                 | Meaning                                                                                                                         |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `tier`                | `valid` (graded), `no_valid_output` (missing, or rejected by the scorer) or `crash` (it failed, or kept changing while copied). |
-| `dev_metric`          | The dev score to three significant figures, or `null` unless `tier` is `valid`.                                                 |
-| `metric`              | The metric's name and which direction is better.                                                                                |
-| `reason`              | Why a call has no score, or `null`. Text from the scorer is cleaned and cut; see the scorer contract below.                     |
-| `delta_vs_prev_valid` | `dev_metric` minus the last valid call's, both as shown to three significant figures, or `null`.                                |
-| `best_dev_metric`     | The best `dev_metric` so far, or `null`.                                                                                        |
-| `elapsed_s`           | How long the call took.                                                                                                         |
-| `calls_left`          | Calls the student has left.                                                                                                     |
-
-A call is refused with `reason` set, and costs nothing, once `max_calls` calls have been made (`"budget spent"`) or when less than `min_interval_s` has passed since the last one.
-A refused call reports the tier of the last call and `dev_metric: null`.
-A call that finds the dev scorer itself broken (see the scorer contract below) is reported the same way, with `reason: "validation is unavailable"`, and costs nothing either; the interval still applies.
-
-The tool keeps one state for the whole task: its calls, their spacing and the best copy.
-In a task with several steps it grades the same `submission_paths` whichever step the student is in, so give such a task one `ValidateConfig` that lists the paths of every step, and don't use the run config's [submission fallbacks](../running/run-config.md#submission-fallbacks), which refuse a task with more than one step.
-
-Configure the tool in `configure_tools()` and add it to the task's `tools`:
+For example, put a `validate` callable in `src/environment/tools/validate.py`:
 
 ```python
-import sys
+from fastmcp.tools.tool import ToolResult
 
-from karotte import Task, ToolConfigWriter
-from karotte.tools.validate import ValidateConfig
+from environment.validation import check_submission
 
 
-class MyTask(Task):
-    @property
-    def tools(self):
-        return ["bash", "validate"]
-
-    def configure_tools(self) -> None:
-        ToolConfigWriter().write(
-            "validate",
-            ValidateConfig(
-                dev_command=[sys.executable, "-m", "environment.dev_score"],
-                metric="accuracy",
-                submission_paths=self.submission_paths,
-                max_calls=5,
-                min_interval_s=60,
-                timeout_s=60,
-            ),
-        )
+async def validate() -> ToolResult:
+    """Check your current submission on the development split."""
+    report = await check_submission()
+    return ToolResult(content=report)
 ```
 
-`higher_is_better` (default `true`) says which direction the metric improves in.
-`snapshot_limits` takes the limits `save_submission` takes (`max_file_bytes`, `max_total_bytes`, `max_entries`, `max_depth`); pass the ones the step's final judge copies with.
-`submission_paths` need distinct file names.
+Here, `check_submission` is an async function the environment implements; it returns a string containing only feedback the student may see.
+Add the tool explicitly to the task:
 
-Karotte runs the dev scorer as `dev_command` plus two arguments: a directory holding a copy of each submission path under its own file name, and the path of a JSON file to write.
-The file has the shape an `ExecutableJudge` script writes, with two optional keys:
-
-```json
-{ "score": 0.83, "metadata": {}, "tier": "valid", "reason": null }
+```python
+@property
+def tools(self):
+    return ["bash", "validate"]
 ```
 
-- `score` is required when the tier is `valid`, which is the default.
-- `tier` may also be `no_valid_output` or `crash`; then `reason` is shown to the student.
-  Karotte removes control characters from it, collapses runs of whitespace (line breaks included) into one space, and cuts it to 300 characters.
-  It is the only free text from the scorer that reaches the student, so never put labels, expected outputs or details of the dev split in it: say what is wrong with the submission, such as `expected 10 columns, found 8`.
-- Nothing else reaches the student: not `metadata`, and not the scorer's output.
+If the tool needs configuration, use `ToolBase` and write its config in `configure_tools()` as above.
+Initialize any call budget or other state once per episode; repeated setup must not replenish the budget.
+For a task with several steps, define which step's submission each call checks.
+Keep validation data separate from the final judge's held-out data, and keep labels, expected outputs and scorer secrets out of the feedback.
+The tool provides feedback; the step's judge still determines the final score.
 
-A scorer that runs past `timeout_s` counts as a `crash`, because a submission can hang it.
-A scorer that can't be started, exits with an error or writes no usable file is broken, and says nothing about the submission.
-Karotte logs an error, does not count the call, does not record it as the student's last or best result, and tells the student only that validation is unavailable.
-So report a submission the scorer can't handle through `tier`, and exit with an error only for a bug of the scorer's own.
-Karotte starts the scorer in its own process group at lower priority and kills the group when the call ends.
-
-A call doesn't stop the student's processes, so a background job could change the files while they are copied, and the copy would mix two states.
-Karotte therefore compares the files with the copy once it is made, and copies again if they differ.
-If they differ a second time, the call is a `crash` whose `reason` says the submission kept changing; it uses up a call, and the copy is neither scored nor kept as the best one.
-
-Keep the dev split out of the final judge's data, and out of the student's reach.
-Otherwise repeated calls reveal the labels the final score depends on.
-
-Karotte keeps the copy with the best valid score.
-Two [run config](../running/run-config.md#submission-fallbacks) options can score it in place of what the student left.
+A validation scorer needs safeguards appropriate to its environment, just as the final judge does.
+If student-controlled files may change during a call, validate a consistent copy and discard it afterwards.
+Run student-controlled code, including code invoked while loading a submission, with student privileges and without harness secrets (see [Running commands as the student](#running-commands-as-the-student)).
+Bound execution time, memory and GPU use, accounting for student processes that may still be running.
+Check these safeguards with the environment's actual scorer; a subprocess timeout alone does not provide them.
 
 ## Running commands as the student
 

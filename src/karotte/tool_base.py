@@ -11,30 +11,27 @@ class ToolBase[ConfigT: BaseModel](ABC):
     config_schema: ClassVar[type[BaseModel]]
 
     def __init__(self) -> None:
-        self.config: Final = self.load_config()
+        self.config: Final = self._load_tool_config()
 
     @property
     def tool_name(self) -> str:
         return self.__class__.__name__
 
-    @classmethod
-    def load_config(cls) -> ConfigT:
-        """The config a task wrote for this tool with `ToolConfigWriter`, or the
-        schema's defaults if it wrote none. Reads it without making a tool."""
+    def _load_tool_config(self) -> ConfigT:
         if CONFIGS_DIR.is_dir():
-            config_path = CONFIGS_DIR / f"{cls.__name__}.json"
+            config_path = CONFIGS_DIR / f"{self.tool_name}.json"
             if config_path.is_file():
                 return cast(
                     ConfigT,
-                    cls.config_schema.model_validate_json(config_path.read_text()),
+                    self.config_schema.model_validate_json(config_path.read_text()),
                 )
 
-        return cast(ConfigT, cls.config_schema())
+        return cast(ConfigT, self.config_schema())
 
 
 class ToolConfigWriter:
-    def __init__(self, config_dir: Path | None = None) -> None:
-        self.config_dir: Final = CONFIGS_DIR if config_dir is None else config_dir
+    def __init__(self, config_dir: Path = CONFIGS_DIR) -> None:
+        self.config_dir: Final = config_dir
 
     def write(self, tool_name: str, config: BaseModel) -> Self:
         self.config_dir.mkdir(parents=True, exist_ok=True)

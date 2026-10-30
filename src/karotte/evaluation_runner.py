@@ -31,7 +31,6 @@ from karotte.container import is_containerized
 from karotte.durable_write import write_durably
 from karotte.mcp_servers.resource_sampler import ResourceSampler
 from karotte.protected_store import ProtectedStore
-from karotte.restore_submission import restore_best_submission
 from karotte.save_artifact import save_artifact
 from karotte.schemas import RunStatus
 from karotte.schemas.chat import Message
@@ -55,7 +54,6 @@ from karotte.schemas.transcript import (
 from karotte.subprocess import ipc_namespace_available
 from karotte.text import escape_surrogates
 from karotte.truncation import sanitize_metadata
-from karotte.validation import clear_snapshots
 
 
 class EvaluationRunner:
@@ -82,16 +80,6 @@ class EvaluationRunner:
         ):
             msg = f"turn_limit can't be enforced by the {config.resolved_agent} agent"
             raise ValueError(msg)
-        if (
-            config.on_invalid_submission is not None
-            or config.on_final_submission is not None
-        ):
-            if "validate" not in task.tools:
-                msg = "on_invalid_submission and on_final_submission need the validate tool, which the task doesn't use"
-                raise ValueError(msg)
-            if len(list(task.steps)) > 1:
-                msg = "on_invalid_submission and on_final_submission need a task with one step: the validate tool keeps one best copy for the whole task, so a later step could be given another step's files"
-                raise ValueError(msg)
 
     def _make_agent(self) -> Agent:
         match self.config.resolved_agent:
@@ -154,7 +142,6 @@ class EvaluationRunner:
         server, and register those tools."""
         ToolConfigWriter().clear()
         ProtectedStore().clear()
-        clear_snapshots()
         self.task.configure_tools()
         tools = [t for t in self.task.tools if t not in self._agent.native_tool_names]
         async with self._connect_to_mcp_server() as mcp_client:
@@ -278,8 +265,6 @@ class EvaluationRunner:
         # captures the file whenever it exists; runs after every step.
         _save_extra_artifacts(self.config)
 
-        await self._restore_validated_submission(step)
-
         if self.config.mcp_server_config.profile_tool_calls:
             async with ResourceSampler() as sampler:
                 scoring = await asyncio.to_thread(
@@ -294,25 +279,6 @@ class EvaluationRunner:
         )
 
         step.post_hook()
-
-    async def _restore_validated_submission(self, step: Step) -> None:
-        """Before scoring, put back the best copy the `validate` tool graded as
-        valid when the run's options ask for it. Runs after the artifacts are
-        saved, so those hold what the student left."""
-        if (
-            self.config.on_invalid_submission is None
-            and self.config.on_final_submission is None
-        ):
-            return
-        paths = step.submission_paths
-        if not paths:
-            logger.warning(
-                "The step declares no submission_paths, so there is nothing to restore"
-            )
-            return
-        _ = await restore_best_submission(
-            paths, only_if_invalid=self.config.on_final_submission != "keep_best"
-        )
 
     @asynccontextmanager
     async def _connect_to_mcp_server(self):

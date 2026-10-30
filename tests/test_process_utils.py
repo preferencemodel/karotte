@@ -21,7 +21,6 @@ They need Linux + root (to reap a separate uid without killing the test
 process); everywhere else they skip.
 """
 
-import contextlib
 import os
 import resource
 import shutil
@@ -46,7 +45,6 @@ from karotte.process_utils import (
     _kill_cohort_from_within,  # pyright: ignore[reportPrivateUsage]
     _kill_pidns_cohort,  # pyright: ignore[reportPrivateUsage]
     _kill_sweep,  # pyright: ignore[reportPrivateUsage]
-    kill_process_group,
     kill_processes,
 )
 from karotte.student_misbehavior import StudentMisbehaviorError
@@ -1195,43 +1193,3 @@ def test_kill_processes_reaps_namespaces_before_verifying(
     kill_processes(1000, pass_interval=0, deadline=5)
 
     assert inside.kill_calls >= 1
-
-
-def test_kill_process_group_kills_every_member() -> None:
-    leader = subprocess.Popen(
-        ["sh", "-c", "sleep 60 & sleep 60 & echo started; wait"],
-        stdout=subprocess.PIPE,
-        start_new_session=True,
-    )
-    try:
-        assert leader.stdout is not None
-        assert leader.stdout.readline() == b"started\n", "the sleeps did not start"
-
-        kill_process_group(leader.pid)
-
-        # Both sleeps inherited the pipe's write end, so it closes, and
-        # `communicate` returns, only once every member of the group is dead.
-        _ = leader.communicate(timeout=10)
-        assert leader.returncode == -signal.SIGKILL
-    finally:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(leader.pid, signal.SIGKILL)
-        _ = leader.wait()
-
-
-def test_kill_process_group_ignores_a_group_that_is_gone() -> None:
-    gone = subprocess.Popen(["true"], start_new_session=True)
-    _ = gone.wait()
-
-    kill_process_group(gone.pid)
-
-
-def test_kill_process_group_ignores_a_group_it_may_not_signal(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def refuse(_pgid: int, _signal: int) -> None:
-        raise PermissionError
-
-    monkeypatch.setattr(os, "killpg", refuse)
-
-    kill_process_group(12345)
