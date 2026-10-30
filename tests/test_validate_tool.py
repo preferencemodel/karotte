@@ -7,7 +7,7 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, final
+from typing import Any, Final, final
 
 import pytest
 from fastmcp import Client
@@ -23,11 +23,13 @@ from karotte.validation import load_state
 
 @final
 class Env:
-    def __init__(self, tmp_path: Path, scorer: Path) -> None:
+    def __init__(
+        self, tmp_path: Path, dev_command: Callable[[Path, Path], list[str]]
+    ) -> None:
         self.submission: Path = tmp_path / "work" / "answer.txt"
         self.submission.parent.mkdir()
         self.counter: Path = tmp_path / "counter"
-        self.scorer: Path = scorer
+        self.dev_command: Final = dev_command(self.counter, self.submission)
 
     @property
     def scorer_runs(self) -> int:
@@ -37,12 +39,7 @@ class Env:
 
     def configure(self, **overrides: Any) -> validate:
         settings: dict[str, Any] = {
-            "dev_command": [
-                sys.executable,
-                str(self.scorer),
-                str(self.counter),
-                str(self.submission),
-            ],
+            "dev_command": self.dev_command,
             "metric": "accuracy",
             "submission_paths": (self.submission,),
             "min_interval_s": 0,
@@ -55,8 +52,12 @@ class Env:
 
 
 @pytest.fixture
-def env(tmp_path: Path, karotte_state: Path, dev_scorer: Path) -> Env:  # pyright: ignore[reportUnusedParameter]
-    return Env(tmp_path, dev_scorer)
+def env(
+    tmp_path: Path,
+    karotte_state: Path,  # pyright: ignore[reportUnusedParameter]
+    dev_command: Callable[[Path, Path], list[str]],
+) -> Env:
+    return Env(tmp_path, dev_command)
 
 
 async def call(tool: validate) -> dict[str, Any]:

@@ -3,7 +3,6 @@ disk when the step gets scored."""
 
 import os
 import shutil
-import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,7 +52,7 @@ async def run_episode(
     config: EvaluationRunConfig,
     mcp_server: HttpMcpServer,
     monkeypatch: pytest.MonkeyPatch,
-    dev_scorer: Path,
+    dev_command: Callable[[Path, Path], list[str]],
     tmp_path: Path,
     episode: Episode,
     validate_settings: dict[str, Any],
@@ -107,12 +106,7 @@ async def run_episode(
         @override
         def configure_tools(self) -> None:
             settings: dict[str, Any] = {
-                "dev_command": [
-                    sys.executable,
-                    str(dev_scorer),
-                    str(tmp_path / "counter"),
-                    str(submission),
-                ],
+                "dev_command": dev_command(tmp_path / "counter", submission),
                 "metric": "accuracy",
                 "submission_paths": self.submission_paths,
                 "min_interval_s": 0,
@@ -140,7 +134,7 @@ def run(
     karotte_state: Path,  # pyright: ignore[reportUnusedParameter]
     mcp_server: HttpMcpServer,
     monkeypatch: pytest.MonkeyPatch,
-    dev_scorer: Path,
+    dev_command: Callable[[Path, Path], list[str]],
     tmp_path: Path,
 ) -> Callable[..., Awaitable[Outcome]]:
     async def go(
@@ -153,7 +147,7 @@ def run(
             config=sample_config.model_copy(update=config),
             mcp_server=mcp_server,
             monkeypatch=monkeypatch,
-            dev_scorer=dev_scorer,
+            dev_command=dev_command,
             tmp_path=tmp_path,
             episode=episode,
             validate_settings=validate_settings or {},

@@ -236,22 +236,14 @@ def karotte_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Move everything karotte keeps under `~/.config/karotte` (tool configs,
     protected store, validation snapshots) into `tmp_path`, for this process and
     for MCP server subprocesses started after the fixture. Returns that
-    directory.
-
-    The directories are bound as parameter defaults or module constants when
-    karotte is imported, so setting `HOME` is not enough in this process."""
+    directory."""
     from karotte import protected_store, tool_base, validation
 
     home = tmp_path / "home"
     state = home / ".config" / "karotte"
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setattr(tool_base, "CONFIGS_DIR", state / "tool_configs")
-    monkeypatch.setattr(
-        tool_base.ToolConfigWriter.__init__, "__defaults__", (state / "tool_configs",)
-    )
-    monkeypatch.setattr(
-        protected_store.ProtectedStore.__init__, "__defaults__", (state / "protected",)
-    )
+    monkeypatch.setattr(protected_store, "PROTECTED_STORE_DIR", state / "protected")
     monkeypatch.setattr(validation, "SNAPSHOTS_DIR", state / "validate_snapshots")
     return state
 
@@ -291,12 +283,21 @@ _DEV_SCORER = textwrap.dedent(
 )
 
 
+DevCommand = Callable[[Path, Path], list[str]]
+"""Builds `ValidateConfig.dev_command` from the file that counts the scorer's
+runs and the live submission file the scorer may rewrite."""
+
+
 @pytest.fixture
-def dev_scorer(tmp_path: Path) -> Path:
-    """A script for `ValidateConfig.dev_command` (run it with `sys.executable`)."""
-    path = tmp_path / "dev_scorer.py"
-    path.write_text(_DEV_SCORER)
-    return path
+def dev_command(tmp_path: Path) -> DevCommand:
+    """A `ValidateConfig.dev_command` builder for the dev scorer script above."""
+    script = tmp_path / "dev_scorer.py"
+    script.write_text(_DEV_SCORER)
+
+    def build(counter: Path, live_submission: Path) -> list[str]:
+        return [sys.executable, str(script), str(counter), str(live_submission)]
+
+    return build
 
 
 @pytest.fixture(autouse=True)
