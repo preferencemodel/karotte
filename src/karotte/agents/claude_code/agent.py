@@ -132,8 +132,6 @@ class ClaudeCodeAgent(CliAgent):
                 # template's default applies. It overrides `--effort`, so only
                 # when the run config sets no effort.
                 env["CLAUDE_CODE_EFFORT_LEVEL"] = "unset"
-        if (reply := self._config.max_output_tokens) is not None:
-            env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = str(reply)
         return env
 
     def _argv(self, instructions: str, prompt_file: Path | None) -> list[str]:

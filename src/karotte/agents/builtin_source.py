@@ -19,7 +19,7 @@ from litellm import (
 from litellm.types.utils import ModelResponse, ModelResponseStream, StreamingChoices
 from loguru import logger
 
-from karotte.model_spec import IMAGE_OMITTED_TEXT, spec_for
+from karotte.model_spec import spec_for
 from karotte.providers import (
     TOOL_CALL_REPAIRS,
     ProviderAuth,
@@ -71,6 +71,7 @@ _INVALID_URL_ERRORS = (
     aiohttp.NonHttpUrlClientError,
 )
 
+IMAGE_OMITTED_TEXT = "[image omitted: this model cannot take image input]"
 
 _RETRY_AFTER_BODY_RE = re.compile(r'"retry_after"\s*:\s*(\d+(?:\.\d+)?)')
 
@@ -429,7 +430,7 @@ class BuiltinSource:
             "messages": serialized_messages,
             "tools": tools,
             "tool_choice": "auto" if tools else None,
-            "max_tokens": self.config.max_output_tokens or spec.max_output_tokens,
+            "max_tokens": spec.max_output_tokens,
             "timeout": 300.0,
             # this is needed for together ai and other such providers, doesn't seem to break
             # claude api calls, so doing it for everyone

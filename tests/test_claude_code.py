@@ -167,12 +167,6 @@ class TestClaudeCodeAgent:
         with pytest.raises(ValueError, match="KAROTTE_PROXY_URL"):
             await agent.start(MagicMock())
 
-    def test_a_run_can_cap_output_tokens(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("CLAUDE_CODE_MAX_OUTPUT_TOKENS", raising=False)
-        env = _agent(extra_config={"max_output_tokens": 32000})._env()  # pyright: ignore[reportPrivateUsage]
-        assert env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] == "32000"
-        assert "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in _agent()._env()  # pyright: ignore[reportPrivateUsage]
-
     def test_only_a_self_hosted_model_points_the_model_aliases_at_itself(
         self, monkeypatch: pytest.MonkeyPatch
     ):
