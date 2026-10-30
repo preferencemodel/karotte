@@ -358,7 +358,7 @@ async def restore_best_submission(
         return False
     if only_if_invalid and await _submission_stays(config, paths):
         return False
-    return await asyncio.to_thread(_put_back, best, paths)
+    return await asyncio.to_thread(_put_back, best, paths, config.submission_paths)
 
 
 async def _submission_stays(config: ValidateConfig, paths: tuple[Path, ...]) -> bool:
@@ -392,10 +392,18 @@ def _stop_student() -> bool:
     return True
 
 
-def _put_back(snapshot: Path, paths: tuple[Path, ...]) -> bool:
-    """Returns whether at least one path got its copy back."""
+def _put_back(
+    snapshot: Path, paths: tuple[Path, ...], graded: tuple[Path, ...]
+) -> bool:
+    """Returns whether at least one path got its copy back. The copy holds each
+    of the `graded` paths under its file name, so a path is restored only if it
+    is one of them: another path with the same file name must not be given that
+    content."""
     restored = False
     for path in paths:
+        if path not in graded:
+            logger.warning("{} is not a path the validate tool graded", path)
+            continue
         source = snapshot / path.name
         if not os.path.lexists(source):
             logger.warning("The best valid copy holds nothing for {}", path)

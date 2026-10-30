@@ -146,6 +146,9 @@ Each call copies the submission to a place only root can read, runs a _dev score
 A call is refused with `reason` set, and costs nothing, once `max_calls` calls have been made (`"budget spent"`) or when less than `min_interval_s` has passed since the last one.
 A refused call reports the tier of the last call and `dev_metric: null`.
 
+The tool keeps one state for the whole task: its calls, their spacing and the best copy.
+In a task with several steps it grades the same `submission_paths` whichever step the student is in, so give such a task one `ValidateConfig` that lists the paths of every step, and don't use the run config's [submission fallbacks](../running/run-config.md#submission-fallbacks), which refuse a task with more than one step.
+
 Configure the tool in `configure_tools()` and add it to the task's `tools`:
 
 ```python

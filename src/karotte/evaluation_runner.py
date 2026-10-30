@@ -85,9 +85,13 @@ class EvaluationRunner:
         if (
             config.on_invalid_submission is not None
             or config.on_final_submission is not None
-        ) and "validate" not in task.tools:
-            msg = "on_invalid_submission and on_final_submission need the validate tool, which the task doesn't use"
-            raise ValueError(msg)
+        ):
+            if "validate" not in task.tools:
+                msg = "on_invalid_submission and on_final_submission need the validate tool, which the task doesn't use"
+                raise ValueError(msg)
+            if len(list(task.steps)) > 1:
+                msg = "on_invalid_submission and on_final_submission need a task with one step: the validate tool keeps one best copy for the whole task, so a later step could be given another step's files"
+                raise ValueError(msg)
 
     def _make_agent(self) -> Agent:
         match self.config.resolved_agent:

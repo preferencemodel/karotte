@@ -205,7 +205,8 @@ Agents that run a step in their own process can only enforce the limits their CL
 
 Two options let a run score a copy of the student's work from earlier in the step.
 Both use the copy with the best valid score from the task's [`validate` tool](../tasks/tools.md#validating-a-submission).
-Karotte refuses a run whose task doesn't use that tool, and scores a step that declares no `submission_paths` as it is.
+Karotte refuses a run whose task doesn't use that tool, or has more than one step: the tool keeps one best copy for the whole task, so a later step could be given another step's files.
+It scores a step that declares no `submission_paths` as it is, and puts back only paths that the tool's `submission_paths` list.
 Both are off by default, and a run that sets them is not comparable with one that doesn't.
 
 | Field                   | Type                       | Meaning                                                                                                                                                                                     |

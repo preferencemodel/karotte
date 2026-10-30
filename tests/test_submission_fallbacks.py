@@ -541,6 +541,43 @@ def test_the_options_need_the_validate_tool(sample_config: EvaluationRunConfig):
         _ = EvaluationRunner(config, TestTask(config))
 
 
+def test_the_options_need_a_task_with_one_step(
+    sample_config: EvaluationRunConfig, monkeypatch: pytest.MonkeyPatch
+):
+    from tests.conftest import TestTask
+
+    # TestTask has two steps.
+    monkeypatch.setattr(TestTask, "tools", property(lambda _self: ["validate"]))
+    config = sample_config.model_copy(update={"on_final_submission": "keep_best"})
+
+    with pytest.raises(ValueError, match="task with one step"):
+        _ = EvaluationRunner(config, TestTask(config))
+
+
+@pytest.mark.asyncio
+async def test_restore_leaves_a_path_the_tool_never_graded_alone(
+    run: Callable[..., Awaitable[Outcome]], tmp_path: Path
+):
+    namesake = tmp_path / "elsewhere" / "answer.txt"
+    namesake.parent.mkdir()
+    namesake.write_text("not graded")
+    restored: list[bool] = []
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        restored.append(
+            await restore_best_submission(
+                (namesake,), tool.config, only_if_invalid=False
+            )
+        )
+
+    _ = await run(episode)
+
+    assert restored == [False]
+    assert namesake.read_text() == "not graded"
+
+
 @pytest.mark.asyncio
 async def test_a_student_that_cannot_be_stopped_is_scored_as_it_is(
     run: Callable[..., Awaitable[Outcome]],
