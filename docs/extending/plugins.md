@@ -16,6 +16,7 @@ Templates have their own entry point, which [Template packages](template-package
 | `karotte.default_hardware`         | a string                                           | The `required_hardware` of tasks that don't set one.                                                                  |
 | `karotte.hardware_limits`          | `f(hardware)` returning `HardwareLimits` or `None` | The memory, disk and CPUs a sandbox on that hardware gets.                                                            |
 | `karotte.container_run_args`       | `f(task, runtime) -> list[str]`                    | Extra arguments for the container engine's `run` command.                                                             |
+| `karotte.cli_agents`               | a `CliAgent` subclass                              | Adds a [CLI agent](../running/run-config.md) named after the class's `name`.                                          |
 
 ## Registering a plugin
 
@@ -59,6 +60,7 @@ If the values add up, Karotte uses all of them.
 | `karotte.update_migrations`                                                                   | All of them run, in installation order (not sorted by name). For `tool`, the first one that doesn't return `None` wins. |
 | `karotte.default_hardware`, `karotte.hardware_limits`                                         | The first by name wins.                                                                                                 |
 | `karotte.container_run_args`                                                                  | All of them run, in entry point name order, and Karotte concatenates their arguments.                                   |
+| `karotte.cli_agents`                                                                          | Each one adds its agent. For two agents with the same `name`, the first by entry point name wins.                       |
 
 ## When a plugin fails to load
 
@@ -183,3 +185,17 @@ def container_run_args(task, runtime: str) -> list[str]:
         raise RuntimeError("GPU tasks need --runtime docker")
     return ["--gpus", "all"]
 ```
+
+### `karotte.cli_agents`
+
+The attribute is a subclass of [`CliAgent`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/agents/cli_agent.py).
+It becomes available as `karotte run --agent <name>`, where `<name>` is the class's `name`, and in `karotte agents list`.
+If its `name` is one of Karotte's own agents, Karotte ignores it with a warning.
+The package must be installed in the environment's image, since the agent runs there.
+
+```toml
+[project.entry-points."karotte.cli_agents"]
+my_agent = "my_plugin.agent:MyAgent"
+```
+
+A `CliAgent` can override `_step_artifacts()` to return files that Karotte saves as artifacts after each step.

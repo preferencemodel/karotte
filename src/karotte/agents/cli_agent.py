@@ -15,6 +15,7 @@ import shutil
 import signal
 import tempfile
 from collections.abc import AsyncGenerator, Callable, Iterable, Mapping
+from importlib.metadata import entry_points
 from pathlib import Path
 from typing import ClassVar, Literal
 
@@ -137,6 +138,10 @@ class CliAgent(abc.ABC):
         A non-zero exit quotes it instead of stderr, which can end in unrelated
         warnings."""
         return None
+
+    def _step_artifacts(self) -> list[Path]:
+        """Extra files to save as artifacts after each step."""
+        return []
 
     def _prompt_text(self, instructions: str) -> str:
         """What the CLI reads from the prompt file."""
@@ -344,6 +349,8 @@ class CliAgent(abc.ABC):
             except TimeoutError:
                 stderr_b = b""
             save_artifact(self._config, log_path)
+            for path in self._step_artifacts():
+                save_artifact(self._config, path)
 
         if timed_out:
             logger.warning(
@@ -442,7 +449,11 @@ def install_release(
     return ["; ".join(steps)]
 
 
+CLI_AGENTS_ENTRY_POINT_GROUP = "karotte.cli_agents"
+
 _CLI_AGENTS: dict[str, type[CliAgent]] = {}
+
+_plugins_loaded = False
 
 
 def register_cli_agent[C: CliAgent](cls: type[C]) -> type[C]:
@@ -450,12 +461,42 @@ def register_cli_agent[C: CliAgent](cls: type[C]) -> type[C]:
     return cls
 
 
+def _load_plugin_agents() -> None:
+    """Register the CLI agents of installed packages, once. A plugin can't
+    replace one of karotte's own agents."""
+    global _plugins_loaded
+    if _plugins_loaded:
+        return
+    _plugins_loaded = True
+    builtin = set(_CLI_AGENTS)
+    for ep in sorted(
+        entry_points(group=CLI_AGENTS_ENTRY_POINT_GROUP), key=lambda ep: ep.name
+    ):
+        try:
+            cls = ep.load()
+        except Exception as e:  # noqa: BLE001 - a broken plugin must not break karotte
+            logger.warning("Ignoring CLI agent {!r}: {}", ep.name, e)
+            continue
+        if not (isinstance(cls, type) and issubclass(cls, CliAgent)):
+            logger.warning("Ignoring CLI agent {!r}: not a CliAgent subclass", ep.name)
+        elif cls.name in builtin:
+            logger.warning(
+                "Ignoring CLI agent {!r}: {!r} is built in", ep.name, cls.name
+            )
+        elif cls.name in _CLI_AGENTS:
+            logger.warning("Ignoring CLI agent {!r}: {!r} is taken", ep.name, cls.name)
+        else:
+            _CLI_AGENTS[cls.name] = cls
+
+
 def cli_agent_types() -> dict[str, type[CliAgent]]:
-    """All registered CLI agents, keyed by ``name``."""
+    """All registered CLI agents, keyed by ``name``, including plugins'."""
+    _load_plugin_agents()
     return dict(_CLI_AGENTS)
 
 
 def get_cli_agent_type(name: str) -> type[CliAgent]:
+    _load_plugin_agents()
     try:
         return _CLI_AGENTS[name]
     except KeyError:
