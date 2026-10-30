@@ -347,7 +347,8 @@ async def restore_best_submission(
     or rewrite a file while it is being checked or replaced. Returns False when
     there is no copy, the student could not be stopped, or (with
     `only_if_invalid`) the submission on disk is to stay: see
-    `_submission_stays`.
+    `_submission_stays`. Also returns False when no path could be put back; True
+    means at least one was.
     """
     best = load_state().best_snapshot
     if best is None or not best.is_dir():
@@ -392,9 +393,12 @@ def _stop_student() -> bool:
 
 
 def _put_back(snapshot: Path, paths: tuple[Path, ...]) -> bool:
+    """Returns whether at least one path got its copy back."""
+    restored = False
     for path in paths:
         source = snapshot / path.name
         if not os.path.lexists(source):
+            logger.warning("The best valid copy holds nothing for {}", path)
             continue
         try:
             parent_fd, name = walk_to_parent(path)
@@ -407,7 +411,10 @@ def _put_back(snapshot: Path, paths: tuple[Path, ...]) -> bool:
         finally:
             os.close(parent_fd)
         logger.info("Restored the best valid copy of {}", path)
-    return True
+        restored = True
+    if not restored:
+        logger.warning("None of the submission paths could be restored")
+    return restored
 
 
 def _remove_at(dir_fd: int, name: str) -> None:

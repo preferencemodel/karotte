@@ -14,7 +14,6 @@ from mcp.types import TextContent
 from karotte import ToolConfigWriter
 from karotte.mcp_servers.mcp_server import McpServer
 from karotte.tools.validate import ValidateConfig, validate
-from karotte.validation import restore_best_submission
 
 
 @final
@@ -432,34 +431,6 @@ async def test_a_scorer_that_cannot_start_is_a_crash(env: Env):
 
     assert payload["tier"] == "crash"
     assert payload["reason"] == "the dev scorer could not be started"
-
-
-@pytest.mark.asyncio
-async def test_restore_puts_back_every_path_exactly_as_it_was_graded(env: Env):
-    extras = env.submission.parent / "extras"
-    (extras / "sub").mkdir(parents=True)
-    (extras / "a.txt").write_text("a")
-    (extras / "sub" / "b.txt").write_text("b")
-    paths = (env.submission, extras)
-    tool = env.configure(submission_paths=paths)
-    env.write("0.5")
-    _ = await call(tool)
-    env.write("0.1")
-    (extras / "a.txt").unlink()
-    (extras / "sub" / "b.txt").write_text("changed")
-    (extras / "junk.txt").write_text("junk")
-
-    restored = await restore_best_submission(paths, tool.config, only_if_invalid=False)
-
-    assert restored
-    assert env.submission.read_text() == "0.5"
-    assert sorted(p.relative_to(extras).as_posix() for p in extras.rglob("*")) == [
-        "a.txt",
-        "sub",
-        "sub/b.txt",
-    ]
-    assert (extras / "a.txt").read_text() == "a"
-    assert (extras / "sub" / "b.txt").read_text() == "b"
 
 
 @pytest.mark.asyncio

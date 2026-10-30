@@ -2,6 +2,7 @@
 disk when the step gets scored."""
 
 import os
+import shutil
 import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -25,7 +26,7 @@ from karotte.schemas.transcript import (
     Transcript,
 )
 from karotte.tools.validate import ValidateConfig, validate
-from karotte.validation import load_state
+from karotte.validation import load_state, restore_best_submission
 
 JUDGE_SCORE = 0.25
 
@@ -54,6 +55,7 @@ async def run_episode(
     tmp_path: Path,
     episode: Episode,
     validate_settings: dict[str, Any],
+    extra_paths: tuple[Path, ...],
 ) -> Outcome:
     """Run a one-step task whose "model" is `episode`: it gets the validate tool
     and the submission path, and may write files and call the tool."""
@@ -75,7 +77,7 @@ async def run_episode(
         @property
         @override
         def submission_paths(self) -> tuple[Path, ...]:
-            return (submission,)
+            return (submission, *extra_paths)
 
         @override
         def pre_scoring_hook(self) -> None:
@@ -142,6 +144,7 @@ def run(
     async def go(
         episode: Episode,
         validate_settings: dict[str, Any] | None = None,
+        extra_paths: tuple[Path, ...] = (),
         **config: str,
     ) -> Outcome:
         return await run_episode(
@@ -152,6 +155,7 @@ def run(
             tmp_path=tmp_path,
             episode=episode,
             validate_settings=validate_settings or {},
+            extra_paths=extra_paths,
         )
 
     return go
@@ -255,6 +259,79 @@ async def test_keep_best_without_a_valid_copy_scores_the_submission_as_it_is(
     outcome = await run(episode, on_final_submission="keep_best")
 
     assert outcome.on_disk_at_scoring == "0.3"
+
+
+@pytest.mark.asyncio
+async def test_restore_puts_back_every_path_exactly_as_it_was_graded(
+    run: Callable[..., Awaitable[Outcome]], tmp_path: Path
+):
+    extras = tmp_path / "extras"
+    (extras / "sub").mkdir(parents=True)
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.5")
+        (extras / "a.txt").write_text("a")
+        (extras / "sub" / "b.txt").write_text("b")
+        _ = await tool()
+        submission.write_text("reject changed")
+        (extras / "a.txt").unlink()
+        (extras / "sub" / "b.txt").write_text("changed")
+        (extras / "junk.txt").write_text("junk")
+
+    outcome = await run(
+        episode, extra_paths=(extras,), on_invalid_submission="restore_best"
+    )
+
+    assert outcome.on_disk_at_scoring == "0.5"
+    assert sorted(p.relative_to(extras).as_posix() for p in extras.rglob("*")) == [
+        "a.txt",
+        "sub",
+        "sub/b.txt",
+    ]
+    assert (extras / "a.txt").read_text() == "a"
+    assert (extras / "sub" / "b.txt").read_text() == "b"
+
+
+@pytest.mark.asyncio
+async def test_restore_reports_that_it_put_a_copy_back(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    restored: list[bool] = []
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        submission.write_text("0.1")
+        restored.append(
+            await restore_best_submission(
+                (submission,), tool.config, only_if_invalid=False
+            )
+        )
+
+    _ = await run(episode)
+
+    assert restored == [True]
+
+
+@pytest.mark.asyncio
+async def test_restore_does_not_report_success_when_every_path_was_skipped(
+    run: Callable[..., Awaitable[Outcome]],
+):
+    restored: list[bool] = []
+
+    async def episode(tool: validate, submission: Path) -> None:
+        submission.write_text("0.7")
+        _ = await tool()
+        shutil.rmtree(submission.parent)
+        restored.append(
+            await restore_best_submission(
+                (submission,), tool.config, only_if_invalid=False
+            )
+        )
+
+    _ = await run(episode)
+
+    assert restored == [False]
 
 
 @pytest.mark.asyncio
