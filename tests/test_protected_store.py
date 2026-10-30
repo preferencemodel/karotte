@@ -24,6 +24,17 @@ class NestedModel(BaseModel):
     flag: bool = False
 
 
+class TestDefaultDirectory:
+    def test_the_default_directory_is_the_current_store_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("karotte.protected_store.PROTECTED_STORE_DIR", tmp_path)
+
+        ProtectedStore().write("secret", "value")
+
+        assert (tmp_path / "secret").read_text() == "value"
+
+
 class TestWrite:
     def test_write_string(self, tmp_path: Path):
         store = ProtectedStore(directory=tmp_path)

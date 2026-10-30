@@ -54,7 +54,6 @@ from karotte.schemas.transcript import (
 )
 from karotte.subprocess import ipc_namespace_available
 from karotte.text import escape_surrogates
-from karotte.tools.validate import validate
 from karotte.truncation import sanitize_metadata
 from karotte.validation import clear_snapshots
 
@@ -312,9 +311,7 @@ class EvaluationRunner:
             )
             return
         _ = await restore_best_submission(
-            paths,
-            validate().config,
-            only_if_invalid=self.config.on_final_submission != "keep_best",
+            paths, only_if_invalid=self.config.on_final_submission != "keep_best"
         )
 
     @asynccontextmanager

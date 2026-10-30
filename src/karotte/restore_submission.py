@@ -16,12 +16,13 @@ from loguru import logger
 from karotte.container import demoted_uid_gid
 from karotte.process_utils import kill_processes
 from karotte.student_misbehavior import StudentMisbehaviorError
+from karotte.tools.validate import ValidateConfig, validate
 from karotte.untrusted_paths import DIR_FLAGS, lstat_at, walk_to_parent
-from karotte.validation import ValidateConfig, grade_submission, load_state
+from karotte.validation import load_state
 
 
 async def restore_best_submission(
-    paths: tuple[Path, ...], config: ValidateConfig, *, only_if_invalid: bool
+    paths: tuple[Path, ...], *, only_if_invalid: bool
 ) -> bool:
     """Put the best copy a `validate` call graded as valid back over `paths`.
 
@@ -36,6 +37,7 @@ async def restore_best_submission(
     if best is None or not best.is_dir():
         logger.info("No valid copy was graded, so there is nothing to restore")
         return False
+    config = validate.load_config()
     if not await asyncio.to_thread(_stop_student):
         return False
     if only_if_invalid and await _submission_stays(config, paths):
@@ -50,7 +52,7 @@ async def _submission_stays(config: ValidateConfig, paths: tuple[Path, ...]) -> 
     submission because of one would lose it. The grade is not recorded and does
     not count as a call, and the student is already stopped, so nothing is
     reported or observable."""
-    grade = await grade_submission(config, paths)
+    grade = await config.grade(paths)
     grade.discard()
     if grade.doubt is not None:
         logger.warning(

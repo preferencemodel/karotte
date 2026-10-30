@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Final, Literal, get_args
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
 from karotte.demoted import drain_bounded
 from karotte.process_utils import kill_process_group
@@ -73,49 +73,6 @@ class SnapshotLimits(BaseModel):
     max_total_bytes: int | None = None
     max_entries: int | None = None
     max_depth: int | None = None
-
-
-class ValidateConfig(BaseModel):
-    """Configures the `validate` tool for a task."""
-
-    dev_command: list[str]
-    """The dev scorer's argv. Karotte appends the snapshot directory and the
-    path of the JSON file to write."""
-    metric: str
-    """Name of the dev metric, shown to the student."""
-    higher_is_better: bool = True
-    submission_paths: tuple[Path, ...]
-    """What gets graded: the absolute paths the step's student hands in. Use
-    the task's `submission_paths`."""
-    max_calls: int = 5
-    min_interval_s: float = 60.0
-    """Least time between two graded calls."""
-    timeout_s: float = 60.0
-    """Longest a dev scorer may run on one submission."""
-    snapshot_limits: SnapshotLimits = SnapshotLimits()
-    """Overrides for the limits on copying a submission. Use the ones the
-    step's final judge copies with."""
-
-    @model_validator(mode="after")
-    def _check(self) -> "ValidateConfig":
-        if not self.dev_command:
-            raise ValueError("dev_command must not be empty")
-        if not self.submission_paths:
-            raise ValueError("submission_paths must not be empty")
-        for path in self.submission_paths:
-            if not path.is_absolute():
-                raise ValueError(f"submission_paths must be absolute, got '{path}'")
-        names = [path.name for path in self.submission_paths]
-        if len(set(names)) != len(names):
-            raise ValueError(
-                "submission_paths must have distinct file names: the dev scorer "
-                + "finds each submission under its own name"
-            )
-        if self.max_calls < 0 or self.min_interval_s < 0 or self.timeout_s <= 0:
-            raise ValueError(
-                "max_calls and min_interval_s must not be negative and timeout_s must be positive"
-            )
-        return self
 
 
 @dataclass(frozen=True)
@@ -167,7 +124,9 @@ def clear_snapshots() -> None:
     shutil.rmtree(SNAPSHOTS_DIR, ignore_errors=True)
 
 
-def record_grade(config: ValidateConfig, state: ValidationState, grade: Grade) -> None:
+def record_grade(
+    state: ValidationState, grade: Grade, *, higher_is_better: bool
+) -> None:
     """Record `grade` in `state`. A valid grade that beats the best so far takes
     over as the kept copy and the old one is deleted; any other copy is deleted."""
     state.last_tier = grade.tier
@@ -176,7 +135,7 @@ def record_grade(config: ValidateConfig, state: ValidationState, grade: Grade) -
     state.last_valid_metric = grade.dev_metric
     best = state.best_metric
     improved = best is None or (
-        grade.dev_metric > best if config.higher_is_better else grade.dev_metric < best
+        grade.dev_metric > best if higher_is_better else grade.dev_metric < best
     )
     if not improved:
         grade.discard()
@@ -187,17 +146,28 @@ def record_grade(config: ValidateConfig, state: ValidationState, grade: Grade) -
     state.best_snapshot = grade.snapshot
 
 
-async def grade_submission(config: ValidateConfig, paths: tuple[Path, ...]) -> Grade:
+async def grade_submission(
+    paths: tuple[Path, ...],
+    *,
+    dev_command: list[str],
+    timeout_s: float,
+    snapshot_limits: SnapshotLimits,
+) -> Grade:
     """Copy `paths` somewhere root-only and run the dev scorer on the copy,
     leaving the student's processes alone."""
     started = time.monotonic()
-    grade = await _grade(config, paths)
+    grade = await _grade(paths, dev_command, timeout_s, snapshot_limits)
     return replace(grade, elapsed_s=time.monotonic() - started)
 
 
-async def _grade(config: ValidateConfig, paths: tuple[Path, ...]) -> Grade:
+async def _grade(
+    paths: tuple[Path, ...],
+    dev_command: list[str],
+    timeout_s: float,
+    snapshot_limits: SnapshotLimits,
+) -> Grade:
     try:
-        snapshot = _take_snapshot(paths, config.snapshot_limits)
+        snapshot = _take_snapshot(paths, snapshot_limits)
     except _SubmissionRejectedError as e:
         return Grade("no_valid_output", reason=str(e))
     except _SubmissionChangedError:
@@ -206,7 +176,7 @@ async def _grade(config: ValidateConfig, paths: tuple[Path, ...]) -> Grade:
             reason="the submission kept changing while it was copied",
             doubt="submission_changed",
         )
-    grade = await _run_scorer(config, snapshot)
+    grade = await _run_scorer(dev_command, timeout_s, snapshot)
     if grade.tier == "valid":
         return replace(grade, snapshot=snapshot)
     shutil.rmtree(snapshot, ignore_errors=True)
@@ -319,7 +289,9 @@ def _same_file(copy: Path, dir_fd: int, name: str) -> bool:
         os.close(fd)
 
 
-async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
+async def _run_scorer(
+    dev_command: list[str], timeout_s: float, snapshot: Path
+) -> Grade:
     with tempfile.TemporaryDirectory(dir=SNAPSHOTS_DIR) as out_dir:
         result_file = Path(out_dir) / "result.json"
         # The stderr pipe is ours rather than asyncio's, whose `wait()` would not
@@ -327,7 +299,7 @@ async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
         read_fd, write_fd = os.pipe()
         try:
             proc = await asyncio.create_subprocess_exec(
-                *config.dev_command,
+                *dev_command,
                 str(snapshot),
                 str(result_file),
                 stdin=asyncio.subprocess.DEVNULL,
@@ -338,7 +310,7 @@ async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
             )
         except OSError as e:
             os.close(read_fd)
-            return _scorer_failed(f"cannot start {config.dev_command}: {e}")
+            return _scorer_failed(f"cannot start {dev_command}: {e}")
         finally:
             os.close(write_fd)
         stderr = asyncio.StreamReader()
@@ -351,7 +323,7 @@ async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
         )
         timed_out = False
         try:
-            async with asyncio.timeout(config.timeout_s):
+            async with asyncio.timeout(timeout_s):
                 _ = await proc.wait()
         except TimeoutError:
             timed_out = True
@@ -364,7 +336,7 @@ async def _run_scorer(config: ValidateConfig, snapshot: Path) -> Grade:
         if timed_out:
             return Grade(
                 "crash",
-                reason=f"the dev scorer did not finish within {config.timeout_s:g} s",
+                reason=f"the dev scorer did not finish within {timeout_s:g} s",
                 doubt="scorer_timed_out",
             )
         if proc.returncode != 0:

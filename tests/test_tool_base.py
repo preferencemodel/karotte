@@ -64,6 +64,23 @@ class TestToolBase:
 
         assert tool.tool_name == "dummy_tool"
 
+    def test_load_config_reads_the_config_without_making_a_tool(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        (tmp_path / "dummy_tool.json").write_text('{"value": 42, "name": "custom"}')
+        monkeypatch.setattr("karotte.tool_base.CONFIGS_DIR", tmp_path)
+
+        config = dummy_tool.load_config()
+
+        assert config == DummyConfig(value=42, name="custom")
+
+    def test_load_config_returns_the_defaults_when_none_was_written(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("karotte.tool_base.CONFIGS_DIR", tmp_path)
+
+        assert dummy_tool.load_config() == DummyConfig()
+
 
 class TestToolConfigWriter:
     def test_write_creates_directory_if_missing(self, tmp_path: Path):
@@ -84,6 +101,15 @@ class TestToolConfigWriter:
         loaded = DummyConfig.model_validate_json(config_file.read_text())
         assert loaded.value == 123
         assert loaded.name == "test"
+
+    def test_the_default_directory_is_the_current_configs_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("karotte.tool_base.CONFIGS_DIR", tmp_path / "configs")
+
+        ToolConfigWriter().write("my_tool", DummyConfig(value=5))
+
+        assert (tmp_path / "configs" / "my_tool.json").is_file()
 
     def test_write_returns_self_for_chaining(self, tmp_path: Path):
         writer = ToolConfigWriter(config_dir=tmp_path)

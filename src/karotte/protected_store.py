@@ -72,8 +72,8 @@ class ProtectedStore:
         token = store.read("api_token", str)
     """
 
-    def __init__(self, directory: Path = PROTECTED_STORE_DIR) -> None:
-        self._directory: Final = directory
+    def __init__(self, directory: Path | None = None) -> None:
+        self._directory: Final = PROTECTED_STORE_DIR if directory is None else directory
 
     def _resolve_path(self, name: str) -> Path:
         """Resolve and validate a secret name to a path within the store directory.

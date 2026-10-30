@@ -1,21 +1,73 @@
 import asyncio
 import math
 import time
+from pathlib import Path
 from typing import Any, final
 
 from fastmcp.tools.tool import ToolResult
 from karotte import ToolBase
 from karotte.validation import (
     Grade,
-    ValidateConfig,
+    SnapshotLimits,
     ValidationState,
     grade_submission,
     load_state,
     record_grade,
     save_state,
 )
+from pydantic import BaseModel, model_validator
 
-__all__ = ["ValidateConfig", "validate"]
+
+class ValidateConfig(BaseModel):
+    """Configures the `validate` tool for a task."""
+
+    dev_command: list[str]
+    """The dev scorer's argv. Karotte appends the snapshot directory and the
+    path of the JSON file to write."""
+    metric: str
+    """Name of the dev metric, shown to the student."""
+    higher_is_better: bool = True
+    submission_paths: tuple[Path, ...]
+    """What gets graded: the absolute paths the step's student hands in. Use
+    the task's `submission_paths`."""
+    max_calls: int = 5
+    min_interval_s: float = 60.0
+    """Least time between two graded calls."""
+    timeout_s: float = 60.0
+    """Longest a dev scorer may run on one submission."""
+    snapshot_limits: SnapshotLimits = SnapshotLimits()
+    """Overrides for the limits on copying a submission. Use the ones the
+    step's final judge copies with."""
+
+    @model_validator(mode="after")
+    def _check(self) -> "ValidateConfig":
+        if not self.dev_command:
+            raise ValueError("dev_command must not be empty")
+        if not self.submission_paths:
+            raise ValueError("submission_paths must not be empty")
+        for path in self.submission_paths:
+            if not path.is_absolute():
+                raise ValueError(f"submission_paths must be absolute, got '{path}'")
+        names = [path.name for path in self.submission_paths]
+        if len(set(names)) != len(names):
+            raise ValueError(
+                "submission_paths must have distinct file names: the dev scorer "
+                + "finds each submission under its own name"
+            )
+        if self.max_calls < 0 or self.min_interval_s < 0 or self.timeout_s <= 0:
+            raise ValueError(
+                "max_calls and min_interval_s must not be negative and timeout_s must be positive"
+            )
+        return self
+
+    async def grade(self, paths: tuple[Path, ...]) -> Grade:
+        """Run the dev scorer on a copy of `paths`."""
+        return await grade_submission(
+            paths,
+            dev_command=self.dev_command,
+            timeout_s=self.timeout_s,
+            snapshot_limits=self.snapshot_limits,
+        )
 
 
 def _three_significant_figures(value: float | None) -> float | None:
@@ -63,7 +115,7 @@ class validate(ToolBase[ValidateConfig]):
                         f"too soon: wait {math.ceil(wait)} s before calling again",
                     )
 
-            grade = await grade_submission(self.config, self.config.submission_paths)
+            grade = await self.config.grade(self.config.submission_paths)
             state.last_call_at = time.time()
             if grade.doubt == "scorer_failed":
                 # The environment's fault: the call is not counted, and the
@@ -72,7 +124,7 @@ class validate(ToolBase[ValidateConfig]):
                 return self._refused(state, "validation is unavailable")
             delta = _delta(grade.dev_metric, state.last_valid_metric)
             state.calls += 1
-            record_grade(self.config, state, grade)
+            record_grade(state, grade, higher_is_better=self.config.higher_is_better)
             save_state(state)
             return self._result(state, grade, delta)
 

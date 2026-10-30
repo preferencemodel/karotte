@@ -305,9 +305,7 @@ async def test_restore_reports_that_it_put_a_copy_back(
         _ = await tool()
         submission.write_text("0.1")
         restored.append(
-            await restore_best_submission(
-                (submission,), tool.config, only_if_invalid=False
-            )
+            await restore_best_submission((submission,), only_if_invalid=False)
         )
 
     _ = await run(episode)
@@ -326,9 +324,7 @@ async def test_restore_does_not_report_success_when_every_path_was_skipped(
         _ = await tool()
         shutil.rmtree(submission.parent)
         restored.append(
-            await restore_best_submission(
-                (submission,), tool.config, only_if_invalid=False
-            )
+            await restore_best_submission((submission,), only_if_invalid=False)
         )
 
     _ = await run(episode)
@@ -595,9 +591,7 @@ async def test_restore_leaves_a_path_the_tool_never_graded_alone(
         submission.write_text("0.7")
         _ = await tool()
         restored.append(
-            await restore_best_submission(
-                (namesake,), tool.config, only_if_invalid=False
-            )
+            await restore_best_submission((namesake,), only_if_invalid=False)
         )
 
     _ = await run(episode)
