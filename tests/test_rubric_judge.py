@@ -728,7 +728,7 @@ def test_transcript_context_filtered_by_tool(
             tool_call_id="tc1",
             result=CallToolResult(
                 content=[TextContent(type="text", text="Training complete")],
-                isError=False,
+                is_error=False,
             ),
         )
     )
@@ -747,7 +747,7 @@ def test_transcript_context_filtered_by_tool(
             tool_call_id="tc2",
             result=CallToolResult(
                 content=[TextContent(type="text", text="Submitted")],
-                isError=False,
+                is_error=False,
             ),
         )
     )

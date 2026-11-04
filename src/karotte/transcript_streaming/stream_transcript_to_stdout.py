@@ -117,8 +117,8 @@ async def stream_transcript_to_stdout(event_stream: AsyncIterator[Event]):
 
             case ToolCallCompletedEvent():
                 print("✅ Tool call completed:")
-                if event.result.structuredContent:
-                    for key, value in event.result.structuredContent.items():
+                if event.result.structured_content:
+                    for key, value in event.result.structured_content.items():
                         print(f"{escape(str(key))}:\n{escape(_truncate(value))}")
 
             case AnswersSubmittedEvent():

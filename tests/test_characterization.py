@@ -462,7 +462,7 @@ async def test_malformed_json_sanitizes_arguments_in_transcript(
 
     tool_results = _events_of_type(events, ToolCallCompletedEvent)
     assert len(tool_results) == 1
-    assert tool_results[0].result.isError
+    assert tool_results[0].result.is_error
     assert malformed_call.function.arguments == json.dumps(
         {"_error": "malformed JSON in original arguments"}
     )

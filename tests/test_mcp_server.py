@@ -57,7 +57,7 @@ async def test_mcp_server_register_function_tool(tmp_path: Path):
         result = await client.call_tool_mcp(
             "replace_in_file", {"file": 12, "old": "world", "new": "universe"}
         )
-        assert result.isError is True
+        assert result.is_error is True
 
 
 @pytest.mark.asyncio
@@ -96,7 +96,7 @@ async def test_register_custom_environment_tool(
     (env_tools_dir / "__init__.py").write_text("")
 
     tool_code = '''\
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def custom_tool(param: str) -> ToolResult:
     """A custom tool from environment.tools."""

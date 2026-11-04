@@ -4,7 +4,7 @@ from typing import override
 
 import mcp.types as mt
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from karotte.mcp_servers.resource_sampler import ResourceSampler
 
 

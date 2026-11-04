@@ -1,6 +1,12 @@
 from typing import Any
 
-from mcp.types import CallToolResult, ContentBlock, ImageContent, TextContent
+from mcp.types import (
+    SERVER_INFO_META_KEY,
+    CallToolResult,
+    ContentBlock,
+    ImageContent,
+    TextContent,
+)
 
 from karotte.schemas.chat import Message
 from karotte.schemas.transcript import MessageAddedEvent, ToolCallCompletedEvent
@@ -11,14 +17,16 @@ def tool_result_events(
 ) -> tuple[ToolCallCompletedEvent, MessageAddedEvent]:
     """A tool result and the tool message the model reads; an image's bytes are kept only in the message."""
     content = [_to_chat_content_part(block) for block in result.content]
+    meta = {k: v for k, v in (result.meta or {}).items() if k != SERVER_INFO_META_KEY}
     result = result.model_copy(
         update={
+            "meta": meta or None,
             "content": [
                 block.model_copy(update={"data": ""})
                 if isinstance(block, ImageContent)
                 else block
                 for block in result.content
-            ]
+            ],
         }
     )
     return (
@@ -41,7 +49,7 @@ def _to_chat_content_part(block: ContentBlock) -> dict[str, Any]:
     if isinstance(block, ImageContent):
         return {
             "type": "image_url",
-            "image_url": {"url": f"data:{block.mimeType};base64,{block.data}"},
+            "image_url": {"url": f"data:{block.mime_type};base64,{block.data}"},
         }
 
     if isinstance(block, TextContent):

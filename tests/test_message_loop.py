@@ -10,7 +10,6 @@ from mcp.types import (
     ImageContent,
     TextContent,
 )
-from pydantic import AnyUrl
 
 from karotte.agents.agent import (
     BlockedTurnLimitReachedError,
@@ -65,7 +64,7 @@ def test_annotated_text_content_carries_no_mcp_only_keys():
 
 
 def test_image_content_becomes_a_data_url():
-    block = ImageContent(type="image", data="Ym9ndXM=", mimeType="image/png")
+    block = ImageContent(type="image", data="Ym9ndXM=", mime_type="image/png")
 
     part = _to_chat_content_part(block)
 
@@ -76,7 +75,7 @@ def test_image_content_becomes_a_data_url():
 
 
 def test_audio_content_falls_back_to_json_text():
-    block = AudioContent(type="audio", data="Ym9ndXM=", mimeType="audio/wav")
+    block = AudioContent(type="audio", data="Ym9ndXM=", mime_type="audio/wav")
 
     part = _to_chat_content_part(block)
 
@@ -87,7 +86,7 @@ def test_audio_content_falls_back_to_json_text():
 def test_embedded_resource_falls_back_to_json_text():
     block = EmbeddedResource(
         type="resource",
-        resource=BlobResourceContents(uri=AnyUrl("file:///tmp/x.bin"), blob="Ym9ndXM="),
+        resource=BlobResourceContents(uri="file:///tmp/x.bin", blob="Ym9ndXM="),
     )
 
     part = _to_chat_content_part(block)
@@ -99,8 +98,8 @@ def test_embedded_resource_falls_back_to_json_text():
 def test_no_content_block_type_leaks_mcp_only_keys():
     blocks = [
         TextContent(type="text", text="hello"),
-        ImageContent(type="image", data="Ym9ndXM=", mimeType="image/png"),
-        AudioContent(type="audio", data="Ym9ndXM=", mimeType="audio/wav"),
+        ImageContent(type="image", data="Ym9ndXM=", mime_type="image/png"),
+        AudioContent(type="audio", data="Ym9ndXM=", mime_type="audio/wav"),
     ]
 
     for block in blocks:

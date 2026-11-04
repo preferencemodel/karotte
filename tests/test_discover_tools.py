@@ -5,7 +5,7 @@ from types import ModuleType
 from typing import Annotated
 
 import pytest
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 from karotte.mcp_servers.discover_tools import (
     InvalidToolError,
@@ -259,7 +259,7 @@ class TestEnvironmentToolsDiscovery:
 
         # Create a valid tool module
         tool_code = '''
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def custom_tool(param: str) -> ToolResult:
     """A custom tool from environment.tools."""
@@ -300,7 +300,7 @@ def custom_tool(param: str) -> ToolResult:
         (env_tools_dir / "__init__.py").write_text("")
 
         tool_code = '''
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def env_specific_tool(x: int) -> ToolResult:
     """Environment specific tool."""
@@ -357,7 +357,7 @@ def env_specific_tool(x: int) -> ToolResult:
 
         # Create a tool with the same name as an existing karotte tool
         tool_code = '''
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def bash(command: str) -> ToolResult:
     """Custom bash tool from environment."""
@@ -485,7 +485,7 @@ class TestFutureAnnotationsCompatibility:
         tool_code = '''\
 from __future__ import annotations
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def future_tool(x: int, y: str) -> ToolResult:
     """A tool that uses future annotations."""
@@ -505,7 +505,7 @@ def future_tool(x: int, y: str) -> ToolResult:
         tool_code = '''\
 from __future__ import annotations
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 class class_tool:
     def __call__(self, x: int) -> ToolResult:

@@ -92,19 +92,20 @@
     "type": "tool_call_completed",
     "tool_call_id": "call_1",
     "result": {
-      "meta": null,
+      "_meta": null,
       "content": [
         {
           "type": "text",
           "text": "{\"echo\":\"hello\"}",
           "annotations": null,
-          "meta": null
+          "_meta": null
         }
       ],
       "structuredContent": {
         "echo": "hello"
       },
-      "isError": false
+      "isError": false,
+      "resultType": "complete"
     }
   },
   {
@@ -141,19 +142,20 @@
     "type": "tool_call_completed",
     "tool_call_id": "call_2",
     "result": {
-      "meta": null,
+      "_meta": null,
       "content": [
         {
           "type": "text",
           "text": "{\"echo\":\"world\"}",
           "annotations": null,
-          "meta": null
+          "_meta": null
         }
       ],
       "structuredContent": {
         "echo": "world"
       },
-      "isError": false
+      "isError": false,
+      "resultType": "complete"
     }
   },
   {
@@ -258,18 +260,19 @@
     "type": "tool_call_completed",
     "tool_call_id": "call_3",
     "result": {
-      "meta": null,
+      "_meta": null,
       "content": [
         {
           "type": "image",
           "data": "",
           "mimeType": "image/png",
           "annotations": null,
-          "meta": null
+          "_meta": null
         }
       ],
       "structuredContent": null,
-      "isError": false
+      "isError": false,
+      "resultType": "complete"
     }
   },
   {
@@ -339,10 +342,11 @@
     "type": "tool_call_completed",
     "tool_call_id": "call_4",
     "result": {
-      "meta": null,
+      "_meta": null,
       "content": [],
       "structuredContent": null,
-      "isError": false
+      "isError": false,
+      "resultType": "complete"
     }
   },
   {
@@ -374,19 +378,20 @@
     "type": "tool_call_completed",
     "tool_call_id": "call_5",
     "result": {
-      "meta": null,
+      "_meta": null,
       "content": [
         {
           "type": "text",
           "text": "Error: Invalid JSON in tool arguments",
           "annotations": null,
-          "meta": null
+          "_meta": null
         }
       ],
       "structuredContent": {
         "result": "Error: Invalid JSON in tool arguments"
       },
-      "isError": true
+      "isError": true,
+      "resultType": "complete"
     }
   },
   {

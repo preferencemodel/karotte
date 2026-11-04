@@ -1,4 +1,4 @@
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 
 def echo(text: str) -> ToolResult:

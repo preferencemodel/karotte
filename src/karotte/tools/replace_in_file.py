@@ -4,7 +4,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from karotte.demoted import check_access as _check_access
 from karotte.demoted import communicate_or_kill as _communicate_or_kill
 from karotte.demoted import open_error, open_regular_as_stdin, open_regular_as_stdout

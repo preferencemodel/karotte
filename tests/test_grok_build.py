@@ -227,8 +227,8 @@ class TestParseStream:
         ]
         completed = [e for e in events if isinstance(e, ToolCallCompletedEvent)]
         assert started == [c.tool_call_id for c in completed] == ["call_a", "call_b"]
-        assert completed[0].result.isError is False
-        assert completed[1].result.isError is True
+        assert completed[0].result.is_error is False
+        assert completed[1].result.is_error is True
 
     def test_usage_is_reported_not_estimated(self):
         usage = [e for e in self._events() if isinstance(e, TokenUsageEvent)]
@@ -301,7 +301,7 @@ class TestParseStream:
         assert isinstance(completed, ToolCallCompletedEvent)
         assert completed.tool_call_id == "call_img"
         assert completed.result.content == [
-            ImageContent(type="image", data="", mimeType="image/jpeg")
+            ImageContent(type="image", data="", mime_type="image/jpeg")
         ]
         assert isinstance(message, MessageAddedEvent)
         assert message.message.role == "tool"

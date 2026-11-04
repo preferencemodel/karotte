@@ -69,7 +69,7 @@ A tool that records the student's answer and saves it in a place where the stude
 
 ```python
 # src/environment/tools/submit_answer.py
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from karotte import ProtectedStore
 
 
@@ -86,7 +86,7 @@ The class name is the tool name, and `self.config` holds the config:
 # src/environment/tools/run_tests.py
 import asyncio
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from karotte import ToolBase
 from karotte.subprocess import make_demote_fn, student_env
 from pydantic import BaseModel

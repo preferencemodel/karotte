@@ -4,7 +4,7 @@ import stat
 from pathlib import Path
 from typing import final
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from karotte import ToolBase, demoted
 from karotte.demoted import check_access as _check_access
 from karotte.demoted import (

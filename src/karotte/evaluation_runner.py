@@ -304,7 +304,7 @@ class EvaluationRunner:
             function=ChatCompletionToolParamFunctionChunk(
                 name=tool.name,
                 description=tool.description,
-                parameters=tool.inputSchema,
+                parameters=tool.input_schema,
             ),
         )
 

@@ -158,18 +158,18 @@ def convert_tool_call_completed_event_to_markdown(
     is_submit_answers_call: bool = False,
     tool_name: str | None = None,
 ) -> str:
-    if is_submit_answers_call and not event.result.isError:
+    if is_submit_answers_call and not event.result.is_error:
         return ""
 
-    if event.result.isError:
+    if event.result.is_error:
         markdown = "##### ❌ Error\n\n"
     else:
         markdown = "##### ✅ Result\n\n"
 
     from mcp.types import ImageContent, TextContent
 
-    if event.result.structuredContent:
-        for key, value in event.result.structuredContent.items():
+    if event.result.structured_content:
+        for key, value in event.result.structured_content.items():
             # Filter out empty stdout for bash tool
             if tool_name == "bash" and key == "stdout" and value == "":
                 continue
@@ -181,7 +181,7 @@ def convert_tool_call_completed_event_to_markdown(
     else:
         for item in event.result.content:
             if isinstance(item, ImageContent):
-                mime_type = item.mimeType or "unknown"
+                mime_type = item.mime_type or "unknown"
                 markdown += f"[Image: {mime_type}]\n\n"
             elif isinstance(item, TextContent):
                 markdown += add_code_block_to_markdown(item.text)
@@ -190,10 +190,10 @@ def convert_tool_call_completed_event_to_markdown(
 
     # Display resource metrics if present in structuredContent
     if (
-        event.result.structuredContent
-        and "_karotte_resource_metrics" in event.result.structuredContent
+        event.result.structured_content
+        and "_karotte_resource_metrics" in event.result.structured_content
     ):
-        metrics_obj = event.result.structuredContent["_karotte_resource_metrics"]
+        metrics_obj = event.result.structured_content["_karotte_resource_metrics"]
         if isinstance(metrics_obj, dict) and metrics_obj.get("samples"):
             m = ResourceMetrics.model_validate(metrics_obj)
             markdown += f"\n**Container Resources**: CPU {m.avg_cpu_percent:.1f}% (peak {m.peak_cpu_percent:.1f}%) | Memory {m.avg_memory_mb:.0f} MB (peak {m.peak_memory_mb:.0f} MB)\n"

@@ -85,6 +85,7 @@
         "name": "echo",
         "description": "Echoes `text` back to the caller.",
         "parameters": {
+          "type": "object",
           "additionalProperties": false,
           "properties": {
             "text": {
@@ -93,8 +94,7 @@
           },
           "required": [
             "text"
-          ],
-          "type": "object"
+          ]
         }
       }
     },
@@ -104,9 +104,9 @@
         "name": "get_image",
         "description": "Returns a fixed 1x1 pixel PNG image.",
         "parameters": {
+          "type": "object",
           "additionalProperties": false,
-          "properties": {},
-          "type": "object"
+          "properties": {}
         }
       }
     }

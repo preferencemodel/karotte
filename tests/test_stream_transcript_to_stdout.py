@@ -340,7 +340,7 @@ async def test_tool_completed_with_square_brackets_preserved():
     """Test that square brackets in tool result structuredContent are preserved."""
     result = CallToolResult(
         content=[],
-        structuredContent={"key[1]": "value[2]", "result": "text1[text2]text3"},
+        structured_content={"key[1]": "value[2]", "result": "text1[text2]text3"},
     )
     event = ToolCallCompletedEvent(tool_call_id="test_id", result=result)
 
@@ -606,7 +606,7 @@ async def test_message_chunk_event_empty_content():
 @pytest.mark.asyncio
 async def test_tool_completed_without_structured_content():
     """Test that ToolCallCompletedEvent without structuredContent prints header only."""
-    result = CallToolResult(content=[], structuredContent=None)
+    result = CallToolResult(content=[], structured_content=None)
     event = ToolCallCompletedEvent(tool_call_id="test_id", result=result)
 
     async def event_generator():
@@ -801,7 +801,7 @@ async def test_all_event_types_are_handled():
             )
             test_events.append(ToolCallStartedEvent(tool_call=tool_call))
         elif event_type == ToolCallCompletedEvent:
-            result = CallToolResult(content=[], structuredContent={})
+            result = CallToolResult(content=[], structured_content={})
             test_events.append(
                 ToolCallCompletedEvent(tool_call_id="test_id", result=result)
             )
@@ -867,7 +867,7 @@ async def test_scoring_metadata_display_is_truncated():
 
 @pytest.mark.asyncio
 async def test_structured_content_display_is_truncated():
-    result = CallToolResult(content=[], structuredContent={"output": "x" * 1_000_000})
+    result = CallToolResult(content=[], structured_content={"output": "x" * 1_000_000})
 
     async def event_generator():
         yield ToolCallCompletedEvent(tool_call_id="test_id", result=result)

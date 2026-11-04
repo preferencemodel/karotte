@@ -61,7 +61,7 @@ async def test_non_object_arguments_give_an_error_result(
 
     completed = await _completed(tool_call, mcp_client)
 
-    assert completed.result.isError
+    assert completed.result.is_error
     assert isinstance(json.loads(tool_call.function.arguments), dict)
 
 
@@ -73,7 +73,7 @@ async def test_invalid_json_gives_an_error_result(
 
     completed = await _completed(tool_call, mcp_client)
 
-    assert completed.result.isError
+    assert completed.result.is_error
     assert isinstance(json.loads(tool_call.function.arguments), dict)
 
 
@@ -88,5 +88,5 @@ async def test_valid_arguments_still_call_the_tool(
 ):
     completed = await _completed(_call(name, arguments), mcp_client)
 
-    assert not completed.result.isError
+    assert not completed.result.is_error
     assert completed.result.content[0].text == text  # pyright: ignore[reportAttributeAccessIssue]
