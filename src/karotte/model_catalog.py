@@ -38,6 +38,7 @@ CATALOG_MODEL_IDS: tuple[str, ...] = (
     "claude-opus-4-5-20251101",
     "claude-sonnet-4-5-20250929",
     "claude-haiku-4-5-20251001",
+    "together_ai/moonshotai/Kimi-K3.1-Pro",
     "together_ai/moonshotai/Kimi-K3",
     "together_ai/moonshotai/Kimi-K2.6",
     "together_ai/moonshotai/Kimi-K2.5",

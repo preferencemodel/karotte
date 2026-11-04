@@ -123,6 +123,7 @@ class TestExtraAllowedOpenAIParams:
             ),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", ("reasoning_effort",)),
             ("together_ai/moonshotai/Kimi-K3", ("reasoning_effort",)),
+            ("together_ai/moonshotai/Kimi-K3.1-Pro", ("reasoning_effort",)),
             ("together_ai/zai-org/GLM-5.2", ()),
             ("together_ai/moonshotai/Kimi-K2.6", ()),
             ("claude-opus-5", ()),
@@ -149,6 +150,7 @@ class TestMaxOutputTokens:
             ("gemini/gemini-3.8-flash", 64000),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", 128000),
             ("together_ai/zai-org/GLM-5.3", 64000),
+            ("together_ai/moonshotai/Kimi-K3.1-Pro", 64000),
             # Fireworks documents no output ceiling for it, so it keeps the default.
             ("fireworks_ai/accounts/fireworks/models/glm-5p3-flash", 64000),
             ("together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017", 393216),
@@ -256,6 +258,7 @@ class TestReasoningEffort:
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", ("low", "xhigh")),
             # Kimi K3 takes low, high and max; K2.x answers 400 to the parameter.
             ("together_ai/moonshotai/Kimi-K3", ("low", "max")),
+            ("together_ai/moonshotai/Kimi-K3.1-Pro", ("low", "max")),
             ("minimax/MiniMax-M3", (None, None)),
             # xhigh is 4.6 and up; xAI documents no range for 4.3.
             ("xai/grok-4.7", ("low", "xhigh")),
@@ -333,6 +336,7 @@ class TestReasoningEffort:
             ),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", ("low", "medium", "xhigh")),
             ("together_ai/moonshotai/Kimi-K3", ("low", "high", "max")),
+            ("together_ai/moonshotai/Kimi-K3.1-Pro", ("low", "high", "max")),
             ("together_ai/moonshotai/Kimi-K2.6", ()),
             ("together_ai/zai-org/GLM-5.2", ()),
             ("minimax/MiniMax-M3", ()),
@@ -518,6 +522,7 @@ class TestDisplayNames:
             ("openai/gpt-6-luna", "GPT-6 Luna"),
             ("openai/gpt-6.1-sol", "GPT-6.1 Sol"),
             ("together_ai/moonshotai/Kimi-K3", "Kimi K3"),
+            ("together_ai/moonshotai/Kimi-K3.1-Pro", "Kimi K3.1 Pro"),
             ("together_ai/moonshotai/Kimi-K2.6", "Kimi K2.6"),
             ("together_ai/deepseek-ai/DeepSeek-V3.1", "DeepSeek V3.1"),
             ("together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", "DeepSeek V4 Pro 0813"),

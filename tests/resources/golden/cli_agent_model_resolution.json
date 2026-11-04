@@ -83,6 +83,12 @@
     "env": {},
     "key_env": null
   },
+  "together_ai/moonshotai/Kimi-K3.1-Pro": {
+    "provider": "together_ai",
+    "model": "moonshotai/Kimi-K3.1-Pro",
+    "env": {},
+    "key_env": null
+  },
   "together_ai/moonshotai/Kimi-K3": {
     "provider": "together_ai",
     "model": "moonshotai/Kimi-K3",

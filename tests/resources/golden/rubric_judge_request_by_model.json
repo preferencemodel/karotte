@@ -125,6 +125,15 @@
       "the criterion is met"
     ]
   },
+  "together_ai/moonshotai/Kimi-K3.1-Pro": {
+    "model": "together_ai/moonshotai/Kimi-K3.1-Pro",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
   "together_ai/moonshotai/Kimi-K3": {
     "model": "together_ai/moonshotai/Kimi-K3",
     "max_tokens": 32000,
