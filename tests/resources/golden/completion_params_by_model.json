@@ -519,6 +519,37 @@
     ],
     "api_key": "test_key"
   },
+  "together_ai/moonshotai/Kimi-K3.1-Pro": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "together_ai/moonshotai/Kimi-K3.1-Pro",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 64000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice",
+      "reasoning_effort"
+    ],
+    "api_key": "test_key",
+    "extra_body": {
+      "reasoning": {
+        "enabled": true
+      }
+    }
+  },
   "together_ai/moonshotai/Kimi-K3": {
     "stream": true,
     "stream_options": {

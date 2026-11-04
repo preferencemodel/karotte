@@ -69,6 +69,11 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "together_ai/moonshotai/Kimi-K3.1-Pro": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
   "together_ai/moonshotai/Kimi-K3": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,

@@ -15,6 +15,7 @@
     "claude-opus-4-5-20251101": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-sonnet-4-5-20250929": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-haiku-4-5-20251001": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
+    "together_ai/moonshotai/Kimi-K3.1-Pro": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "together_ai/moonshotai/Kimi-K3": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "together_ai/moonshotai/Kimi-K2.6": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "together_ai/moonshotai/Kimi-K2.5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",

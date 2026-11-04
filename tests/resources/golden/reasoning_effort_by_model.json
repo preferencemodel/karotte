@@ -426,6 +426,24 @@
       "mapped_by_litellm": {}
     }
   },
+  "together_ai/moonshotai/Kimi-K3.1-Pro": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "high"
+      }
+    }
+  },
   "together_ai/moonshotai/Kimi-K3": {
     "None": {
       "sent_by_karotte": null,

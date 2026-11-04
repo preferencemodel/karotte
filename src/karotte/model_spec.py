@@ -177,6 +177,7 @@ _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
     # The same checkpoint under Fireworks' spelling of the id.
     "glm-5p3": ("low", "high", "max"),
     "glm-5p3-flash": ("low", "high", "max"),
+    "Kimi-K3.1-Pro": ("low", "medium", "high", "max"),
     "Kimi-K3": ("low", "high", "max"),
     "Qwen3.8-2.4T-A95B": ("low", "medium", "xhigh"),
 }
@@ -203,6 +204,7 @@ _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
         "glm-5p3",
         "glm-5p3-flash",
         "Qwen3.8-2.4T-A95B",
+        "Kimi-K3.1-Pro",
         "Kimi-K3",
     ),
     ("reasoning_effort",),

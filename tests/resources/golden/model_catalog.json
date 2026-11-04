@@ -344,6 +344,29 @@
       "extra_allowed_openai_params": []
     },
     {
+      "model": "together_ai/moonshotai/Kimi-K3.1-Pro",
+      "model_display_name": "Kimi K3.1 Pro",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/moonshotai/Kimi-K3.1-Pro",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "max",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
       "model": "together_ai/moonshotai/Kimi-K3",
       "model_display_name": "Kimi K3",
       "provider": "together_ai",
