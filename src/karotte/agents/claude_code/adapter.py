@@ -8,6 +8,10 @@ it. Claude Code runs a tool as soon as its call has streamed, so a result can
 arrive before the response that asked for it ends; such results are held until
 then. Lines with a non-null ``parent_tool_use_id`` come from subagents and are
 left out (the native log, saved as an artifact, keeps them).
+
+With ``--include-hook-events``, the context a tool hook hands the model (the
+time-left note) arrives just before the tool's result, and is kept with it, at
+the end of the tool message, where the builtin agent puts its own note.
 """
 
 import json
@@ -17,6 +21,7 @@ from typing import Any
 from loguru import logger
 from mcp.types import CallToolResult, ContentBlock, ImageContent, TextContent
 
+from karotte.agents.message_loop import append_text_content
 from karotte.agents.ndjson import parse_json_line
 from karotte.agents.tool_results import tool_result_events
 from karotte.agents.usage import messages_usage_event
@@ -26,6 +31,11 @@ from karotte.schemas.transcript import (
     MessageAddedEvent,
     ToolCallStartedEvent,
 )
+
+# Claude Code runs `PostToolUse` hooks after a tool call that succeeded and
+# `PostToolUseFailure` ones after one that failed, a shell command that exited
+# non-zero included. What they add reaches the model next to the result.
+TOOL_RESULT_HOOK_EVENTS = ("PostToolUse", "PostToolUseFailure")
 
 
 def parse_stream(lines: Iterable[str]) -> Iterator[Event]:
@@ -43,6 +53,8 @@ class StreamParser:
         self._usage: dict[str, Any] = {}
         self._in_response: bool = False
         self._held_results: list[Event] = []
+        self._hook_notes: list[str] = []
+        """What tool hooks added, for the tool result that follows them."""
         self.error: str | None = None
         """What Claude Code's ``result`` line reported, if the run ended in an error."""
 
@@ -57,8 +69,15 @@ class StreamParser:
                 content = _message(record).get("content")
                 if isinstance(content, list):
                     self._blocks.extend(b for b in content if isinstance(b, dict))
+            case "system" if record.get("subtype") == "hook_response":
+                if (note := _tool_hook_note(record)) is not None:
+                    self._hook_notes.append(note)
             case "user":
-                events = _user_events(_message(record).get("content"))
+                events = list(_user_events(_message(record).get("content")))
+                if self._hook_notes and _add_to_last_tool_message(
+                    events, self._hook_notes
+                ):
+                    self._hook_notes = []
                 if self._in_response:
                     self._held_results.extend(events)
                 else:
@@ -156,6 +175,30 @@ def _user_events(content: Any) -> Iterator[Event]:
             yield from tool_result_events(str(block.get("tool_use_id") or ""), result)
     if texts:
         yield MessageAddedEvent(message=Message(role="user", content="".join(texts)))
+
+
+def _tool_hook_note(record: dict[str, Any]) -> str | None:
+    """The context a tool hook's output hands the model, if any."""
+    if record.get("hook_event") not in TOOL_RESULT_HOOK_EVENTS:
+        return None
+    try:
+        output = json.loads(str(record.get("stdout") or ""))
+    except json.JSONDecodeError:
+        return None
+    specific = output.get("hookSpecificOutput") if isinstance(output, dict) else None
+    context = specific.get("additionalContext") if isinstance(specific, dict) else None
+    return context if isinstance(context, str) and context else None
+
+
+def _add_to_last_tool_message(events: list[Event], notes: list[str]) -> bool:
+    """Append `notes` to the last tool message in `events`, as the builtin agent
+    appends its own; False if there is none."""
+    for event in reversed(events):
+        if isinstance(event, MessageAddedEvent) and event.message.role == "tool":
+            for note in notes:
+                append_text_content(event.message, note)
+            return True
+    return False
 
 
 def _result_content(content: Any) -> list[ContentBlock]:

@@ -83,9 +83,10 @@ These keys have a built-in meaning:
 | `extra_task_instructions`    | string or list of strings | Appended to the step's instructions after a blank line. A string applies to every step; a list has one entry per step, and steps past its end are unchanged.     |
 | `task_instructions_override` | string or list of strings | Replaces the step's instructions. Same string-or-list rules. Wins over `extra_task_instructions`.                                                                |
 | `extra_artifact_paths`       | string or list of strings | Absolute paths saved as [artifacts](../tasks/artifacts-and-transcripts.md) after each step, before `pre_scoring_hook`. Missing paths are skipped with a warning. |
+| `agent_env`                  | object of strings         | Environment variables for a [CLI agent](#cli-agents)'s process. Ones Karotte sets itself keep Karotte's value. The student can read them: no secrets.            |
 
 The first two are read by the `default` template's `get_system_prompt()`, so they only work in tasks that use it.
-Karotte itself applies the latter three.
+Karotte itself applies the others.
 
 ## Models
 
@@ -195,8 +196,8 @@ Agents that run a step in their own process can only enforce the limits their CL
 | ---------------------------------- | ---------------------------------- | ---------- | --------------------------------------------------------------------------------------------- |
 | `turn_limit`                       | Yes                                | Yes        | Per step, through the CLI's `--max-turns`; `codex` and `agy` have none, so Karotte rejects it |
 | `step_time_limit_seconds`          | Yes                                | Yes        | Yes, by killing the CLI's processes                                                           |
-| `inject_time_remaining_counter`    | Yes                                | Yes        | No                                                                                            |
-| `step_context_window_limit`        | Yes, if the provider reports usage | No         | No                                                                                            |
+| `inject_time_remaining_counter`    | Yes                                | Yes        | Only `claude-code`, after every tool call                                                     |
+| `step_context_window_limit`        | Yes, if the provider reports usage | No         | No; `claude-code` on a `hosted_vllm` model compacts its context there instead                 |
 | `inject_context_remaining_counter` | Yes, if the provider reports usage | No[^ext]   | No                                                                                            |
 
 [^ext]: The external agent doesn't report token usage, so its context counter, if on, always shows the full limit.
@@ -292,6 +293,13 @@ CLI agents differ from `builtin` in a few ways:
   Whether the model thinks is up to its chat template; a Qwen3.5+ model thinks by default.
 - On a `hosted_vllm` model, Claude Code doesn't send a reasoning effort either.
   SGLang hands it to the model's chat template, and some templates refuse efforts they don't define (Qwen3.8 takes only `xhigh`, `medium` and `low`), so the template's own default applies.
+- When the step has a time limit and `inject_time_remaining_counter` is on, a Claude Code hook tells the model `Time remaining: N seconds` after every tool call, a failed one included.
+  The transcript keeps the note at the end of that tool's message, where the builtin agent puts its own.
+- In a `-p` run, Claude Code stops a shell command that names no timeout after 2 minutes, or 10 in the background, and lets a command ask for at most 10 minutes, or 2 hours in the background.
+  To give commands as long as the builtin agent's `bash` (an hour), set them in `agent_env`, e.g. `{"BASH_DEFAULT_TIMEOUT_MS": "3600000", "BASH_MAX_TIMEOUT_MS": "7200000"}`.
+  A background command still running when the model ends its turn keeps the step open until it finishes or its timeout passes.
+- On a `hosted_vllm` model, `step_context_window_limit` is the context window Claude Code compacts at.
+  Without it Claude Code assumes 200K tokens for a model it doesn't know.
 
 `codex` specifics:
 

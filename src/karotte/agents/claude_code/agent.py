@@ -8,18 +8,20 @@ manifest. Steps share one session, created on the first step and resumed after.
 
 import json
 import os
+import shlex
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import ClassVar, Literal, final
 
-from karotte.agents.claude_code.adapter import StreamParser
+from karotte.agents.claude_code.adapter import TOOL_RESULT_HOOK_EVENTS, StreamParser
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     CliAgent,
     install_release,
     register_cli_agent,
 )
+from karotte.agents.message_loop import TIME_REMAINING_NOTE
 from karotte.agents.models import resolve_model
 from karotte.model_forwarder import ModelForwarder
 from karotte.model_spec import spec_for
@@ -132,6 +134,10 @@ class ClaudeCodeAgent(CliAgent):
                 # template's default applies. It overrides `--effort`, so only
                 # when the run config sets no effort.
                 env["CLAUDE_CODE_EFFORT_LEVEL"] = "unset"
+            if (limit := self._step_context_window_limit) is not None:
+                # Claude Code assumes 200K for a model it doesn't know and
+                # compacts there; this is the window it compacts at instead.
+                env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = str(limit)
         return env
 
     def _argv(self, instructions: str, prompt_file: Path | None) -> list[str]:
@@ -150,6 +156,8 @@ class ClaudeCodeAgent(CliAgent):
             "stream-json",
             "--verbose",
             "--include-partial-messages",
+            # So the transcript keeps what tool hooks tell the model.
+            "--include-hook-events",
             # Claude 5 models return empty thinking text unless asked for summaries.
             "--thinking-display",
             "summarized",
@@ -165,6 +173,9 @@ class ClaudeCodeAgent(CliAgent):
             argv += ["--effort", effort]
         if self._config.turn_limit is not None:
             argv += ["--max-turns", str(self._config.turn_limit)]
+        deadline = self._step_deadline
+        if deadline is not None and self._config.inject_time_remaining_counter:
+            argv += ["--settings", json.dumps(_time_remaining_settings(deadline))]
         return argv
 
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
@@ -178,3 +189,41 @@ class ClaudeCodeAgent(CliAgent):
         # Claude Code's stderr can end in a warning such as
         # `[claude-code:unrecognized_model]`, printed for any non-Claude model.
         return None if self._parser is None else self._parser.error
+
+
+def _time_remaining_settings(deadline: float) -> dict[str, object]:
+    """`--settings` whose hooks tell the model how long its step has left after
+    every tool call, the note the builtin agent adds after every turn. A hook's
+    `additionalContext` reaches the model next to the tool's result."""
+    return {
+        "hooks": {
+            event: [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": _time_remaining_hook(event, deadline),
+                        }
+                    ]
+                }
+            ]
+            for event in TOOL_RESULT_HOOK_EVENTS
+        }
+    }
+
+
+def _time_remaining_hook(event: str, deadline: float) -> str:
+    """A POSIX shell command, since the task image may have no Python, that
+    prints the hook output for `event` with the seconds left until `deadline`."""
+    output = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": event,
+                "additionalContext": TIME_REMAINING_NOTE.format(seconds="%s"),
+            }
+        }
+    )
+    return (
+        f't=$(({int(deadline)} - $(date +%s))); [ "$t" -gt 0 ] || t=0; '
+        f'printf {shlex.quote(output)} "$t"'
+    )

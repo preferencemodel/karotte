@@ -3,6 +3,9 @@
 `claude -p` log (tests/resources/claude_code/)."""
 
 import json
+import re
+import subprocess
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -48,6 +51,34 @@ def _value(argv: list[str], flag: str) -> str:
     return argv[argv.index(flag) + 1]
 
 
+def _in_step(
+    agent: ClaudeCodeAgent,
+    deadline: float | None = None,
+    context_window_limit: int | None = None,
+) -> ClaudeCodeAgent:
+    """`agent` as `run_step` leaves it just before it starts `claude`."""
+    agent._step_deadline = deadline  # pyright: ignore[reportPrivateUsage]
+    agent._step_context_window_limit = context_window_limit  # pyright: ignore[reportPrivateUsage]
+    return agent
+
+
+def _hook_notes(argv: list[str]) -> dict[str, str]:
+    """Runs each `--settings` hook the way Claude Code does, and returns the
+    note each one hands the model, by event."""
+    notes: dict[str, str] = {}
+    for event, entries in json.loads(_value(argv, "--settings"))["hooks"].items():
+        (entry,) = entries
+        assert "matcher" not in entry  # every tool
+        (hook,) = entry["hooks"]
+        ran = subprocess.run(
+            ["sh", "-c", hook["command"]], capture_output=True, text=True, check=True
+        )
+        output = json.loads(ran.stdout)["hookSpecificOutput"]
+        assert output["hookEventName"] == event
+        notes[event] = output["additionalContext"]
+    return notes
+
+
 class TestClaudeCodeAgent:
     def test_is_registered(self):
         assert cli_agent_types()["claude-code"] is ClaudeCodeAgent
@@ -66,6 +97,7 @@ class TestClaudeCodeAgent:
         first = agent._argv("x", None)  # pyright: ignore[reportPrivateUsage]
         assert first[:2] == [f"{AGENTS_BIN_DIR}/claude", "-p"]
         assert "x" not in first
+        assert "--include-hook-events" in first
         assert _value(first, "--model") == "claude-sonnet-5-5"
         assert _value(first, "--output-format") == "stream-json"
         assert "--include-partial-messages" in first
@@ -198,6 +230,51 @@ class TestClaudeCodeAgent:
         assert hosted._env()["CLAUDE_CODE_EFFORT_LEVEL"] == "unset"  # pyright: ignore[reportPrivateUsage]
         assert "--effort" not in hosted._argv("x", None)  # pyright: ignore[reportPrivateUsage]
         assert "CLAUDE_CODE_EFFORT_LEVEL" not in claude._env()  # pyright: ignore[reportPrivateUsage]
+
+    def test_a_timed_step_tells_the_model_its_time_left_after_every_tool_call(self):
+        agent = _in_step(_agent(), deadline=time.time() + 100)
+        notes = _hook_notes(agent._argv("x", None))  # pyright: ignore[reportPrivateUsage]
+        assert set(notes) == {"PostToolUse", "PostToolUseFailure"}
+        for note in notes.values():
+            match = re.fullmatch(r"Time remaining: (\d+) seconds", note)
+            assert match is not None
+            assert 95 <= int(match[1]) <= 100
+
+    def test_the_time_left_stops_at_zero(self):
+        agent = _in_step(_agent(), deadline=time.time() - 50)
+        notes = _hook_notes(agent._argv("x", None))  # pyright: ignore[reportPrivateUsage]
+        assert set(notes.values()) == {"Time remaining: 0 seconds"}
+
+    def test_no_time_left_note_without_a_time_limit_or_with_the_counter_off(self):
+        untimed = _agent()._argv("x", None)  # pyright: ignore[reportPrivateUsage]
+        off = _in_step(
+            _agent(inject_time_remaining_counter=False), deadline=time.time() + 100
+        )
+        assert "--settings" not in untimed
+        assert "--settings" not in off._argv("x", None)  # pyright: ignore[reportPrivateUsage]
+
+    def test_a_run_may_set_claude_codes_own_settings_but_not_where_it_calls(self):
+        agent_env = {
+            "BASH_DEFAULT_TIMEOUT_MS": "3600000",
+            "ANTHROPIC_BASE_URL": "http://elsewhere",
+        }
+        env = _agent(extra_config={"agent_env": agent_env})._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["BASH_DEFAULT_TIMEOUT_MS"] == "3600000"
+        assert env["ANTHROPIC_BASE_URL"] != "http://elsewhere"
+
+    def test_only_a_self_hosted_model_is_given_the_steps_context_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        monkeypatch.delenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", raising=False)
+        hosted = _in_step(
+            _agent(model=_SELF_HOSTED), context_window_limit=196608
+        )._env()  # pyright: ignore[reportPrivateUsage]
+        claude = _in_step(_agent(), context_window_limit=196608)._env()  # pyright: ignore[reportPrivateUsage]
+        unlimited = _agent(model=_SELF_HOSTED)._env()  # pyright: ignore[reportPrivateUsage]
+        assert hosted["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "196608"
+        assert "CLAUDE_CODE_MAX_CONTEXT_TOKENS" not in claude
+        assert "CLAUDE_CODE_MAX_CONTEXT_TOKENS" not in unlimited
 
     def test_reports_the_error_claude_ended_the_step_with(self):
         agent = _agent()
@@ -402,3 +479,60 @@ class TestParseStream:
             }
         )
         assert list(parse_stream(["not json", "[1]", subagent, ""])) == []
+
+    def test_a_tool_hooks_note_stays_with_the_result_it_followed(self):
+        # As Claude Code 2.1.292 writes them with --include-hook-events.
+        lines = [
+            _hook_response("PostToolUse", "Time remaining: 299 seconds"),
+            _tool_result("toolu_0", "hello", is_error=False),
+            _hook_response("PostToolUseFailure", "Time remaining: 298 seconds"),
+            _tool_result("toolu_1", "Exit code 3", is_error=True),
+            _tool_result("toolu_2", "no hook ran", is_error=False),
+        ]
+        first, second, third = _messages(list(parse_stream(lines)), "tool")
+        assert first.message.content == [
+            {"type": "text", "text": "hello"},
+            {"type": "text", "text": "Time remaining: 299 seconds"},
+        ]
+        assert second.message.content == [
+            {"type": "text", "text": "Exit code 3"},
+            {"type": "text", "text": "Time remaining: 298 seconds"},
+        ]
+        assert third.message.content == [{"type": "text", "text": "no hook ran"}]
+
+    def test_only_tool_hooks_notes_join_a_tool_result(self):
+        lines = [
+            _hook_response("SessionStart", "Welcome"),
+            _tool_result("toolu_0", "hello", is_error=False),
+        ]
+        (message,) = _messages(list(parse_stream(lines)), "tool")
+        assert message.message.content == [{"type": "text", "text": "hello"}]
+
+
+def _hook_response(event: str, context: str) -> str:
+    output = json.dumps(
+        {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}
+    )
+    return json.dumps(
+        {
+            "type": "system",
+            "subtype": "hook_response",
+            "hook_name": f"{event}:Bash",
+            "hook_event": event,
+            "output": output,
+            "stdout": output,
+            "stderr": "",
+            "exit_code": 0,
+            "outcome": "success",
+        }
+    )
+
+
+def _tool_result(tool_use_id: str, text: str, *, is_error: bool) -> str:
+    block = {
+        "type": "tool_result",
+        "tool_use_id": tool_use_id,
+        "content": text,
+        "is_error": is_error,
+    }
+    return json.dumps({"type": "user", "message": {"role": "user", "content": [block]}})

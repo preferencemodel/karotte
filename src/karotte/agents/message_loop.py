@@ -40,6 +40,10 @@ EMPTY_TURN_NUDGE = (
     "into smaller pieces if necessary."
 )
 
+TIME_REMAINING_NOTE = "Time remaining: {seconds} seconds"
+"""What the model is told about a timed step's time left. Claude Code's hooks
+print the same note (see `karotte.agents.claude_code`)."""
+
 
 class MessageLoopAgent:
     """Agent that drives turns from a `MessageSource` and executes the tool
@@ -205,10 +209,10 @@ def _has_text(message: Message) -> bool:
 
 def _append_time_remaining(events: list[Event], remaining_seconds: float) -> None:
     """Fold a remaining-time note into the last tool-result message of a turn."""
-    note = f"Time remaining: {int(remaining_seconds)} seconds"
+    note = TIME_REMAINING_NOTE.format(seconds=int(remaining_seconds))
     for event in reversed(events):
         if isinstance(event, MessageAddedEvent):
-            _append_text_content(event.message, note)
+            append_text_content(event.message, note)
             return
 
 
@@ -217,11 +221,11 @@ def _append_context_remaining(events: list[Event], remaining_tokens: int) -> Non
     note = f"Context remaining: {remaining_tokens}"
     for event in reversed(events):
         if isinstance(event, MessageAddedEvent):
-            _append_text_content(event.message, note)
+            append_text_content(event.message, note)
             return
 
 
-def _append_text_content(message: Message, text: str) -> None:
+def append_text_content(message: Message, text: str) -> None:
     content = message.content
     if content is None:
         message.content = text
