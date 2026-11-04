@@ -1,4 +1,5 @@
 import asyncio
+import json
 import random
 import re
 import socket
@@ -19,6 +20,10 @@ from litellm import (
 from litellm.types.utils import ModelResponse, ModelResponseStream, StreamingChoices
 from loguru import logger
 
+from karotte.agents.provider_chunks import (
+    install_provider_chunk_taps,
+    tap_provider_chunks,
+)
 from karotte.model_spec import spec_for
 from karotte.providers import (
     TOOL_CALL_REPAIRS,
@@ -38,9 +43,12 @@ from karotte.schemas.transcript import (
     MessageChunkResetEvent,
     TokenUsageEvent,
 )
+from karotte.truncation import truncate_middle
 
 # litellm's success logging for Responses API streams dumps a chat usage dict into ResponseAPIUsage.
 warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
+
+install_provider_chunk_taps()
 
 # Retry configuration for transient LLM errors (overloaded, rate-limited, etc.)
 # 16 retries lead to a maximum wait time of around 10 minutes
@@ -70,6 +78,9 @@ _INVALID_URL_ERRORS = (
     aiohttp.InvalidURL,
     aiohttp.NonHttpUrlClientError,
 )
+
+# How much of the chunks the warning shows. The transcript keeps all of them.
+MAX_LOGGED_PROVIDER_CHUNKS_CHARS = 2000
 
 IMAGE_OMITTED_TEXT = "[image omitted: this model cannot take image input]"
 
@@ -284,6 +295,7 @@ class BuiltinSource:
         unreachable_attempts = 0
         for attempt in range(1, LLM_RETRY_MAX_ATTEMPTS + 1):
             chunks: list[ModelResponseStream] = []
+            provider_chunks = tap_provider_chunks()
 
             try:
                 response = await litellm.acompletion(
@@ -388,14 +400,26 @@ class BuiltinSource:
 
             # litellm normalizes a provider safety refusal (e.g. Claude's native
             # 'refusal' stop_reason) to the OpenAI 'content_filter' finish_reason.
+            # The provider's reason for the block is in its raw chunks.
             finish_reason = choice.finish_reason
+            raw = None
             if finish_reason == "content_filter":
+                if provider_chunks:
+                    raw = {"provider_chunks": list(provider_chunks)}
                 logger.warning(
-                    "Model {model} declined the request (finish_reason=content_filter).",
+                    "Model {model} declined the request (finish_reason=content_filter); provider's last chunks: {chunks}",
                     model=self.config.model,
+                    chunks=truncate_middle(
+                        json.dumps(list(provider_chunks), default=str),
+                        MAX_LOGGED_PROVIDER_CHUNKS_CHARS,
+                    )
+                    if provider_chunks
+                    else "none kept",
                 )
 
-            yield MessageAddedEvent(message=message, finish_reason=finish_reason)
+            yield MessageAddedEvent(
+                message=message, finish_reason=finish_reason, raw=raw
+            )
 
             if usage:
                 cache_read_tokens, cache_write_tokens = cache_tokens(usage)
