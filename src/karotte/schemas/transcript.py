@@ -76,7 +76,9 @@ class MessageAddedEvent(BaseEvent):
     raw: dict[str, Any] | None = None
     """Fields of the agent-native record this message was derived from that
     have no place in `message` (e.g. reasoning state, sub-agent markers).
-    Set by transcript adapters; the full native log is saved as an artifact."""
+    Set by transcript adapters; the full native log is saved as an artifact.
+    For a blocked turn, `provider_chunks` holds the provider's last raw stream
+    chunks."""
 
 
 class ToolCallStartedEvent(BaseEvent):
