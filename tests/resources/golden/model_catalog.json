@@ -354,6 +354,7 @@
       "max_reasoning_effort": "max",
       "reasoning_effort_levels": [
         "low",
+        "medium",
         "high",
         "max"
       ],

@@ -336,7 +336,7 @@ class TestReasoningEffort:
             ),
             ("together_ai/Qwen/Qwen3.8-2.4T-A95B", ("low", "medium", "xhigh")),
             ("together_ai/moonshotai/Kimi-K3", ("low", "high", "max")),
-            ("together_ai/moonshotai/Kimi-K3.1-Pro", ("low", "high", "max")),
+            ("together_ai/moonshotai/Kimi-K3.1-Pro", ("low", "medium", "high", "max")),
             ("together_ai/moonshotai/Kimi-K2.6", ()),
             ("together_ai/zai-org/GLM-5.2", ()),
             ("minimax/MiniMax-M3", ()),
