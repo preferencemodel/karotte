@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
-from pydantic import BaseModel, Field, SerializeAsAny
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializeAsAny,
+    field_validator,
+    model_validator,
+)
 
 from . import RunStatus
 from ._import_mcp_types import get_mcp_type
@@ -26,6 +33,13 @@ class MetadataEvent(BaseEvent):
     """For events that add metadata to the run."""
 
     metadata: dict[str, Any]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _untyped_only(cls, data: Any) -> Any:
+        if cls is MetadataEvent and isinstance(data, dict) and "type" in data:
+            raise ValueError("a typed event is not a bare MetadataEvent")
+        return data
 
 
 class TaskStartedEvent(BaseEvent):
@@ -157,6 +171,21 @@ class TokenUsageEvent(BaseEvent):
     ``trafficType``), else the tier asked for; None is the provider's default tier."""
 
 
+class UnknownEvent(BaseEvent):
+    """An event type this version doesn't know, kept as-is so newer transcripts still load."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow")
+
+    type: str
+
+    @field_validator("type")
+    @classmethod
+    def _not_a_known_type(cls, value: str) -> str:
+        if value in _KNOWN_EVENT_TYPES:
+            raise ValueError(f"{value!r} is a known event type")
+        return value
+
+
 Event = (
     TaskStartedEvent
     | StepStartedEvent
@@ -173,7 +202,14 @@ Event = (
     | TaskPreHookCompletedEvent
     | MetadataEvent
     | TokenUsageEvent
+    | UnknownEvent
 )
+
+_KNOWN_EVENT_TYPES = {
+    event.model_fields["type"].default
+    for event in get_args(Event)
+    if "type" in event.model_fields and event is not UnknownEvent
+}
 
 
 class Transcript(BaseModel):

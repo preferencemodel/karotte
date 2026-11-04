@@ -22,6 +22,7 @@ from karotte.schemas.transcript import (
     TokenUsageEvent,
     ToolCallCompletedEvent,
     ToolCallStartedEvent,
+    UnknownEvent,
 )
 from karotte.transcript_markdown import (
     convert_error_event_to_markdown,
@@ -472,6 +473,7 @@ class TranscriptView(VerticalScroll):
                 | StepStartedEvent()
                 | AnswersSubmittedEvent()
                 | TokenUsageEvent()
+                | UnknownEvent()
             ):
                 return ""  # Skip these events
 
