@@ -12,10 +12,17 @@ from mcp.types import (
 )
 from pydantic import AnyUrl
 
-from karotte.agents.agent import EmptyTurnLimitReachedError, RunContext
+from karotte.agents.agent import (
+    BlockedTurnLimitReachedError,
+    EmptyTurnLimitReachedError,
+    RunContext,
+)
 from karotte.agents.message_loop import (
+    BLOCKED_TURN_NUDGE,
     EMPTY_TURN_NUDGE,
+    MAX_CONSECUTIVE_BLOCKED_TURNS,
     MAX_CONSECUTIVE_EMPTY_TURNS,
+    SKIPPED_TOOL_CALL_RESULT,
     MessageLoopAgent,
 )
 from karotte.agents.tool_results import (
@@ -251,34 +258,6 @@ async def test_empty_message_without_truncation_ends_the_step(
 
 
 @pytest.mark.asyncio
-async def test_a_refusal_ends_the_step(sample_config: EvaluationRunConfig):
-    """A declined request comes back empty; nudging only asks a model that
-    deliberately refused to refuse again."""
-    events, source = await _run(
-        [(_assistant(content="", reasoning="a" * 100), "content_filter")],
-        sample_config,
-    )
-
-    assert _nudges(events) == []
-    assert source.calls == 1
-
-
-@pytest.mark.asyncio
-async def test_a_refusal_drops_the_tool_calls_it_came_with(
-    sample_config: EvaluationRunConfig,
-):
-    """A declined turn ends the step even when it carries tool calls -- running
-    them would act on the request the provider just refused."""
-    events, source = await _run(
-        [(_assistant(content="", tool_calls=_tool_call()), "content_filter")],
-        sample_config,
-    )
-
-    assert [e for e in events if isinstance(e, ToolCallStartedEvent)] == []
-    assert source.calls == 1
-
-
-@pytest.mark.asyncio
 async def test_text_without_tool_calls_ends_the_step(
     sample_config: EvaluationRunConfig,
 ):
@@ -410,3 +389,83 @@ async def test_nudge_reaches_the_model_on_the_following_turn(
     assert source.histories[0][-1].content == "Do the thing"
     assert source.histories[1][-1].role == "user"
     assert source.histories[1][-1].content == EMPTY_TURN_NUDGE
+
+
+# =============================================================================
+# Blocked turns
+#
+# A reply the provider blocked (finish_reason="content_filter") is asked for
+# again instead of ending the step.
+# =============================================================================
+
+
+def _blocked(
+    tool_calls: list[ChatCompletionMessageToolCall] | None = None,
+) -> tuple[Message, str]:
+    return _assistant(content="", tool_calls=tool_calls), "content_filter"
+
+
+def _blocked_nudges(events: list[Event]) -> int:
+    return sum(
+        isinstance(e, MessageAddedEvent) and e.message.content == BLOCKED_TURN_NUDGE
+        for e in events
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_turn_is_asked_again(sample_config: EvaluationRunConfig):
+    events, source = await _run(
+        [_blocked(), (_assistant(content="Done."), "stop")],
+        sample_config,
+    )
+
+    assert _blocked_nudges(events) == 1
+    assert _nudges(events) == []
+    assert source.calls == 2
+    assert source.histories[1][-1].role == "user"
+    assert source.histories[1][-1].content == BLOCKED_TURN_NUDGE
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_turn_answers_its_tool_calls_without_running_them(
+    sample_config: EvaluationRunConfig,
+):
+    """Running them would act on a blocked reply; leaving them unanswered
+    makes the next request invalid."""
+    events, source = await _run(
+        [_blocked(_tool_call("c1")), (_assistant(content="Done."), "stop")],
+        sample_config,
+    )
+
+    assert [e for e in events if isinstance(e, ToolCallStartedEvent)] == []
+    tool_message = source.histories[1][-2]
+    assert tool_message.role == "tool"
+    assert tool_message.tool_call_id == "c1"
+    assert tool_message.content == SKIPPED_TOOL_CALL_RESULT
+    assert source.histories[1][-1].content == BLOCKED_TURN_NUDGE
+
+
+@pytest.mark.asyncio
+async def test_blocks_that_keep_coming_fail_the_step(
+    sample_config: EvaluationRunConfig,
+):
+    with pytest.raises(BlockedTurnLimitReachedError):
+        await _run([_blocked()] * (MAX_CONSECUTIVE_BLOCKED_TURNS + 1), sample_config)
+
+
+@pytest.mark.asyncio
+async def test_a_reply_that_gets_through_resets_the_blocked_turn_budget(
+    sample_config: EvaluationRunConfig,
+):
+    working = (_assistant(content="", tool_calls=_tool_call()), "tool_calls")
+
+    events, _ = await _run(
+        [*[_blocked()] * MAX_CONSECUTIVE_BLOCKED_TURNS, working]
+        + [
+            *[_blocked()] * MAX_CONSECUTIVE_BLOCKED_TURNS,
+            (_assistant(content="Done."), "stop"),
+        ],
+        sample_config,
+    )
+
+    assert _blocked_nudges(events) == MAX_CONSECUTIVE_BLOCKED_TURNS * 2

@@ -32,6 +32,11 @@ class EmptyTurnLimitReachedError(Exception):
     in a row, so nudging it to continue has stopped working."""
 
 
+class BlockedTurnLimitReachedError(Exception):
+    """Raised when the provider blocked the model's reply too many turns in a
+    row, so asking again has stopped working."""
+
+
 @final
 @dataclass
 class RunContext:
