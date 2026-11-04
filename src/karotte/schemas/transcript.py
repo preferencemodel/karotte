@@ -168,6 +168,7 @@ Event = (
     | AnswersSubmittedEvent
     | ScoringEvent
     | ErrorEvent
+    | TaskPreHookCompletedEvent
     | MetadataEvent
     | TokenUsageEvent
 )

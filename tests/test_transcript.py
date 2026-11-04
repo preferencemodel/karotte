@@ -3,6 +3,8 @@ from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
     ErrorEvent,
     MessageAddedEvent,
+    MetadataEvent,
+    TaskPreHookCompletedEvent,
     TokenUsageEvent,
     Transcript,
 )
@@ -82,3 +84,23 @@ def test_token_usage_event_without_cache():
     assert event.output_tokens == 50
     assert event.cache_read_tokens is None
     assert event.cache_write_tokens is None
+
+
+def test_pre_hook_event_round_trips_through_a_transcript():
+    transcript = Transcript(
+        run_id="r", events=[TaskPreHookCompletedEvent(metadata={"a": 1})]
+    )
+
+    [event] = Transcript.model_validate_json(transcript.model_dump_json()).events
+
+    assert isinstance(event, TaskPreHookCompletedEvent)
+    assert event.metadata == {"a": 1}
+
+
+def test_unknown_event_with_metadata_parses_as_metadata_event():
+    [event] = Transcript.model_validate(
+        {"run_id": "r", "events": [{"type": "unknown", "metadata": {"a": 1}}]}
+    ).events
+
+    assert type(event) is MetadataEvent
+    assert event.metadata == {"a": 1}
