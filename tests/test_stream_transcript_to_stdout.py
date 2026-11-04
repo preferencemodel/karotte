@@ -736,14 +736,14 @@ async def test_streamed_message_ending_in_a_newline_gets_no_extra_one():
 
 
 @pytest.mark.asyncio
-async def test_unknown_event_type():
-    """Test that unknown event types print an error message."""
+async def test_unhandled_event_type():
+    """Test that event types the printer doesn't handle print an error message."""
     from pydantic import BaseModel
 
-    class UnknownEvent(BaseModel):
-        type: str = "unknown"
+    class UnhandledEvent(BaseModel):
+        type: str = "unhandled"
 
-    event = UnknownEvent()
+    event = UnhandledEvent()
 
     async def event_generator():
         yield event
@@ -752,7 +752,7 @@ async def test_unknown_event_type():
         await stream_transcript_to_stdout(event_generator())  # pyright: ignore[reportArgumentType]
         output = mock_stdout.getvalue()
 
-    assert "Unknown event type: UnknownEvent" in output
+    assert "Unknown event type: UnhandledEvent" in output
 
 
 @pytest.mark.asyncio
@@ -764,7 +764,7 @@ async def test_all_event_types_are_handled():
     """
     from typing import get_args
 
-    from karotte.schemas.transcript import Event, TokenUsageEvent
+    from karotte.schemas.transcript import Event, TokenUsageEvent, UnknownEvent
 
     # Get all event types from the Event union
     event_types = get_args(Event)
@@ -820,6 +820,8 @@ async def test_all_event_types_are_handled():
             )
         elif event_type == TokenUsageEvent:
             test_events.append(TokenUsageEvent(input_tokens=100, output_tokens=50))
+        elif event_type == UnknownEvent:
+            test_events.append(UnknownEvent(type="from_the_future"))
         elif hasattr(event_type, "__name__") and event_type.__name__ == "MetadataEvent":
             # MetadataEvent is handled by TaskPreHookCompletedEvent which is a subclass
             # Skip it as it's abstract

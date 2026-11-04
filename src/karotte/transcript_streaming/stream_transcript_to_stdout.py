@@ -20,6 +20,7 @@ from karotte.schemas.transcript import (
     TokenUsageEvent,
     ToolCallCompletedEvent,
     ToolCallStartedEvent,
+    UnknownEvent,
 )
 from karotte.truncation import truncate_middle
 from rich.console import Console
@@ -165,7 +166,7 @@ async def stream_transcript_to_stdout(event_stream: AsyncIterator[Event]):
                 print(
                     f"\n[bold]🏁 Result: {event.status}, {steps_passed}{total} steps passed, final score {score}[/bold]"
                 )
-            case TokenUsageEvent():
+            case TokenUsageEvent() | UnknownEvent():
                 pass
             case _:
                 print(

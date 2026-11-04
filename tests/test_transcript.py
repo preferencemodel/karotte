@@ -1,12 +1,17 @@
+import pytest
+from pydantic import TypeAdapter, ValidationError
+
 from karotte.schemas.chat import Message
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
     ErrorEvent,
+    Event,
     MessageAddedEvent,
     MetadataEvent,
     TaskPreHookCompletedEvent,
     TokenUsageEvent,
     Transcript,
+    UnknownEvent,
 )
 
 
@@ -97,10 +102,38 @@ def test_pre_hook_event_round_trips_through_a_transcript():
     assert event.metadata == {"a": 1}
 
 
-def test_unknown_event_with_metadata_parses_as_metadata_event():
+def test_untyped_metadata_event_still_parses():
     [event] = Transcript.model_validate(
-        {"run_id": "r", "events": [{"type": "unknown", "metadata": {"a": 1}}]}
+        {"run_id": "r", "events": [{"metadata": {"a": 1}}]}
     ).events
 
-    assert type(event) is MetadataEvent
+    assert isinstance(event, MetadataEvent)
     assert event.metadata == {"a": 1}
+
+
+def test_unknown_event_with_metadata_keeps_its_type():
+    [event] = Transcript.model_validate(
+        {"run_id": "r", "events": [{"type": "from_the_future", "metadata": {}}]}
+    ).events
+
+    assert isinstance(event, UnknownEvent)
+    assert event.type == "from_the_future"
+
+
+def test_unknown_event_type_is_kept_as_is():
+    raw = {
+        "timestamp": "2026-01-01T00:00:00Z",
+        "type": "from_the_future",
+        "detail": {"n": 1},
+    }
+
+    transcript = Transcript.model_validate({"run_id": "r", "events": [raw]})
+
+    [event] = transcript.events
+    assert isinstance(event, UnknownEvent)
+    assert transcript.model_dump(mode="json")["events"] == [raw]
+
+
+def test_malformed_known_event_is_not_swallowed():
+    with pytest.raises(ValidationError):
+        TypeAdapter(Event).validate_python({"type": "message_added"})
