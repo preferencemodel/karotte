@@ -10,6 +10,7 @@ messages.
 
 from karotte.agents.agent import (
     Agent,
+    BlockedTurnLimitReachedError,
     CliAgentExitedError,
     EmptyTurnLimitReachedError,
     RunContext,
@@ -39,6 +40,7 @@ __all__ = [
     "EXTERNAL_MESSAGE_TIMEOUT_S",
     "Agent",
     "BackendSource",
+    "BlockedTurnLimitReachedError",
     "BuiltinAgent",
     "BuiltinSource",
     "ClaudeCodeAgent",
