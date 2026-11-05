@@ -245,6 +245,7 @@ def _thinking_blocks(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] 
         for block in getattr(chunk.choices[0].delta, "thinking_blocks", None) or []:
             if block.get("type") == "redacted_thinking":
                 blocks.append(dict(block))
+                text = ""
             elif block.get("signature"):
                 blocks.append({**block, "thinking": block.get("thinking") or text})
                 text = ""

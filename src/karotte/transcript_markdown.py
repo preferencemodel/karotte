@@ -188,7 +188,7 @@ def convert_tool_call_completed_event_to_markdown(
             else:
                 markdown += f"[{type(item).__name__}]\n\n"
 
-    # Display resource metrics if present in structuredContent
+    # Display resource metrics if present in structured_content
     if (
         event.result.structured_content
         and "_karotte_resource_metrics" in event.result.structured_content

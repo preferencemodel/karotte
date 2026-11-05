@@ -129,9 +129,26 @@ class ToolCallCompletedEvent(BaseEvent):
     tool_call_id: str
     result: CallToolResult
 
+    @field_validator("result")
+    @classmethod
+    def _drop_server_info_stamp(cls, result: CallToolResult) -> CallToolResult:
+        """The MCP client stamps every result with the server's name and version; transcripts don't keep it."""
+        key = get_mcp_type("SERVER_INFO_META_KEY")
+        if not result.meta or key not in result.meta:
+            return result
+        meta = {k: v for k, v in result.meta.items() if k != key}
+        return result.model_copy(update={"meta": meta or None})
+
     @field_serializer("result")
     def _wire_keys(self, result: CallToolResult, info: SerializationInfo) -> Any:
-        return result.model_dump(mode=info.mode, by_alias=True)
+        return result.model_dump(
+            mode=info.mode,
+            by_alias=True,
+            exclude_unset=info.exclude_unset,
+            exclude_defaults=info.exclude_defaults,
+            exclude_none=info.exclude_none,
+            round_trip=info.round_trip,
+        )
 
 
 class AnswersSubmittedEvent(BaseEvent):
