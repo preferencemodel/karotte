@@ -56,9 +56,13 @@ class TestAgyAgent:
 
     def test_install_pins_version_and_checksums_per_architecture(self):
         script = " ".join(AgyAgent.install())
-        assert f"/{AgyAgent.version}-{AgyAgent.build}/" in script
-        assert "/linux-x64/cli_linux_x64.tar.gz" in script
-        assert "/linux-arm/cli_linux_arm64.tar.gz" in script
+        release = (
+            "https://github.com/google-antigravity/antigravity-cli/releases/download/"
+            f"{AgyAgent.version}"
+        )
+        assert f"{release}/agy_cli_linux_$arch.tar.gz" in script
+        assert "x86_64) arch=x64;" in script
+        assert "aarch64) arch=arm64;" in script
         assert f"{AGENTS_BIN_DIR}/agy" in script
         assert script.count("sha256sum -c") == 1
 
