@@ -32,7 +32,7 @@ from textwrap import dedent
 from typing import Annotated, Final, final
 
 import psutil
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from karotte import ToolBase
 from karotte.confinement import network_needs_namespace
 from karotte.subprocess import student_env, student_session_command

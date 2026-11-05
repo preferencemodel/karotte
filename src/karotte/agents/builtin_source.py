@@ -238,17 +238,18 @@ def _tap_traffic_types(stream: CustomStreamWrapper) -> list[str]:
 
 
 def _thinking_blocks(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] | None:
-    """The response's thinking blocks, exactly as the provider signed them.
-
-    litellm's stream_chunk_builder joins each block's text twice, as the signature
-    chunk repeats the whole block.
-    """
-    blocks = [
-        dict(block)
-        for chunk in chunks
-        for block in getattr(chunk.choices[0].delta, "thinking_blocks", None) or []
-        if block.get("signature") or block.get("type") == "redacted_thinking"
-    ]
+    """The response's thinking blocks, exactly as the provider signed them."""
+    blocks: list[dict[str, Any]] = []
+    text = ""
+    for chunk in chunks:
+        for block in getattr(chunk.choices[0].delta, "thinking_blocks", None) or []:
+            if block.get("type") == "redacted_thinking":
+                blocks.append(dict(block))
+            elif block.get("signature"):
+                blocks.append({**block, "thinking": block.get("thinking") or text})
+                text = ""
+            else:
+                text += block.get("thinking") or ""
     return blocks or None
 
 

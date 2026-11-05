@@ -311,7 +311,7 @@ async def test_json_view_shows_simplified_images_but_copy_gives_full():
         tool_call_id="call_123",
         result=CallToolResult(
             content=[
-                ImageContent(type="image", data=large_base64, mimeType="image/png")
+                ImageContent(type="image", data=large_base64, mime_type="image/png")
             ]
         ),
     )

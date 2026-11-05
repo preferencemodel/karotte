@@ -151,7 +151,7 @@ def _user_events(content: Any) -> Iterator[Event]:
         elif block.get("type") == "tool_result":
             result = CallToolResult(
                 content=_result_content(block.get("content")),
-                isError=bool(block.get("is_error")),
+                is_error=bool(block.get("is_error")),
             )
             yield from tool_result_events(str(block.get("tool_use_id") or ""), result)
     if texts:
@@ -176,7 +176,7 @@ def _result_content(content: Any) -> list[ContentBlock]:
                     ImageContent(
                         type="image",
                         data=str(source.get("data") or ""),
-                        mimeType=str(source.get("media_type") or ""),
+                        mime_type=str(source.get("media_type") or ""),
                     )
                 )
     return blocks

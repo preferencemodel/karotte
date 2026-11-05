@@ -250,7 +250,7 @@ class TestParseStream:
         assert json.loads(started[2].function.arguments) == {"a": 17, "b": 25}
         assert completed[2].result.content[0].text == "42"  # pyright: ignore[reportAttributeAccessIssue]
         assert not completed[3].result.content
-        assert not any(c.result.isError for c in completed)
+        assert not any(c.result.is_error for c in completed)
 
     def test_usage_is_per_model_response(self):
         events = list(parse_stream(_lines("step_0.ndjson")))
@@ -281,7 +281,7 @@ class TestParseStream:
             ),
         ]
         (completed,) = _completed(list(parse_stream(lines)))
-        assert completed.result.isError
+        assert completed.result.is_error
         assert completed.result.content[0].text == "invalid arguments"  # pyright: ignore[reportAttributeAccessIssue]
 
     def test_tool_call_ids_differ_between_steps(self):

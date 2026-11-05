@@ -22,7 +22,7 @@ async def test_does_not_crash_when_used_with_view_lines_in_file_tool(tmp_path: P
         ToolCallCompletedEvent(
             tool_call_id="",
             result=CallToolResult(
-                content=[], structuredContent=result.structured_content
+                content=[], structured_content=result.structured_content
             ),
         )
     )
@@ -33,7 +33,7 @@ def test_image_content_shows_mime_type():
         tool_call_id="test",
         result=CallToolResult(
             content=[
-                ImageContent(type="image", data="base64data", mimeType="image/png")
+                ImageContent(type="image", data="base64data", mime_type="image/png")
             ],
         ),
     )
@@ -47,7 +47,7 @@ def test_image_content_with_empty_mime_type_shows_unknown():
     event = ToolCallCompletedEvent(
         tool_call_id="test",
         result=CallToolResult(
-            content=[ImageContent(type="image", data="base64data", mimeType="")],
+            content=[ImageContent(type="image", data="base64data", mime_type="")],
         ),
     )
 
@@ -75,9 +75,9 @@ def test_multiple_content_items():
         tool_call_id="test",
         result=CallToolResult(
             content=[
-                ImageContent(type="image", data="base64data", mimeType="image/jpeg"),
+                ImageContent(type="image", data="base64data", mime_type="image/jpeg"),
                 TextContent(type="text", text="hello"),
-                ImageContent(type="image", data="moredata", mimeType="image/gif"),
+                ImageContent(type="image", data="moredata", mime_type="image/gif"),
             ],
         ),
     )
@@ -95,9 +95,9 @@ def test_structured_content_takes_precedence_over_content():
         tool_call_id="test",
         result=CallToolResult(
             content=[
-                ImageContent(type="image", data="base64data", mimeType="image/png")
+                ImageContent(type="image", data="base64data", mime_type="image/png")
             ],
-            structuredContent={"key": "value"},
+            structured_content={"key": "value"},
         ),
     )
 
@@ -112,7 +112,7 @@ def test_success_result_shows_checkmark():
         tool_call_id="test",
         result=CallToolResult(
             content=[TextContent(type="text", text="success")],
-            isError=False,
+            is_error=False,
         ),
     )
 
@@ -126,7 +126,7 @@ def test_error_result_shows_x():
         tool_call_id="test",
         result=CallToolResult(
             content=[TextContent(type="text", text="error message")],
-            isError=True,
+            is_error=True,
         ),
     )
 
@@ -140,7 +140,7 @@ def test_bash_tool_filters_empty_stdout():
         tool_call_id="test",
         result=CallToolResult(
             content=[],
-            structuredContent={"stdout": "", "stderr": "some error"},
+            structured_content={"stdout": "", "stderr": "some error"},
         ),
     )
 
@@ -156,7 +156,7 @@ def test_bash_tool_keeps_nonempty_stdout():
         tool_call_id="test",
         result=CallToolResult(
             content=[],
-            structuredContent={"stdout": "hello world", "stderr": ""},
+            structured_content={"stdout": "hello world", "stderr": ""},
         ),
     )
 
@@ -173,7 +173,7 @@ def test_karotte_resource_metrics_filtered_from_structured_content():
         tool_call_id="test",
         result=CallToolResult(
             content=[],
-            structuredContent={
+            structured_content={
                 "stdout": "output",
                 "_karotte_resource_metrics": {
                     "samples": [],
@@ -199,7 +199,7 @@ def test_resource_metrics_displayed_when_present():
         tool_call_id="test",
         result=CallToolResult(
             content=[TextContent(type="text", text="output")],
-            structuredContent={
+            structured_content={
                 "output": "output",
                 "_karotte_resource_metrics": {
                     "samples": [
@@ -230,7 +230,7 @@ def test_resource_metrics_not_displayed_when_no_samples():
         tool_call_id="test",
         result=CallToolResult(
             content=[TextContent(type="text", text="output")],
-            structuredContent={
+            structured_content={
                 "output": "output",
                 "_karotte_resource_metrics": {
                     "samples": [],
@@ -254,7 +254,7 @@ def test_resource_metrics_not_displayed_when_not_in_structured_content():
         tool_call_id="test",
         result=CallToolResult(
             content=[TextContent(type="text", text="output")],
-            structuredContent={"output": "output"},
+            structured_content={"output": "output"},
         ),
     )
 

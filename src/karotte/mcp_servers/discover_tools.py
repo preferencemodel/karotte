@@ -4,7 +4,7 @@ import pkgutil
 import typing
 from collections.abc import Callable, Sequence
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 
 class InvalidToolError(Exception):

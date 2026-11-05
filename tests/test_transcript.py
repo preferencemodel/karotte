@@ -1,4 +1,5 @@
 import pytest
+from mcp.types import CallToolResult, ImageContent
 from pydantic import TypeAdapter, ValidationError
 
 from karotte.schemas.chat import Message
@@ -10,6 +11,7 @@ from karotte.schemas.transcript import (
     MetadataEvent,
     TaskPreHookCompletedEvent,
     TokenUsageEvent,
+    ToolCallCompletedEvent,
     Transcript,
     UnknownEvent,
 )
@@ -137,3 +139,22 @@ def test_unknown_event_type_is_kept_as_is():
 def test_malformed_known_event_is_not_swallowed():
     with pytest.raises(ValidationError):
         TypeAdapter(Event).validate_python({"type": "message_added"})
+
+
+def test_tool_call_result_is_stored_with_mcp_wire_keys():
+    event = ToolCallCompletedEvent(
+        tool_call_id="call_1",
+        result=CallToolResult(
+            content=[ImageContent(type="image", data="", mime_type="image/png")],
+            structured_content={"a": 1},
+            is_error=True,
+        ),
+    )
+
+    stored = Transcript(run_id="r", events=[event]).model_dump(mode="json")
+    result = stored["events"][0]["result"]
+
+    assert result["isError"] is True
+    assert result["structuredContent"] == {"a": 1}
+    assert result["content"][0]["mimeType"] == "image/png"
+    assert TypeAdapter(Event).validate_python(stored["events"][0]) == event

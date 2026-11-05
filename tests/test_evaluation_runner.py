@@ -664,7 +664,7 @@ async def test_json_decode_error_handling_in_execute_tool_calls():
     # Verify the completed event contains an error result
     completed_event = events[1]
     assert isinstance(completed_event, ToolCallCompletedEvent)
-    assert completed_event.result.isError is True
+    assert completed_event.result.is_error is True
     assert isinstance(completed_event.result.content[0], TextContent)
     assert (
         completed_event.result.content[0].text
@@ -703,7 +703,7 @@ async def test_guard_case_malformed_json_cat_redirect():
     # Check the ToolCallCompletedEvent has the error
     completed_event = events[1]
     assert isinstance(completed_event, ToolCallCompletedEvent)
-    assert completed_event.result.isError is True
+    assert completed_event.result.is_error is True
     assert isinstance(completed_event.result.content[0], TextContent)
     assert (
         completed_event.result.content[0].text

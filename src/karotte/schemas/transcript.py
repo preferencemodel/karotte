@@ -7,7 +7,9 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializationInfo,
     SerializeAsAny,
+    field_serializer,
     field_validator,
     model_validator,
 )
@@ -126,6 +128,10 @@ class ToolCallCompletedEvent(BaseEvent):
     type: Literal["tool_call_completed"] = "tool_call_completed"
     tool_call_id: str
     result: CallToolResult
+
+    @field_serializer("result")
+    def _wire_keys(self, result: CallToolResult, info: SerializationInfo) -> Any:
+        return result.model_dump(mode=info.mode, by_alias=True)
 
 
 class AnswersSubmittedEvent(BaseEvent):

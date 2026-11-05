@@ -319,6 +319,6 @@ async def _execute_tool_calls(
 def _build_call_tool_result(result: str, is_error: bool) -> CallToolResult:
     return CallToolResult(
         content=[TextContent(type="text", text=result)],
-        structuredContent={"result": result},
-        isError=is_error,
+        structured_content={"result": result},
+        is_error=is_error,
     )

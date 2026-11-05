@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import final
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from fastmcp.utilities.types import Image as FastMCPImage
 from karotte import ToolBase, demoted
 from karotte.demoted import drain_bounded as _drain_bounded

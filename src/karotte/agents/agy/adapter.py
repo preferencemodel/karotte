@@ -147,7 +147,7 @@ def _result(info: dict[str, Any], failed: bool) -> CallToolResult:
         message = error.get("message") if isinstance(error, dict) else error
         return CallToolResult(
             content=[TextContent(type="text", text=str(message or "tool failed"))],
-            isError=True,
+            is_error=True,
         )
     output = info.get("output")
     if not isinstance(output, str) or not output:
