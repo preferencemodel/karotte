@@ -301,6 +301,8 @@ def old_tool(param: str) -> ToolResult:
 """
         )
         monkeypatch.syspath_prepend(str(tmp_path))
+        for name in [k for k in sys.modules if k.startswith("environment")]:
+            monkeypatch.delitem(sys.modules, name)
         monkeypatch.delitem(sys.modules, "fastmcp.tools.tool", raising=False)
 
         tools = discover_tools(tool_names=["old_tool"])
