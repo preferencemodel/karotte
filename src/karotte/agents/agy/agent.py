@@ -20,15 +20,13 @@ from karotte.schemas.transcript import Event
 
 _AGY_BIN = f"{AGENTS_BIN_DIR}/agy"
 _RELEASE_URL = (
-    "https://storage.googleapis.com/antigravity-public/antigravity-cli/"
-    "{version}-{build}/{platform}.tar.gz"
+    "https://github.com/google-antigravity/antigravity-cli/releases/download/"
+    "{version}/agy_cli_linux_$arch.tar.gz"
 )
-_PLATFORMS = {"x64": "linux-x64/cli_linux_x64", "arm64": "linux-arm/cli_linux_arm64"}
 
-# The release manifest only has SHA-512s; these are of the same tarballs.
 _SHA256: dict[str, str] = {
-    "x64": "fd96967583c1eed94733c039638fa59b71ddbd823c75ebc8dd0e677463565aad",
-    "arm64": "cf953adcc69f87d00d71f97c3f35dc723a8669a350accf9a199df781f0523f56",
+    "x64": "ed0526231e3916b6cc1b025cf356862e88cc036e27c3c5eae5a580495fc79773",
+    "arm64": "107b7499ca90018ab2b6c1b636cdec4251dfd836656526845e354be1bfe05eba",
 }
 
 
@@ -36,9 +34,7 @@ _SHA256: dict[str, str] = {
 @register_cli_agent
 class AgyAgent(CliAgent):
     name: ClassVar[str] = "agy"
-    version: ClassVar[str] = "1.4.0"
-    build: ClassVar[str] = "5281842794987520"
-    """The build id that goes with :attr:`version` in the release URL."""
+    version: ClassVar[str] = "1.4.10"
     provider_url: ClassVar[str] = "https://generativelanguage.googleapis.com"
     providers: ClassVar[tuple[str, ...]] = ("gemini", "vertex_ai")
     binary: ClassVar[str] = _AGY_BIN
@@ -53,12 +49,7 @@ class AgyAgent(CliAgent):
     def install(cls) -> list[str]:
         return install_release(
             cls.name,
-            {
-                arch: _RELEASE_URL.format(
-                    version=cls.version, build=cls.build, platform=platform
-                )
-                for arch, platform in _PLATFORMS.items()
-            },
+            _RELEASE_URL.format(version=cls.version),
             _SHA256,
             _AGY_BIN,
             arch_names={"x86_64": "x64", "aarch64": "arm64"},
