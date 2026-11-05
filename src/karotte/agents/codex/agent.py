@@ -24,12 +24,12 @@ _RELEASE_URL = (
 
 _SHA256: dict[str, dict[str, str]] = {
     "codex": {
-        "x86_64": "86f268d81b898f3e144c5ecff2ad2fda2c5802e042d6195b72538fe0fa125057",
-        "aarch64": "bf3ca2719f1143b1440fbd85c149379e696c782c50ad7991f8bfcec60b2600c1",
+        "x86_64": "a0bf572d2f93f056c6712a6da348e96078dc84f3885fd7be67807ef389cb3978",
+        "aarch64": "94eb707605ec2646b2e05b7edf7c4e7b3ccf02b16237c34ae9beb8cfb7f810a9",
     },
     "codex-code-mode-host": {
-        "x86_64": "458239ea45c1fc508d89695f180ab352f2834709a8a46929a4466f4f04399ada",
-        "aarch64": "1395ce9367f8acd280674dff083edf25bf221d908b8351d5bd4f3fdde9181e9a",
+        "x86_64": "7588334fd47bc4003d970b70dfd4d1e4578491b1e9baa72976a4c2d7e97590da",
+        "aarch64": "ac98d1f878e353a16cba711fd47bfef2f6c814109bdd819ee2b6b6d6a19701e7",
     },
 }
 
@@ -38,7 +38,7 @@ _SHA256: dict[str, dict[str, str]] = {
 @register_cli_agent
 class CodexAgent(CliAgent):
     name: ClassVar[str] = "codex"
-    version: ClassVar[str] = "0.162.1"
+    version: ClassVar[str] = "0.166.0"
     provider_url: ClassVar[str] = "https://api.openai.com"
     providers: ClassVar[tuple[str, ...]] = ("openai",)
     binary: ClassVar[str] = _CODEX_BIN
