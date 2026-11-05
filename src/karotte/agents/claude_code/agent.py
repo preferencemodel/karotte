@@ -33,8 +33,8 @@ _RELEASE_URL = (
 
 # From the release's manifest.json, per platform name in its URL.
 _SHA256: dict[str, str] = {
-    "x64": "a967e7b1d8b4e47ee421d5433027880347952b0c0857abf880e2c942a4ec93b3",
-    "arm64": "24caa9e6ff13bf227049a2626f1c816fc895023050f0ec3b12dbf14d897367e0",
+    "x64": "86dc1fcc69498159eaf15f446613e847010f9036bfbbdffd4c49350be8489ada",
+    "arm64": "2e2496c9a8065df93acb0fca2d341f59a6b8777649b2e025ab8c9bcd5eef61f3",
 }
 
 # Claude Code tools that need Anthropic's backend or a human, which a task run
@@ -59,7 +59,7 @@ _MODEL_ALIAS_ENVS = (
 @register_cli_agent
 class ClaudeCodeAgent(CliAgent):
     name: ClassVar[str] = "claude-code"
-    version: ClassVar[str] = "2.1.292"
+    version: ClassVar[str] = "2.1.311"
     provider_url: ClassVar[str] = "https://api.anthropic.com"
     # Claude Code only speaks Anthropic's Messages API (`/v1/messages`), so each
     # provider here must serve it. `hosted_vllm` is litellm's prefix for a
@@ -115,6 +115,8 @@ class ClaudeCodeAgent(CliAgent):
             "ANTHROPIC_BASE_URL": self.model_url,
             "DISABLE_AUTOUPDATER": "1",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+            # Otherwise the task's MCP tools sit behind a ToolSearch call.
+            "ENABLE_TOOL_SEARCH": "false",
         }
         if not self._on_anthropic:
             # The aliases name Claude models, which only Anthropic serves.
