@@ -14,6 +14,7 @@ from karotte.schemas.chat import (
 from karotte.schemas.scoring import Scoring
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
+    ContextCompactedEvent,
     ErrorEvent,
     MessageAddedEvent,
     MessageChunkEvent,
@@ -736,6 +737,19 @@ async def test_streamed_message_ending_in_a_newline_gets_no_extra_one():
 
 
 @pytest.mark.asyncio
+async def test_context_compaction_is_marked():
+    async def event_generator():
+        yield ContextCompactedEvent()
+
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        await stream_transcript_to_stdout(event_generator())
+        output = mock_stdout.getvalue()
+
+    assert "Context compacted" in output
+    assert "Unknown event type" not in output
+
+
+@pytest.mark.asyncio
 async def test_unhandled_event_type():
     """Test that event types the printer doesn't handle print an error message."""
     from pydantic import BaseModel
@@ -822,6 +836,8 @@ async def test_all_event_types_are_handled():
             test_events.append(TokenUsageEvent(input_tokens=100, output_tokens=50))
         elif event_type == UnknownEvent:
             test_events.append(UnknownEvent(type="from_the_future"))
+        elif event_type == ContextCompactedEvent:
+            test_events.append(ContextCompactedEvent())
         elif hasattr(event_type, "__name__") and event_type.__name__ == "MetadataEvent":
             # MetadataEvent is handled by TaskPreHookCompletedEvent which is a subclass
             # Skip it as it's abstract

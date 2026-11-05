@@ -6,6 +6,7 @@ from typing import Any
 
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
+    ContextCompactedEvent,
     ErrorEvent,
     Event,
     MessageAddedEvent,
@@ -166,6 +167,8 @@ async def stream_transcript_to_stdout(event_stream: AsyncIterator[Event]):
                 print(
                     f"\n[bold]🏁 Result: {event.status}, {steps_passed}{total} steps passed, final score {score}[/bold]"
                 )
+            case ContextCompactedEvent():
+                print("\n🗜️ Context compacted\n")
             case TokenUsageEvent() | UnknownEvent():
                 pass
             case _:

@@ -16,6 +16,7 @@ from karotte.model_forwarder import GeminiForwarder
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import (
+    ContextCompactedEvent,
     Event,
     MessageAddedEvent,
     TokenUsageEvent,
@@ -299,11 +300,52 @@ class TestParseStream:
                 "step_update": {
                     "step_index": 0,
                     "state": "DONE",
-                    "step_type": "checkpoint",
+                    "step_type": "system_message",
                 },
             }
         )
         assert list(parse_stream(["not json", "[1]", other, ""])) == []
+
+    def test_checkpoint_marks_a_compaction_before_the_next_response(self):
+        lines = [
+            _step(11, "user_input"),
+            _step(12, "system_message", duration_seconds=0.000248),
+            _CHECKPOINT,
+            _step(
+                14, "agent_response", text_delta="OK\n", usage={"input_tokens": 10948}
+            ),
+        ]
+
+        events = list(parse_stream(lines))
+
+        assert [type(e) for e in events] == [
+            ContextCompactedEvent,
+            MessageAddedEvent,
+            TokenUsageEvent,
+        ]
+
+    def test_checkpoint_mid_tool_loop_follows_the_results(self):
+        lines = [
+            _step(
+                1, "agent_response", text_delta="Listing.", usage={"input_tokens": 5}
+            ),
+            _tool(2, "DONE", {"output": "a.txt"}),
+            _CHECKPOINT,
+            _step(14, "agent_response", text_delta="Done.", usage={"input_tokens": 7}),
+        ]
+
+        events = list(parse_stream(lines))
+
+        assert [type(e) for e in events] == [
+            MessageAddedEvent,
+            TokenUsageEvent,
+            ToolCallStartedEvent,
+            ToolCallCompletedEvent,
+            MessageAddedEvent,
+            ContextCompactedEvent,
+            MessageAddedEvent,
+            TokenUsageEvent,
+        ]
 
     def test_flush_keeps_what_a_killed_step_left_unsent(self):
         parse = StreamParser(Session(), 0)
@@ -335,3 +377,31 @@ def _tool(index: int, state: str, info: dict[str, Any]) -> str:
             },
         }
     )
+
+
+def _step(index: int, step_type: str, **fields: Any) -> str:
+    return json.dumps(
+        {
+            "event": "step_update",
+            "step_update": {
+                "step_index": index,
+                "state": "DONE",
+                "step_type": step_type,
+                **fields,
+            },
+        }
+    )
+
+
+_CHECKPOINT = _step(
+    13,
+    "checkpoint",
+    duration_seconds=12.153453,
+    usage={
+        "input_tokens": 55810,
+        "output_tokens": 1160,
+        "thinking_tokens": 486,
+        "cache_read_tokens": 227007,
+        "total_tokens": 56970,
+    },
+)

@@ -8,6 +8,7 @@ from textual.widgets import RichLog, Static, TextArea
 
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
+    ContextCompactedEvent,
     ErrorEvent,
     Event,
     MessageAddedEvent,
@@ -464,6 +465,8 @@ class TranscriptView(VerticalScroll):
                 markdown = convert_scoring_event_to_markdown(event)
             case ErrorEvent():
                 markdown = convert_error_event_to_markdown(event)
+            case ContextCompactedEvent():
+                markdown = "🗜️ **Context compacted**"
             case (
                 TaskCompletedEvent()
                 | MessageChunkEvent()

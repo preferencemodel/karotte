@@ -177,6 +177,12 @@ class TokenUsageEvent(BaseEvent):
     ``trafficType``), else the tier asked for; None is the provider's default tier."""
 
 
+class ContextCompactedEvent(BaseEvent):
+    """The agent compacted its context, replacing earlier messages with a summary."""
+
+    type: Literal["context_compacted"] = "context_compacted"
+
+
 class UnknownEvent(BaseEvent):
     """An event type this version doesn't know, kept as-is so newer transcripts still load."""
 
@@ -208,6 +214,7 @@ Event = (
     | TaskPreHookCompletedEvent
     | MetadataEvent
     | TokenUsageEvent
+    | ContextCompactedEvent
     | UnknownEvent
 )
 

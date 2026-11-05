@@ -15,6 +15,7 @@ from karotte.agents.cli_agent import AGENTS_BIN_DIR
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import (
+    ContextCompactedEvent,
     Event,
     MessageAddedEvent,
     TokenUsageEvent,
@@ -393,6 +394,73 @@ class TestParseStream:
         assert "7 × 11 × 13" in first.message.reasoning_content
         assert all(m.message.reasoning_content is None for m in rest)
 
+    def test_compaction_comes_before_the_summary(self):
+        lines = [
+            _COMPACTING,
+            _COMPACTED,
+            _COMPACT_BOUNDARY,
+            _SUMMARY,
+        ]
+
+        events = list(parse_stream(lines))
+
+        assert [type(e) for e in events] == [ContextCompactedEvent, MessageAddedEvent]
+        summary = events[1]
+        assert isinstance(summary, MessageAddedEvent)
+        assert summary.message.role == "user"
+        assert str(summary.message.content).startswith("This session is being")
+
+    def test_compaction_mid_response_follows_the_held_results(self):
+        lines = [
+            _stream_event({"type": "message_start", "message": {"usage": {}}}),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "toolu_1",
+                                "name": "Bash",
+                                "input": {"command": "ls"},
+                            }
+                        ]
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "toolu_1",
+                                "content": "a.txt",
+                            }
+                        ]
+                    },
+                }
+            ),
+            _COMPACTING,
+            _COMPACT_BOUNDARY,
+            _SUMMARY,
+            _stream_event({"type": "message_stop"}),
+        ]
+
+        events = list(parse_stream(lines))
+
+        assert [type(e) for e in events] == [
+            MessageAddedEvent,
+            TokenUsageEvent,
+            ToolCallStartedEvent,
+            ToolCallCompletedEvent,
+            MessageAddedEvent,
+            ContextCompactedEvent,
+            MessageAddedEvent,
+        ]
+        assert [e.message.role for e in _messages(events, "user")] == ["user"]
+
     def test_skips_subagent_and_malformed_lines(self):
         subagent = json.dumps(
             {
@@ -402,3 +470,62 @@ class TestParseStream:
             }
         )
         assert list(parse_stream(["not json", "[1]", subagent, ""])) == []
+
+
+_COMPACTING = json.dumps(
+    {"type": "system", "subtype": "status", "status": "compacting", "session_id": "s"}
+)
+_COMPACTED = json.dumps(
+    {
+        "type": "system",
+        "subtype": "status",
+        "status": None,
+        "compact_result": "success",
+        "session_id": "s",
+    }
+)
+_COMPACT_BOUNDARY = json.dumps(
+    {
+        "type": "system",
+        "subtype": "compact_boundary",
+        "uuid": "1f6a",
+        "compact_metadata": {
+            "trigger": "auto",
+            "pre_tokens": 168412,
+            "post_tokens": 11898,
+            "cumulative_dropped_tokens": 156514,
+            "duration_ms": 312006,
+            "preserved_segment": {
+                "head_uuid": "7eb1",
+                "anchor_uuid": "2754",
+                "tail_uuid": "e4bb",
+            },
+            "preserved_messages": {
+                "anchor_uuid": "2754",
+                "uuids": ["7eb1", "e4bb"],
+                "all_uuids": ["7eb1", "e4bb"],
+            },
+        },
+        "logical_parent_uuid": "e4bb",
+        "session_id": "s",
+    }
+)
+_SUMMARY = json.dumps(
+    {
+        "type": "user",
+        "isSynthetic": True,
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "This session is being continued. Summary: ...",
+                }
+            ],
+        },
+    }
+)
+
+
+def _stream_event(event: dict[str, object]) -> str:
+    return json.dumps({"type": "stream_event", "event": event})
