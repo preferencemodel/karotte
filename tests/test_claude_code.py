@@ -119,6 +119,11 @@ class TestClaudeCodeAgent:
         assert env["DISABLE_AUTOUPDATER"] == "1"
         assert env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
 
+    def test_mcp_tools_are_listed_upfront(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://proxy:4000/")
+        env = _agent()._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["ENABLE_TOOL_SEARCH"] == "false"
+
     @pytest.mark.asyncio
     async def test_start_without_proxy_forwards_and_withholds_the_key(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
