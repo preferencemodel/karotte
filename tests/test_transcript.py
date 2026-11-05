@@ -1,5 +1,5 @@
 import pytest
-from mcp.types import CallToolResult, ImageContent
+from mcp.types import CallToolResult, ImageContent, TextContent
 from pydantic import TypeAdapter, ValidationError
 
 from karotte.schemas.chat import Message
@@ -169,3 +169,39 @@ def test_tool_call_result_is_stored_with_mcp_wire_keys():
     assert result["structuredContent"] == {"a": 1}
     assert result["content"][0]["mimeType"] == "image/png"
     assert TypeAdapter(Event).validate_python(stored["events"][0]) == event
+
+
+def test_tool_call_result_respects_dump_options():
+    event = ToolCallCompletedEvent(
+        tool_call_id="call_1",
+        result=CallToolResult(content=[TextContent(type="text", text="x")]),
+    )
+
+    result = event.model_dump(mode="json", exclude_none=True)["result"]
+
+    assert result == {
+        "content": [{"type": "text", "text": "x"}],
+        "isError": False,
+        "resultType": "complete",
+    }
+
+
+def test_tool_call_result_written_before_mcp_2_loads():
+    stored = {
+        "type": "tool_call_completed",
+        "tool_call_id": "call_1",
+        "result": {
+            "meta": {"b": 2},
+            "content": [{"type": "text", "text": "x", "meta": {"a": 1}}],
+            "structuredContent": {"k": "v"},
+            "isError": True,
+        },
+    }
+
+    event = TypeAdapter(Event).validate_python(stored)
+
+    assert isinstance(event, ToolCallCompletedEvent)
+    assert event.result.meta == {"b": 2}
+    assert event.result.content[0].meta == {"a": 1}
+    assert event.result.structured_content == {"k": "v"}
+    assert event.result.is_error is True

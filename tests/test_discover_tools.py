@@ -284,6 +284,32 @@ def custom_tool(param: str) -> ToolResult:
         assert "custom_tool" in tools
         assert "bash" in tools  # From karotte.tools
 
+    def test_discovers_tool_that_imports_from_fastmcp_3_module(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        env_tools_dir = tmp_path / "environment" / "tools"
+        env_tools_dir.mkdir(parents=True)
+        (tmp_path / "environment" / "__init__.py").write_text("")
+        (env_tools_dir / "__init__.py").write_text("")
+        (env_tools_dir / "old_tool.py").write_text(
+            """
+from fastmcp.tools.tool import ToolResult
+
+def old_tool(param: str) -> ToolResult:
+    \"\"\"A tool written for fastmcp 3.\"\"\"
+    return ToolResult(content=[{"type": "text", "text": param}])
+"""
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        for name in [k for k in sys.modules if k.startswith("environment")]:
+            monkeypatch.delitem(sys.modules, name)
+        monkeypatch.delitem(sys.modules, "fastmcp.tools.tool", raising=False)
+
+        tools = discover_tools(tool_names=["old_tool"])
+
+        assert "old_tool" in tools
+        assert sys.modules["fastmcp.tools.tool"].ToolResult is ToolResult
+
     def test_imports_environment_tools_with_correct_prefix(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ):

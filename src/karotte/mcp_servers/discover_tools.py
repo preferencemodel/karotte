@@ -1,10 +1,62 @@
 import importlib
+import importlib.abc
+import importlib.machinery
+import importlib.util
 import inspect
 import pkgutil
+import sys
+import types
 import typing
 from collections.abc import Callable, Sequence
+from typing import Any
 
 from fastmcp.tools import ToolResult
+from loguru import logger
+
+_FASTMCP3_TOOL_MODULE = "fastmcp.tools.tool"
+
+
+class _Fastmcp3ToolModule(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """Serves `fastmcp.tools.tool`, which fastmcp 4 removed, from `fastmcp.tools`.
+
+    Tools written for fastmcp 3 import `ToolResult` from there.
+    """
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: Sequence[str] | None,
+        target: types.ModuleType | None = None,
+    ) -> importlib.machinery.ModuleSpec | None:
+        if fullname != _FASTMCP3_TOOL_MODULE:
+            return None
+        return importlib.util.spec_from_loader(fullname, self)
+
+    def exec_module(self, module: types.ModuleType) -> None:
+        logger.warning(
+            f"`{_FASTMCP3_TOOL_MODULE}` was removed in fastmcp 4; "
+            + "import from `fastmcp.tools` instead"
+        )
+        import fastmcp.tools
+        import fastmcp.tools.base
+        import fastmcp.tools.function_tool
+
+        def __getattr__(name: str) -> Any:
+            for source in (fastmcp.tools.base, fastmcp.tools.function_tool):
+                if hasattr(source, name):
+                    return getattr(source, name)
+            raise AttributeError(
+                f"module {module.__name__!r} has no attribute {name!r}"
+            )
+
+        module.__dict__.update(
+            {name: getattr(fastmcp.tools, name) for name in fastmcp.tools.__all__}
+        )
+        module.__getattr__ = __getattr__  # type: ignore[method-assign]
+
+
+if not any(isinstance(f, _Fastmcp3ToolModule) for f in sys.meta_path):
+    sys.meta_path.append(_Fastmcp3ToolModule())
 
 
 class InvalidToolError(Exception):

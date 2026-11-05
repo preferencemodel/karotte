@@ -1,6 +1,7 @@
 from mcp.types import CallToolResult, ImageContent, TextContent
 
 from karotte.agents.tool_results import tool_result_events
+from karotte.schemas.transcript import ToolCallCompletedEvent
 
 
 def test_image_bytes_are_kept_only_in_the_tool_message():
@@ -100,6 +101,22 @@ def test_server_info_stamp_is_not_stored():
     completed, _ = tool_result_events("call_1", result)
 
     assert completed.result.meta == {"custom": 1}
+
+
+def test_server_info_stamp_is_not_stored_when_event_is_built_directly():
+    result = CallToolResult.model_validate(
+        {
+            "content": [],
+            "_meta": {
+                "io.modelcontextprotocol/serverInfo": {"name": "s", "version": "1"},
+                "custom": 1,
+            },
+        }
+    )
+
+    event = ToolCallCompletedEvent(tool_call_id="call_1", result=result)
+
+    assert event.result.meta == {"custom": 1}
 
 
 def test_meta_with_only_the_server_info_stamp_is_dropped():

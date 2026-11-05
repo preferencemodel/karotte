@@ -12,7 +12,10 @@ from litellm import CustomStreamWrapper
 from litellm.types.utils import Delta as LiteLlmDelta
 from litellm.types.utils import ModelResponseStream, StreamingChoices, Usage
 
-from karotte.agents.builtin_source import BuiltinSource
+from karotte.agents.builtin_source import (
+    BuiltinSource,
+    _thinking_blocks,  # pyright: ignore[reportPrivateUsage]
+)
 from karotte.model_spec import spec_for
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -504,6 +507,28 @@ async def test_other_providers_neither_keep_nor_send_reasoning_state(
     sent = source.get_completion_params([user, assistant], [])["messages"][1]
     assert "thinking_blocks" not in sent
     assert "reasoning_items" not in sent
+
+
+def test_unsigned_thinking_before_a_redacted_block_is_not_kept():
+    chunks = [
+        _chunk(
+            LiteLlmDelta(thinking_blocks=[{"type": "thinking", "thinking": "lost "}])
+        ),
+        _chunk(
+            LiteLlmDelta(thinking_blocks=[{"type": "redacted_thinking", "data": "r"}])
+        ),
+        _chunk(LiteLlmDelta(thinking_blocks=[{"type": "thinking", "thinking": "b"}])),
+        _chunk(
+            LiteLlmDelta(
+                thinking_blocks=[{"type": "thinking", "thinking": "", "signature": "s"}]
+            )
+        ),
+    ]
+
+    assert _thinking_blocks(chunks) == [
+        {"type": "redacted_thinking", "data": "r"},
+        {"type": "thinking", "thinking": "b", "signature": "s"},
+    ]
 
 
 def _chat_chunk(
