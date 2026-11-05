@@ -3,7 +3,7 @@ import os
 import shutil
 import stat
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -215,7 +215,7 @@ def _copy_file(fd: int, dest: Path, state: _CopyState, rel: str) -> None:
 
 
 @contextmanager
-def _dest_failure_is_misbehavior(rel: str) -> Iterator[None]:
+def _dest_failure_is_misbehavior(rel: str) -> Generator[None]:
     try:
         yield
     except OSError as e:

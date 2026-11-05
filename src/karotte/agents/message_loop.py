@@ -1,7 +1,7 @@
 import json
 import time
 from collections.abc import AsyncGenerator, Sequence
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from fastmcp import Client
 from fastmcp.client import StreamableHttpTransport
@@ -298,7 +298,7 @@ async def _execute_tool_calls(
         else:
             if arguments is None or isinstance(arguments, dict):
                 result = await mcp_client.call_tool_mcp(
-                    tool_call.function.name, arguments
+                    tool_call.function.name, cast("dict[str, Any]", arguments)
                 )
             else:
                 # MCP only takes an object (or nothing) as tool arguments, and

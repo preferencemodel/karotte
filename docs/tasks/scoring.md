@@ -166,10 +166,14 @@ class FinalMessageJudge(Judge):
 
     @override
     def evaluate(self, transcript: Transcript) -> Scoring:
-        replies = [m for m in transcript.messages if m.role == "assistant" and m.content]
+        replies = [
+            m for m in transcript.messages if m.role == "assistant" and m.content
+        ]
         last = str(replies[-1].content) if replies else ""
         passed = self.expected in last
-        return Scoring(score=float(passed), metadata={"last_message": last}, continue_task=passed)
+        return Scoring(
+            score=float(passed), metadata={"last_message": last}, continue_task=passed
+        )
 ```
 
 A judge can score from:

@@ -29,7 +29,7 @@ from tests.conftest import register_hardware_plugins
 
 
 @pytest.fixture(autouse=True)
-def _stub_process_hardening():  # pyright: ignore[reportUnusedFunction]
+def _stub_process_hardening():
     """run() calls sanitize_paths_and_reexec(), which sanitizes process-global env
     vars in place and re-execs. pytest can't revert either, so a real call would
     strip non-root PATH entries (e.g. nix-store paths holding `uv`) or replace the
@@ -48,7 +48,7 @@ def _stub_process_hardening():  # pyright: ignore[reportUnusedFunction]
 
 
 @pytest.fixture(autouse=True)
-def _docker_by_default(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+def _docker_by_default(monkeypatch: pytest.MonkeyPatch):
     """The real default depends on the OS running the tests and its VM setup."""
     # The package re-exports the `run` function under the module's name.
     monkeypatch.setattr(
@@ -126,7 +126,7 @@ def test_raises_error_if_trying_to_prepare_only_with_parallel_runs(
 
 
 @pytest.fixture(autouse=True)
-def _restore_proxy_env(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+def _restore_proxy_env(monkeypatch: pytest.MonkeyPatch):
     """Uncontainerized runs with a proxy export it into os.environ."""
     for var in ("KAROTTE_PROXY_URL", "ANTHROPIC_BASE_URL"):
         monkeypatch.setenv(var, "")

@@ -7,7 +7,7 @@ import os
 import stat
 import time
 import warnings
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextvars import ContextVar
 from functools import cache
 from pathlib import Path
@@ -157,7 +157,7 @@ _shared_budget: ContextVar[_Budget | None] = ContextVar(
 
 
 @contextlib.contextmanager
-def shared_sweep_budget() -> Iterator[None]:
+def shared_sweep_budget() -> Generator[None]:
     """Make every :func:`delete_files` call in the block draw on one budget."""
     token = _shared_budget.set(_Budget(SWEEP_TIMEOUT_SECONDS, SWEEP_ENTRY_BUDGET))
     try:

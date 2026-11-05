@@ -9,7 +9,7 @@ from karotte.cli.build import build
 
 
 @pytest.fixture(autouse=True)
-def _engine_on_path() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction]
+def _engine_on_path() -> Iterator[None]:
     with (
         patch("karotte.build.which", return_value="/usr/bin/engine"),
         patch("karotte.build._buildx_available", return_value=True),
@@ -102,7 +102,7 @@ def test_buildctl_is_only_checked_for_nerdctl(runtime: str):
 
 
 @pytest.fixture(autouse=True)
-def _docker_by_default(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+def _docker_by_default(monkeypatch: pytest.MonkeyPatch):
     """The real default depends on the OS running the tests."""
     # The package re-exports the `build` function under the module's name.
     monkeypatch.setattr(

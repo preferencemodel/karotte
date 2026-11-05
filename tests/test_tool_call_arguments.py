@@ -18,11 +18,11 @@ async def mcp_client() -> AsyncGenerator[Client[FastMCPTransport]]:
     server = FastMCP("test")
 
     @server.tool
-    def echo(text: str) -> str:  # pyright: ignore[reportUnusedFunction]
+    def echo(text: str) -> str:
         return text
 
     @server.tool
-    def ping() -> str:  # pyright: ignore[reportUnusedFunction]
+    def ping() -> str:
         return "pong"
 
     async with Client(FastMCPTransport(server)) as client:

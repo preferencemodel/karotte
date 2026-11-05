@@ -184,7 +184,7 @@ real_cohort_kill = pytest.mark.real_cohort_kill
 
 
 @pytest.fixture(autouse=True)
-def _stub_cohort_kill(  # pyright: ignore[reportUnusedFunction]
+def _stub_cohort_kill(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Keep the in-cohort kill out of the tests that fake ``/proc``.

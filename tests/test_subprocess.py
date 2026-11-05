@@ -33,7 +33,7 @@ else is on the box."""
 
 
 @pytest.fixture(autouse=True)
-def _no_ipc_namespace(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+def _no_ipc_namespace(monkeypatch: pytest.MonkeyPatch):
     """The IPC probe forks a real child; tests opt in to availability explicitly."""
     monkeypatch.setattr("karotte.subprocess._ipcns_probed", True)
     monkeypatch.setattr("karotte.subprocess._ipcns_available", False)
@@ -1091,7 +1091,7 @@ def test_wrap_to_disable_networking_preserves_argv(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.fixture(autouse=True)
-def _forget_pidns_probe():  # pyright: ignore[reportUnusedFunction]
+def _forget_pidns_probe():
     """The probe result is cached process-wide; each test gets a fresh one."""
     reset_pid_namespace_probe()
     yield
