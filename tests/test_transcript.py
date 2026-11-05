@@ -5,6 +5,7 @@ from pydantic import TypeAdapter, ValidationError
 from karotte.schemas.chat import Message
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
+    ContextCompactedEvent,
     ErrorEvent,
     Event,
     MessageAddedEvent,
@@ -134,6 +135,16 @@ def test_unknown_event_type_is_kept_as_is():
     [event] = transcript.events
     assert isinstance(event, UnknownEvent)
     assert transcript.model_dump(mode="json")["events"] == [raw]
+
+
+def test_context_compacted_event_round_trips_through_a_transcript():
+    stored = Transcript(run_id="r", events=[ContextCompactedEvent()]).model_dump(
+        mode="json"
+    )
+
+    assert stored["events"][0]["type"] == "context_compacted"
+    [event] = Transcript.model_validate(stored).events
+    assert isinstance(event, ContextCompactedEvent)
 
 
 def test_malformed_known_event_is_not_swallowed():

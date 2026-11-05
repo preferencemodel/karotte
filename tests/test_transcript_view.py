@@ -9,6 +9,7 @@ from karotte.schemas.chat import ChatCompletionMessageToolCall, Delta, Function,
 from karotte.schemas.scoring import Scoring
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
+    ContextCompactedEvent,
     ErrorEvent,
     MessageAddedEvent,
     MessageChunkEvent,
@@ -805,3 +806,15 @@ class TestSimplifyMessageAddedEvent:
         # Should return the same event (no images to simplify)
         assert isinstance(result, MessageAddedEvent)
         assert result.message.content == event.message.content
+
+
+@pytest.mark.asyncio
+async def test_pretty_mode_marks_a_context_compaction():
+    app = TranscriptViewTestApp()
+
+    async with app.run_test():
+        transcript_view = app.query_one("#transcript-view", TranscriptView)
+
+        markdown = transcript_view.convert_event_to_markdown(ContextCompactedEvent())
+
+        assert "Context compacted" in markdown

@@ -14,6 +14,7 @@ from karotte.agents.tool_results import tool_result_events
 from karotte.agents.usage import int_or_zero
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
+    ContextCompactedEvent,
     Event,
     MessageAddedEvent,
     TokenUsageEvent,
@@ -92,6 +93,9 @@ class StreamParser:
                     self._results.extend(
                         tool_result_events(call_id, _result(info, state == "ERROR"))
                     )
+            case "checkpoint" if update.get("state") == "DONE":
+                yield from self.flush()
+                yield ContextCompactedEvent()
             case kind:
                 logger.debug("Skipping agy {} step.", kind)
 

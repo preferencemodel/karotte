@@ -22,6 +22,7 @@ from karotte.agents.tool_results import tool_result_events
 from karotte.agents.usage import messages_usage_event
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
+    ContextCompactedEvent,
     Event,
     MessageAddedEvent,
     ToolCallStartedEvent,
@@ -58,16 +59,22 @@ class StreamParser:
                 if isinstance(content, list):
                     self._blocks.extend(b for b in content if isinstance(b, dict))
             case "user":
-                events = _user_events(_message(record).get("content"))
-                if self._in_response:
-                    self._held_results.extend(events)
-                else:
-                    yield from events
+                yield from self._after_response(
+                    _user_events(_message(record).get("content"))
+                )
+            case "system" if record.get("subtype") == "compact_boundary":
+                yield from self._after_response([ContextCompactedEvent()])
             case "result" if record.get("is_error"):
                 self.error = str(record.get("result"))
                 logger.warning("claude reported an error: {}", self.error)
             case _:
                 pass
+
+    def _after_response(self, events: Iterable[Event]) -> Iterator[Event]:
+        if self._in_response:
+            self._held_results.extend(events)
+        else:
+            yield from events
 
     def _stream_event(self, event: Any) -> Iterator[Event]:
         if not isinstance(event, dict):
