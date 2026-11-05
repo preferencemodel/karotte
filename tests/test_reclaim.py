@@ -5,7 +5,7 @@ import ctypes
 import errno
 import os
 import tracemalloc
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -879,7 +879,7 @@ class TestSweepEntryBudget:
         real = os.scandir
 
         @contextlib.contextmanager
-        def counting(fd: int) -> Iterator[Iterator[os.DirEntry[str]]]:
+        def counting(fd: int) -> Generator[Iterator[os.DirEntry[str]]]:
             def entries(it: Iterator[os.DirEntry[str]]) -> Iterator[os.DirEntry[str]]:
                 for entry in it:
                     pulled[0] += 1

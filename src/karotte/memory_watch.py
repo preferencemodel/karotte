@@ -3,7 +3,7 @@
 import os
 import re
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -517,7 +517,7 @@ def watch_memory(
     *,
     max_processes: int | None = None,
     poll_interval: float = POLL_INTERVAL_S,
-) -> Iterator[MemoryWatch]:
+) -> Generator[MemoryWatch]:
     """:func:`start_watch` scoped to a block."""
     running = start_watch(
         uid, max_bytes, max_processes=max_processes, poll_interval=poll_interval

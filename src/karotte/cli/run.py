@@ -176,7 +176,10 @@ def run(
     ] = None,
     temperature: Annotated[
         float | None,
-        typer.Option(help="Sampling temperature. Overrides the config's temperature."),
+        typer.Option(
+            help="Sampling temperature. Overrides the config's temperature.",
+            metavar="FLOAT",
+        ),
     ] = None,
     transcript_file: Annotated[
         str | None,

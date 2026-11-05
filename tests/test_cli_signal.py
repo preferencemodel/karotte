@@ -11,7 +11,7 @@ from karotte.cli import (
 
 
 @pytest.fixture
-def _restore_sigterm():  # pyright: ignore[reportUnusedFunction]
+def _restore_sigterm():
     original = signal.getsignal(signal.SIGTERM)
     try:
         yield

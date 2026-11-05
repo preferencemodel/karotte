@@ -231,9 +231,7 @@ def fresh_confinement():
 
 
 @pytest.fixture(autouse=True)
-def _oom_score_to_a_file(  # pyright: ignore[reportUnusedFunction]
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
+def _oom_score_to_a_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Tests call the student preexec in-process with setuid patched out; the
     real write would make pytest itself the first OOM victim."""
     monkeypatch.setattr(

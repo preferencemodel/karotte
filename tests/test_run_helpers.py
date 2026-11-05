@@ -39,7 +39,7 @@ from tests.conftest import register_hardware_plugins
 
 
 @pytest.fixture(autouse=True)
-def _no_ci_sudo(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+def _no_ci_sudo(monkeypatch: pytest.MonkeyPatch):
     """CI runners set CI, which prefixes engine commands with sudo."""
     monkeypatch.delenv("CI", raising=False)
 
@@ -1726,7 +1726,7 @@ class TestDockerGvisorCleanUp:
 
 
 @pytest.fixture(autouse=True)
-def _fixed_network_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):  # pyright: ignore[reportUnusedFunction]
+def _fixed_network_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """The strict firewall allows the sandbox's own addresses; pin them so rule
     lists don't depend on the machine running the tests. Proxy pinning writes
     to a temp hosts file, never the real /etc/hosts."""
