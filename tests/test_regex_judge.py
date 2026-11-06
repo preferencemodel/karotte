@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from karotte.judges.regex_judge import RegexJudge
+from karotte.judges.regex_judge import RegexJudge, final_answer_pattern
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message, Role
 from karotte.schemas.transcript import (
     MessageAddedEvent,
@@ -166,3 +166,58 @@ def test_general_value_match_multiline(transcript: Transcript):
     assert scoring.score == 1
     assert scoring.metadata == {}
     assert scoring.continue_task is True
+
+
+@pytest.mark.parametrize(
+    "messages",
+    [
+        ["answer: 5"],
+        ["answer: 5."],
+        ["2 + 3 = 5.\n\nanswer: 5"],
+        ["answer: 4", "I added wrong, the right one is answer: 5"],
+    ],
+)
+def test_final_answer_pattern_matches_the_last_answer(
+    transcript: Transcript, messages: list[str]
+):
+    transcript.events.extend(
+        MessageAddedEvent(message=Message(content=m)) for m in messages
+    )
+
+    scoring = RegexJudge([final_answer_pattern("5")]).evaluate(transcript)
+
+    assert scoring.score == 1
+    assert scoring.continue_task is True
+
+
+@pytest.mark.parametrize(
+    "messages",
+    [
+        ["\n".join(f"answer: {n}" for n in range(100))],
+        ["answer: 5", "Actually, answer: 7"],
+        ["answer: 5.5"],
+        ["answer: 55"],
+        ["answer: 5,000"],
+    ],
+)
+def test_final_answer_pattern_rejects_guesses_and_longer_values(
+    transcript: Transcript, messages: list[str]
+):
+    transcript.events.extend(
+        MessageAddedEvent(message=Message(content=m)) for m in messages
+    )
+
+    scoring = RegexJudge([final_answer_pattern("5")]).evaluate(transcript)
+
+    assert scoring.score == 0
+    assert scoring.continue_task is False
+
+
+def test_final_answer_pattern_escapes_the_answer(transcript: Transcript):
+    transcript.events.append(
+        MessageAddedEvent(message=Message(content="answer: 3x12x11"))
+    )
+
+    scoring = RegexJudge([final_answer_pattern("3.12.11")]).evaluate(transcript)
+
+    assert scoring.score == 0

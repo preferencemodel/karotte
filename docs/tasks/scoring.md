@@ -125,6 +125,20 @@ Every pattern must match for a score of 1 and `continue_task=True`; otherwise th
 score is 0 and the metadata lists the patterns that did not match.
 Matching includes assistant text from earlier steps in the same task.
 
+A pattern like `answer: 42` also matches when the model lists many answers, or gives
+`answer: 42` and then changes it.
+To check a single final answer, use `final_answer_pattern`:
+
+```python
+from karotte.judges import RegexJudge, final_answer_pattern
+
+RegexJudge([final_answer_pattern("42")])
+```
+
+It escapes the answer, counts only the last `answer:` in the assistant text, and
+doesn't accept a longer value such as `answer: 42.5` or `answer: 420`.
+Pass `prefix=` to use another label, for example `final_answer_pattern(path, prefix="path:")`.
+
 ### AlwaysPassJudge
 
 `AlwaysPassJudge()` scores 1 and continues.
