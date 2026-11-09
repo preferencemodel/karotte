@@ -100,6 +100,7 @@ class TestPromptCaching:
 _GEMINI = spec_for("vertex_ai/gemini-3.1-pro-preview")
 _VERTEX_CLAUDE = spec_for("vertex_ai/claude-sonnet-5")
 _GLM = spec_for("fireworks_ai/accounts/fireworks/models/glm-5p3")
+_QWEN = spec_for("fireworks_ai/accounts/fireworks/models/qwen3p8-max")
 _VERTEX_PRIORITY_HEADERS = {
     "X-Vertex-AI-LLM-Request-Type": "shared",
     "X-Vertex-AI-LLM-Shared-Request-Type": "priority",
@@ -230,6 +231,15 @@ class TestServiceTier:
         params: dict[str, Any] = {}
         assert VertexProvider().apply_service_tier(_VERTEX_CLAUDE, True, params) is None
         assert params == {}
+
+    def test_fireworks_never_asks_for_priority_on_qwen(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        _set_mode(monkeypatch, "priority")
+        params: dict[str, Any] = {}
+        assert FireworksProvider().apply_service_tier(_QWEN, True, params) is None
+        assert params == {}
+        assert not FireworksProvider().escalates_on(_QWEN, Mock(status_code=503))
 
     def test_other_providers_leave_the_tier_alone(
         self, monkeypatch: pytest.MonkeyPatch
