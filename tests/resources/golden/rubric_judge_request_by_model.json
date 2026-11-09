@@ -8,6 +8,15 @@
       "the criterion is met"
     ]
   },
+  "claude-fable-5-2": {
+    "model": "anthropic/claude-fable-5-2",
+    "max_tokens": 32000,
+    "temperature": "<omitted>",
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
   "claude-fable-5-1": {
     "model": "anthropic/claude-fable-5-1",
     "max_tokens": 32000,

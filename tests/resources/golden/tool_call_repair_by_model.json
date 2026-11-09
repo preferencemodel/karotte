@@ -2,6 +2,7 @@
   "sent_by_the_model": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
   "seen_by_the_tool": {
     "claude-opus-5-5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
+    "claude-fable-5-2": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-fable-5-1": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-fable-5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",
     "claude-opus-5": "{\"text\": \"\\\"<\uff5ctool\u2581call\u2581begin\uff5c>hello\\\"\"}",

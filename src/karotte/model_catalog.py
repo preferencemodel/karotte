@@ -25,6 +25,7 @@ class ModelCatalog(BaseModel, frozen=True):
 # The first entry is the default in model pickers.
 CATALOG_MODEL_IDS: tuple[str, ...] = (
     "claude-opus-5-5",
+    "claude-fable-5-2",
     "claude-fable-5-1",
     "claude-fable-5",
     "claude-opus-5",

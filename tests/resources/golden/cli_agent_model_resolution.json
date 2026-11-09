@@ -5,6 +5,12 @@
     "env": {},
     "key_env": null
   },
+  "claude-fable-5-2": {
+    "provider": "",
+    "model": "claude-fable-5-2",
+    "env": {},
+    "key_env": null
+  },
   "claude-fable-5-1": {
     "provider": "",
     "model": "claude-fable-5-1",

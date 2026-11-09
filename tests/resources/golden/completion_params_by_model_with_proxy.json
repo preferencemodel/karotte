@@ -37,6 +37,44 @@
       "display": "summarized"
     }
   },
+  "claude-fable-5-2": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "anthropic/claude-fable-5-2",
+    "messages": [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Go.",
+            "cache_control": {
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          }
+        ],
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 128000,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
+    "thinking": {
+      "type": "adaptive",
+      "display": "summarized"
+    }
+  },
   "claude-fable-5-1": {
     "stream": true,
     "stream_options": {
