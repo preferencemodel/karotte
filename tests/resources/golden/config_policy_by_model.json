@@ -134,7 +134,7 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
-  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
+  "fireworks_ai/accounts/fireworks/models/qwen3p8-max": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,
     "api_key_required": true

@@ -609,11 +609,11 @@
       "extra_allowed_openai_params": []
     },
     {
-      "model": "together_ai/Qwen/Qwen3.8-2.4T-A95B",
-      "model_display_name": "Qwen3.8 2.4T A95B",
-      "provider": "together_ai",
-      "provider_display_name": "Together AI",
-      "litellm_model": "together_ai/Qwen/Qwen3.8-2.4T-A95B",
+      "model": "fireworks_ai/accounts/fireworks/models/qwen3p8-max",
+      "model_display_name": "Qwen3.8 Max",
+      "provider": "fireworks_ai",
+      "provider_display_name": "Fireworks AI",
+      "litellm_model": "fireworks_ai/accounts/fireworks/models/qwen3p8-max",
       "max_output_tokens": 128000,
       "min_reasoning_effort": "low",
       "max_reasoning_effort": "xhigh",

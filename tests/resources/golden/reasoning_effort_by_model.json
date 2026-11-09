@@ -657,7 +657,7 @@
       "mapped_by_litellm": {}
     }
   },
-  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
+  "fireworks_ai/accounts/fireworks/models/qwen3p8-max": {
     "None": {
       "sent_by_karotte": null,
       "mapped_by_litellm": {}

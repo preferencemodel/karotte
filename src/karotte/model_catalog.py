@@ -51,7 +51,7 @@ CATALOG_MODEL_IDS: tuple[str, ...] = (
     "fireworks_ai/accounts/fireworks/models/glm-5p3-flash",
     "together_ai/zai-org/GLM-5.2",
     "together_ai/zai-org/GLM-5.1",
-    "together_ai/Qwen/Qwen3.8-2.4T-A95B",
+    "fireworks_ai/accounts/fireworks/models/qwen3p8-max",
     "openai/o1",
     "openai/o3",
     "openai/gpt-5",

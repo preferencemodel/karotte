@@ -891,12 +891,12 @@
     ],
     "api_key": "test_key"
   },
-  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
+  "fireworks_ai/accounts/fireworks/models/qwen3p8-max": {
     "stream": true,
     "stream_options": {
       "include_usage": true
     },
-    "model": "together_ai/Qwen/Qwen3.8-2.4T-A95B",
+    "model": "fireworks_ai/accounts/fireworks/models/qwen3p8-max",
     "messages": [
       {
         "content": "Go.",
@@ -915,7 +915,10 @@
       "tool_choice",
       "reasoning_effort"
     ],
-    "api_key": "test_key"
+    "api_key": "test_key",
+    "extra_headers": {
+      "x-session-affinity": "golden-run"
+    }
   },
   "openai/o1": {
     "stream": true,
