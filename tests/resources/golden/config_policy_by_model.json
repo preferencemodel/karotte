@@ -4,6 +4,11 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "claude-fable-5-2": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
   "claude-fable-5-1": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,

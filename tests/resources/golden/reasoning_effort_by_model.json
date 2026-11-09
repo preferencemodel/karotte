@@ -34,6 +34,41 @@
       }
     }
   },
+  "claude-fable-5-2": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      }
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        },
+        "output_config": {
+          "effort": "low"
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        },
+        "output_config": {
+          "effort": "max"
+        }
+      }
+    }
+  },
   "claude-fable-5-1": {
     "None": {
       "sent_by_karotte": null,
