@@ -161,9 +161,9 @@
     "env": {},
     "key_env": null
   },
-  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
-    "provider": "together_ai",
-    "model": "Qwen/Qwen3.8-2.4T-A95B",
+  "fireworks_ai/accounts/fireworks/models/qwen3p8-max": {
+    "provider": "fireworks_ai",
+    "model": "accounts/fireworks/models/qwen3p8-max",
     "env": {},
     "key_env": null
   },

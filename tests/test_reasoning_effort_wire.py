@@ -105,7 +105,7 @@ def test_responses_body_carries_effort(model: str, effort: str):
 @pytest.mark.parametrize(
     ("model", "effort"),
     [
-        ("together_ai/Qwen/Qwen3.8-2.4T-A95B", "xhigh"),
+        ("fireworks_ai/accounts/fireworks/models/qwen3p8-max", "xhigh"),
         ("together_ai/moonshotai/Kimi-K3", "max"),
         ("together_ai/zai-org/GLM-5.3", "max"),
         ("together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017", "max"),

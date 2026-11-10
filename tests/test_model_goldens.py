@@ -267,14 +267,21 @@ def test_together_effort_gets_past_litellms_param_check():
     assert _litellm_reasoning_params("together_ai/zai-org/GLM-5.3", "max") == {
         "reasoning_effort": "high"
     }
-    assert _litellm_reasoning_params("together_ai/Qwen/Qwen3.8-2.4T-A95B", "max") == {
-        "reasoning_effort": "xhigh"
-    }
     assert _litellm_reasoning_params("together_ai/moonshotai/Kimi-K3", "min") == {
         "reasoning_effort": "low"
     }
     # Models without an effort range send nothing, so there is nothing to allow.
     assert _litellm_reasoning_params("together_ai/zai-org/GLM-5.2", "max") == {}
+
+
+def test_fireworks_effort_gets_past_litellms_param_check():
+    """Same for fireworks_ai: its litellm param list has no reasoning_effort."""
+    assert _litellm_reasoning_params(
+        "fireworks_ai/accounts/fireworks/models/qwen3p8-max", "max"
+    ) == {"reasoning_effort": "xhigh"}
+    assert _litellm_reasoning_params(
+        "fireworks_ai/accounts/fireworks/models/glm-5p3", "min"
+    ) == {"reasoning_effort": "low"}
 
 
 def test_tools_are_offered_when_the_task_has_them(monkeypatch: pytest.MonkeyPatch):

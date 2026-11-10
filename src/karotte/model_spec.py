@@ -138,7 +138,7 @@ _MAX_OUTPUT_TOKENS: dict[str, int] = {
     "deepseek-v4p1-flash-1017": 393216,
     "muse-spark-1.3": 128000,
     "muse-wonder-1.0": 128000,
-    "Qwen3.8-2.4T-A95B": 128000,
+    "qwen3p8-max": 128000,
 }
 
 _MAX_OUTPUT_TOKENS_PREFIXES: tuple[tuple[str, int], ...] = (
@@ -179,7 +179,8 @@ _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
     "glm-5p3-flash": ("low", "high", "max"),
     "Kimi-K3.1-Pro": ("low", "medium", "high", "max"),
     "Kimi-K3": ("low", "high", "max"),
-    "Qwen3.8-2.4T-A95B": ("low", "medium", "xhigh"),
+    # Qwen3.8's chat template takes only these three.
+    "qwen3p8-max": ("low", "medium", "xhigh"),
 }
 
 # litellm validates effort against its cost map, which lacks the bridge name
@@ -203,7 +204,7 @@ _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
         "GLM-5.3",
         "glm-5p3",
         "glm-5p3-flash",
-        "Qwen3.8-2.4T-A95B",
+        "qwen3p8-max",
         "Kimi-K3.1-Pro",
         "Kimi-K3",
     ),

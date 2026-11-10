@@ -281,6 +281,15 @@ class TogetherAiProvider(Provider):
             merge_extra_body(params, {"reasoning_effort": effort})
 
 
+# Fireworks models never asked for Priority: Qwen3.8 Max's Priority is +50% over
+# Standard, against +25% for most models.
+_FIREWORKS_STANDARD_ONLY: Final = frozenset({"qwen3p8-max"})
+
+
+def _fireworks_priority(spec: ModelSpec) -> bool:
+    return spec.model.split("/")[-1] not in _FIREWORKS_STANDARD_ONLY
+
+
 class FireworksProvider(Provider):
     @override
     def apply_prompt_caching(
@@ -294,16 +303,16 @@ class FireworksProvider(Provider):
         merge_extra_headers(params, {"x-session-affinity": cache_key})
 
     @override
-    def escalates_on(self, _spec: ModelSpec, exc: Exception) -> bool:
+    def escalates_on(self, spec: ModelSpec, exc: Exception) -> bool:
         # 503 is Fireworks' load shedding, which Priority is admitted ahead of. A 429
         # is the account's rate limit, which Priority does not lift.
-        return getattr(exc, "status_code", None) == 503
+        return _fireworks_priority(spec) and getattr(exc, "status_code", None) == 503
 
     @override
     def apply_service_tier(
-        self, _spec: ModelSpec, escalated: bool, params: dict[str, Any]
+        self, spec: ModelSpec, escalated: bool, params: dict[str, Any]
     ) -> str | None:
-        if not _wants_priority(escalated):
+        if not (_fireworks_priority(spec) and _wants_priority(escalated)):
             return None
         # extra_body: litellm's fireworks_ai param list lacks service_tier.
         merge_extra_body(params, {"service_tier": "priority"})
