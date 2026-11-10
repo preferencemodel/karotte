@@ -1429,6 +1429,33 @@
     ],
     "api_key": "test_key"
   },
+  "vertex_ai/gemini-4-carbon": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "vertex_ai/gemini-4-carbon",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 1048576,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
   "vertex_ai/gemini-4-argon": {
     "stream": true,
     "stream_options": {
@@ -1534,6 +1561,34 @@
       "tools",
       "tool_choice"
     ],
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  },
+  "gemini/gemini-4-carbon": {
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "model": "gemini/gemini-4-carbon",
+    "messages": [
+      {
+        "content": "Go.",
+        "role": "user",
+        "tool_calls": null,
+        "reasoning_content": null,
+        "tool_call_id": null
+      }
+    ],
+    "tools": [],
+    "tool_choice": null,
+    "max_tokens": 1048576,
+    "timeout": 300.0,
+    "allowed_openai_params": [
+      "tools",
+      "tool_choice"
+    ],
+    "api_key": "test_key",
     "thinkingConfig": {
       "includeThoughts": true
     }
