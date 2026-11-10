@@ -299,6 +299,12 @@
     "env": {},
     "key_env": null
   },
+  "vertex_ai/gemini-4-carbon": {
+    "provider": "vertex_ai",
+    "model": "gemini-4-carbon",
+    "env": {},
+    "key_env": null
+  },
   "vertex_ai/gemini-4-argon": {
     "provider": "vertex_ai",
     "model": "gemini-4-argon",
@@ -322,6 +328,14 @@
     "model": "gemini-3.7-flash",
     "env": {},
     "key_env": null
+  },
+  "gemini/gemini-4-carbon": {
+    "provider": "gemini",
+    "model": "gemini-4-carbon",
+    "env": {
+      "GEMINI_API_KEY": "test_key"
+    },
+    "key_env": "GEMINI_API_KEY"
   },
   "gemini/gemini-4-argon": {
     "provider": "gemini",

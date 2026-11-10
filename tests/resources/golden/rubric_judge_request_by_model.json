@@ -404,6 +404,15 @@
       "the criterion is met"
     ]
   },
+  "vertex_ai/gemini-4-carbon": {
+    "model": "vertex_ai/gemini-4-carbon",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
   "vertex_ai/gemini-4-argon": {
     "model": "vertex_ai/gemini-4-argon",
     "max_tokens": 32000,
@@ -433,6 +442,15 @@
   },
   "vertex_ai/gemini-3.7-flash": {
     "model": "vertex_ai/gemini-3.7-flash",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "gemini/gemini-4-carbon": {
+    "model": "gemini/gemini-4-carbon",
     "max_tokens": 32000,
     "temperature": 0.3,
     "parsed": [

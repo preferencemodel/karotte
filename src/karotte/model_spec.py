@@ -133,6 +133,7 @@ _DEFAULT_MAX_OUTPUT_TOKENS = 64000
 # max_tokens covers thinking *and* response text, so it doubles as the thinking
 # budget on adaptive-thinking models.
 _MAX_OUTPUT_TOKENS: dict[str, int] = {
+    "gemini-4-carbon": 1048576,
     "gemini-4-argon": 1048576,
     "DeepSeek-V4.1-Flash-1017": 393216,
     "deepseek-v4p1-flash-1017": 393216,
@@ -161,6 +162,7 @@ _CLAUDE_4_6_EFFORT_LEVELS = ("low", "medium", "high", "max")
 _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
     "o1": ("low", "medium", "high"),
     "o3": ("low", "medium", "high"),
+    "gemini-4-carbon": ("low", "medium", "high"),
     "gemini-4-argon": ("low", "medium", "high"),
     "gemini-3.1-pro-preview": ("low", "medium", "high"),
     "gemini-3.8-flash": ("low", "medium", "high"),
