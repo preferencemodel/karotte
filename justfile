@@ -53,7 +53,7 @@ test-template template *run_args:
 
 # Run config for template tests; set KAROTTE_TEST_FAKE_MODEL to use the env's fake model instead of an API key
 test-run-config dir:
-  cd {{ dir }} && uv run karotte create-run-config --model claude-haiku-4-5-20251001
+  cd {{ dir }} && uv run karotte create-run-config --model claude-haiku-5-5
   if [ -n "${KAROTTE_TEST_FAKE_MODEL:-}" ]; then jq '.use_fake_model = true' {{ dir }}/run_config.json > {{ dir }}/run_config.json.tmp && mv {{ dir }}/run_config.json.tmp {{ dir }}/run_config.json; fi
 
 # `test-template` for language-toolchains
@@ -68,7 +68,7 @@ test-toolchains-template container_cmd="docker" *run_args:
   cd {{ test_root }}/test_language-toolchains && uv run --extra dev just lint
   cd {{ test_root }}/test_language-toolchains && uv run --extra dev just test
   cd {{ test_root }}/test_language-toolchains && uv run --extra dev just enable-all-toolchains
-  cd {{ test_root }}/test_language-toolchains && uv run karotte create-run-config --model claude-haiku-4-5-20251001
+  cd {{ test_root }}/test_language-toolchains && uv run karotte create-run-config --model claude-haiku-5-5
   cd {{ test_root }}/test_language-toolchains && uv run karotte run --config run_config.json --no-ui --no-proxy {{ run_args }}
   cd {{ test_root }}/test_language-toolchains && uv run python {{ justfile_directory() }}/tests/check_transcript.py out/transcript.json
   cd {{ test_root }}/test_language-toolchains && uv run --extra dev just check-toolchains karotte '' '{{ container_cmd }}'
