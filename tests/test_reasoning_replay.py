@@ -237,6 +237,26 @@ async def test_claude_thinking_is_sent_back_with_its_signature(fake_provider: Se
     assert replayed["content"][-1]["type"] == "tool_use"
 
 
+@pytest.mark.asyncio
+async def test_a_textless_claude_turn_is_sent_back_without_a_text_block(
+    fake_provider: Serve,
+):
+    bodies = fake_provider(_THINK_THEN_CALL_BASH)
+    source = BuiltinSource(_config("claude-sonnet-5-5"))
+    user = Message(role="user", content="List the files.")
+
+    assistant = await _turn(source, [user])
+    tool_result = Message(role="tool", content="a.txt", tool_call_id="toolu_1")
+    await _turn(source, [user, assistant, tool_result])
+
+    replayed = bodies[1]["messages"][1]
+    assert [block["type"] for block in replayed["content"]] == [
+        "thinking",
+        "thinking",
+        "tool_use",
+    ]
+
+
 _ENCRYPTED = "gAAAAABopaque-encrypted-reasoning=="
 _OPENAI_SUMMARY = "I should read the file."
 _REASONING_ITEM = {

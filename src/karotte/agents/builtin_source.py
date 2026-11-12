@@ -495,16 +495,21 @@ class BuiltinSource:
 
     def _serialize_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Serializes transcript messages to dicts."""
-        return [
-            message.model_dump(
+        serialized = []
+        for message in messages:
+            data = message.model_dump(
                 exclude={
                     field
                     for field in ("thinking_blocks", "reasoning_items")
                     if getattr(message, field) is None
                 }
             )
-            for message in messages
-        ]
+            # litellm <1.109 turns "" into a "[System: ...]" line Claude can refuse.
+            content = data["content"]
+            if message.tool_calls and isinstance(content, str) and not content.strip():
+                data["content"] = None
+            serialized.append(data)
+        return serialized
 
 
 def _without_images(message: dict[str, Any]) -> dict[str, Any]:
