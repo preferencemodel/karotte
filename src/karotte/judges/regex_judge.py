@@ -37,6 +37,20 @@ class RegexJudge(Judge):
         return Scoring(score, metadata, score == 1.0)
 
 
+def final_answer_pattern(answer: str, prefix: str = "answer:") -> re.Pattern[str]:
+    """Match `answer` only if it is the last answer the model gave.
+
+    For use with `RegexJudge`. The answer is escaped and must follow the last
+    `prefix` in the assistant text, so listing several answers or changing the
+    answer later doesn't pass. The answer can't continue into a longer value:
+    `answer: 5.5`, `answer: 55` and `answer: 5,000` don't match `5`.
+    """
+    label = re.escape(prefix)
+    return re.compile(
+        rf"{label}\s*{re.escape(answer)}(?![.,]?\w)(?!.*{label})", re.DOTALL
+    )
+
+
 def _message_text(message: Message) -> str:
     if isinstance(message.content, str):
         return message.content

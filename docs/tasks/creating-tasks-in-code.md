@@ -10,10 +10,8 @@ Karotte has a `create_task` factory for simple cases, and the `default` template
 Put the calls in a task package's `__init__.py` and assign each class to a module-level name, since [discovery](tasks-and-steps.md#discovery) collects the task classes in the package's namespace:
 
 ```python
-import re
-
 from karotte import StepConfig, create_task
-from karotte.judges import RegexJudge
+from karotte.judges import RegexJudge, final_answer_pattern
 
 QUESTIONS = {
     "add-small": ("What is 2 + 3?", "5"),
@@ -28,7 +26,7 @@ for task_id, (question, answer) in QUESTIONS.items():
         steps=[
             StepConfig(
                 instructions=f"{question} Answer with `answer: <number>`.",
-                judge=RegexJudge([re.compile(rf"answer: {answer}\b")]),
+                judge=RegexJudge([final_answer_pattern(answer)]),
             )
         ],
     )
