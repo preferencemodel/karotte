@@ -470,7 +470,6 @@ def run(
 
         problems = modal_problems(
             required_hardware=load_task(run_config).required_hardware,
-            mounts=mount,
             dev=dev,
             keep_containers=keep_containers,
             prepare_only=prepare_only,

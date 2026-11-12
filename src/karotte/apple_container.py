@@ -46,7 +46,12 @@ from karotte.forwarded_env import sandbox_env
 from karotte.hardware import VmSize, vm_size
 from karotte.runtime import image_name
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
-from karotte.staged_mounts import STAGED_MOUNTS_ENV_VAR, StagedMount, encode
+from karotte.staged_mounts import (
+    STAGED_MOUNTS_DIR,
+    STAGED_MOUNTS_ENV_VAR,
+    StagedMount,
+    encode,
+)
 from karotte.task import Task
 
 CONTAINER = "container"
@@ -59,7 +64,6 @@ MIN_VERSION = (1, 4, 1)
 
 
 TRANSCRIPT_DIR = "/root/out"
-STAGED_MOUNTS_DIR = "/root/.karotte_mounts"
 DEV_SRC_TARGET = "/root/.venv/lib/python3.12/site-packages/environment/"
 
 APP_ROOT = Path.home() / "Library" / "Application Support" / "com.apple.container"

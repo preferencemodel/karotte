@@ -229,6 +229,7 @@ def run_containerized(
             run_config,
             log_file=log_file,
             build_context=build_context,
+            mounts=mounts,
             proxy_url=proxy_url,
         )
         return
