@@ -78,6 +78,7 @@ class TestLitellmModel:
             ("openai/gpt-6-sol", "openai/responses/gpt-6-sol"),
             ("openai/gpt-6-luna", "openai/responses/gpt-6-luna"),
             ("openai/gpt-6.1-sol", "openai/responses/gpt-6.1-sol"),
+            ("openai/gpt-6.1-terra", "openai/responses/gpt-6.1-terra"),
             # Muse Spark only returns reasoning summaries on the Responses API.
             ("meta/muse-wonder-1.0", "meta/responses/muse-wonder-1.0"),
             ("meta/muse-spark-1.3", "meta/responses/muse-spark-1.3"),
@@ -103,6 +104,7 @@ class TestExtraAllowedOpenAIParams:
             ("openai/gpt-6-sol", ("reasoning_effort",)),
             ("openai/gpt-6-luna", ("reasoning_effort",)),
             ("openai/gpt-6.1-sol", ("reasoning_effort",)),
+            ("openai/gpt-6.1-terra", ("reasoning_effort",)),
             ("openai/gpt-5.6", ()),
             # litellm's cost map predates 3.8 Flash; 3.7 is in it.
             ("vertex_ai/gemini-3.8-flash", ("reasoning_effort",)),
@@ -148,6 +150,7 @@ class TestMaxOutputTokens:
             ("openai/gpt-6-sol", 128000),
             ("openai/gpt-6-luna", 128000),
             ("openai/gpt-6.1-sol", 128000),
+            ("openai/gpt-6.1-terra", 128000),
             ("openai/gpt-5.6", 128000),
             ("claude-fable-5-1", 128000),
             ("claude-haiku-5-5", 128000),
@@ -190,6 +193,7 @@ class TestSamplingParams:
             ("openai/gpt-5.6", True),
             ("openai/gpt-6-astra", False),
             ("openai/gpt-6.1-sol", False),
+            ("openai/gpt-6.1-terra", False),
             ("some-unknown-model", True),
         ],
     )
@@ -224,6 +228,7 @@ class TestReasoningEffort:
             ("openai/gpt-6-sol", ("low", "max")),
             ("openai/gpt-6-luna", ("low", "max")),
             ("openai/gpt-6.1-sol", ("low", "max")),
+            ("openai/gpt-6.1-terra", ("low", "max")),
             ("openai/gpt-5.6", ("low", "max")),
             ("openai/gpt-5.6-sol", ("low", "max")),
             ("openai/gpt-5.6-2026-04-01", ("low", "max")),
@@ -315,6 +320,10 @@ class TestReasoningEffort:
             ("openai/gpt-6-sol", ("low", "medium", "high", "xhigh", "max")),
             ("openai/gpt-6-luna", ("low", "medium", "high", "xhigh", "max")),
             ("openai/gpt-6.1-sol", ("low", "medium", "high", "xhigh", "max")),
+            (
+                "openai/gpt-6.1-terra",
+                ("none", "low", "medium", "high", "xhigh", "max"),
+            ),
             ("vertex_ai/gemini-3.1-pro-preview", ("low", "medium", "high")),
             ("vertex_ai/gemini-3.8-flash", ("low", "medium", "high")),
             ("vertex_ai/gemini-4-hydrogen", ("low", "medium", "high")),
@@ -371,7 +380,9 @@ class TestReasoningEffort:
     @pytest.mark.parametrize("model", CATALOG_MODEL_IDS)
     def test_range_is_the_ends_of_the_levels(self, model: str):
         spec = spec_for(model)
-        levels = spec.reasoning_effort_levels
+        levels = tuple(
+            level for level in spec.reasoning_effort_levels if level != "none"
+        )
         assert spec.min_reasoning_effort == (levels[0] if levels else None)
         assert spec.max_reasoning_effort == (levels[-1] if levels else None)
 
@@ -393,6 +404,10 @@ class TestReasoningEffort:
             # A provider's own level name passes through untouched.
             ("claude-opus-5", "medium", "medium"),
             ("openai/gpt-5.5", "xhigh", "xhigh"),
+            # none turns reasoning off, so min stays on the lowest real effort.
+            ("openai/gpt-6.1-terra", "min", "low"),
+            ("openai/gpt-6.1-terra", "none", "none"),
+            ("openai/gpt-6.1-terra", "max", "max"),
         ],
     )
     def test_reasoning_effort_value(
@@ -541,6 +556,7 @@ class TestDisplayNames:
             ("openai/gpt-6-sol", "GPT-6 Sol"),
             ("openai/gpt-6-luna", "GPT-6 Luna"),
             ("openai/gpt-6.1-sol", "GPT-6.1 Sol"),
+            ("openai/gpt-6.1-terra", "GPT-6.1 Terra"),
             ("together_ai/moonshotai/Kimi-K3", "Kimi K3"),
             ("together_ai/moonshotai/Kimi-K3.1-Pro", "Kimi K3.1 Pro"),
             ("together_ai/moonshotai/Kimi-K2.6", "Kimi K2.6"),
@@ -628,6 +644,7 @@ class TestReasoningRequest:
             ("openai/gpt-6-sol", _SUMMARIES_AND_ENCRYPTED_REASONING),
             ("openai/gpt-6-luna", _SUMMARIES_AND_ENCRYPTED_REASONING),
             ("openai/gpt-6.1-sol", _SUMMARIES_AND_ENCRYPTED_REASONING),
+            ("openai/gpt-6.1-terra", _SUMMARIES_AND_ENCRYPTED_REASONING),
             # litellm's string-to-Reasoning fold has no "max" branch, so every
             # model with a max level needs the summary to take the dict path.
             ("openai/gpt-5.6", {"extra_body": {"reasoning_summary": "detailed"}}),
