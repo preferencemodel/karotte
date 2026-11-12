@@ -284,6 +284,13 @@ class TestStepArtifacts:
         _ = [e async for e in agent.run_step("two")]
         assert saved == ["step_0.ndjson", "calls.jsonl", "step_1.ndjson", "calls.jsonl"]
 
+    def test_the_step_dir_path_has_no_symlinks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        steps = agent._step_files()  # pyright: ignore[reportPrivateUsage]
+        assert steps == steps.resolve()
+
 
 class TestPluginAgents:
     @pytest.fixture

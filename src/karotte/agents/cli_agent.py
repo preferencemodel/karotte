@@ -176,7 +176,9 @@ class CliAgent(abc.ABC):
         """Root's own directory for each step's prompt and log: the student can
         read a file in it by name, but can't plant links where root writes."""
         if self._step_dir is None:
-            self._step_dir = Path(tempfile.mkdtemp(prefix=f"karotte-{self.name}-"))
+            self._step_dir = Path(
+                tempfile.mkdtemp(prefix=f"karotte-{self.name}-")
+            ).resolve()
             self._step_dir.chmod(0o711)
         return self._step_dir
 
