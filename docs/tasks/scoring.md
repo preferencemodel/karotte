@@ -61,6 +61,7 @@ The scoring script of the `example-task` task:
 
 ```python
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -69,7 +70,10 @@ if __name__ == "__main__":
 
     answer = Path(submission_path).read_text().strip()
 
-    score = 1.0 if "3.12.11" in answer else 0.0
+    # Match the whole answer exactly. A substring check would also accept
+    # "3.12.110" or a list of guesses such as "3.10 3.11 3.12.11 3.13", and any
+    # extra text (e.g. "Python 3.12.11") means the agent ignored the instructions.
+    score = 1.0 if re.fullmatch(r"3\.12\.11", answer) else 0.0
 
     Path(output_path).write_text(json.dumps({"score": score, "metadata": {}}))
 ```
