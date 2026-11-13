@@ -1,3 +1,4 @@
+import importlib
 import itertools
 import json
 import os
@@ -236,6 +237,18 @@ def _oom_score_to_a_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     real write would make pytest itself the first OOM victim."""
     monkeypatch.setattr(
         "karotte.subprocess.OOM_SCORE_ADJ", str(tmp_path / "oom_score_adj")
+    )
+
+
+@pytest.fixture(autouse=True)
+def _websocket_ports_are_free(monkeypatch: pytest.MonkeyPatch):
+    """Otherwise `karotte run` aborts when another test holds the default port."""
+
+    def none_in_use(_ports: list[int]) -> list[int]:
+        return []
+
+    monkeypatch.setattr(
+        importlib.import_module("karotte.cli.run"), "ports_in_use", none_in_use
     )
 
 
