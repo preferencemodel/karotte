@@ -122,7 +122,7 @@ def _is_retryable(exc: Exception) -> bool:
     if isinstance(exc, _RETRYABLE_EXCEPTIONS):
         return True
     status_code = getattr(exc, "status_code", None)
-    return isinstance(status_code, int) and status_code >= 500
+    return isinstance(status_code, int) and (status_code >= 500 or status_code == 429)
 
 
 def _retry_limit(exc: Exception) -> int:

@@ -5,9 +5,20 @@ from typing import Any, Final, TypedDict, cast, override
 
 from loguru import logger
 
+from karotte.decisions import (
+    MAX_PROBABILITY,
+    MIN_PROBABILITY,
+    DecisionsError,
+    ask_yes_no,
+)
 from karotte.judges.judge import Judge
 from karotte.judges.rubric_context import AnswersContext, RubricContext
-from karotte.model_spec import ModelSpec, spec_for
+from karotte.model_spec import (
+    ModelSpec,
+    api_key_env_var,
+    is_decision_model,
+    spec_for,
+)
 from karotte.providers import PROXY_PLACEHOLDER_KEY, provider_for, proxy_api_base
 from karotte.schemas.scoring import Metadata, Scoring
 from karotte.schemas.transcript import Transcript
@@ -48,6 +59,13 @@ class RubricJudge(Judge):
                  Defaults to [AnswersContext()].
         continue_threshold: Score threshold for continuing the task. Defaults to 0.0.
         temperature: Temperature for LLM generation. Defaults to 0.3.
+        decision_threshold: With a decision model (e.g. "gemini/gemini-decision-1"),
+            which answers every criterion in one request with a calibrated
+            probability of yes, a criterion is met at or above this probability.
+            Defaults to 0.5, and must lie in 0.01 to 0.99, the range the model
+            answers in. Probabilities are calibrated, but the cutoff that suits
+            your rubric isn't always 0.5: tune it on graded examples. Unused with
+            other models.
     """
 
     default_api_key: str | None = None
@@ -61,8 +79,14 @@ class RubricJudge(Judge):
         context: list[RubricContext] | None = None,
         continue_threshold: float = 0.0,
         temperature: float = 0.3,
+        decision_threshold: float = 0.5,
     ) -> None:
+        if not MIN_PROBABILITY <= decision_threshold <= MAX_PROBABILITY:
+            raise ValueError(
+                f"decision_threshold must be between {MIN_PROBABILITY} and {MAX_PROBABILITY}, the range a decision model answers in; got {decision_threshold}."
+            )
         self.rubric: Final = rubric
+        self.decision_threshold: Final = decision_threshold
         default_model = RubricJudge.default_model
         self.model: Final = model or default_model
         same_provider = default_model is not None and (
@@ -100,12 +124,12 @@ class RubricJudge(Judge):
         total_score: float = 0.0
         metadata: Metadata = {}
 
-        for i, item in enumerate(self.rubric):
+        verdicts, extra_metadata = self._verdicts(context_text)
+        for i, (item, (is_met, reasoning)) in enumerate(
+            zip(self.rubric, verdicts, strict=True)
+        ):
             criterion = item["criterion"]
             weight = float(item["weight"])
-
-            # Ask LLM if criterion is met
-            is_met, reasoning = self._evaluate_criterion(context_text, criterion)
 
             criterion_key = f"criterion_{i}_{criterion[:30]}"
             if is_met:
@@ -115,6 +139,7 @@ class RubricJudge(Judge):
                 metadata[criterion_key] = f"✗: {reasoning}"
 
         # Store final score and context
+        metadata.update(extra_metadata)
         metadata["context"] = context_text
         metadata["final_score"] = str(total_score)
         metadata["pass_threshold"] = f"> {self.continue_threshold}"
@@ -131,6 +156,51 @@ class RubricJudge(Judge):
                 "RubricJudge has no model: pass model=, or set rubric_judge_model in the run config."
             )
         return self.model
+
+    def _verdicts(self, context: str) -> tuple[list[tuple[bool, str]], Metadata]:
+        """``(is_met, reasoning)`` for each criterion, in rubric order, and any
+        metadata the grading adds to the scoring."""
+        model = self._require_model()
+        if is_decision_model(model):
+            return self._decision_verdicts(model, context)
+        verdicts = [
+            self._evaluate_criterion(context, item["criterion"]) for item in self.rubric
+        ]
+        return verdicts, {}
+
+    def _decision_verdicts(
+        self, model: str, context: str
+    ) -> tuple[list[tuple[bool, str]], Metadata]:
+        """Every criterion answered by one decision-model request, which bills the
+        context once. A criterion is met when its probability of yes reaches
+        ``decision_threshold``; the reasoning is that probability and the model's
+        confidence in it, and the least confident answer is added to the metadata
+        so a borderline grade can be told from a clear one."""
+        api_key = self.api_key or os.environ.get(api_key_env_var(model) or "")
+        if not api_key:
+            raise RubricJudgeError(
+                f"{model} needs an API key: set {api_key_env_var(model)}, or rubric_judge_api_key in the run config."
+            )
+        questions = [
+            f"Does the content meet this criterion?\n{item['criterion']}"
+            for item in self.rubric
+        ]
+        try:
+            result = ask_yes_no(model, api_key, context, questions)
+        except DecisionsError as e:
+            raise RubricJudgeError(f"{model} gave no verdict: {e}") from e
+        verdicts = [
+            (
+                answer.probability >= self.decision_threshold,
+                f"P(yes)={answer.probability:.2f}, confidence {answer.confidence:.2f}",
+            )
+            for answer in result.answers
+        ]
+        metadata: Metadata = {"decision_input_tokens": str(result.input_tokens)}
+        if result.answers:
+            lowest = min(answer.confidence for answer in result.answers)
+            metadata["decision_min_confidence"] = f"{lowest:.2f}"
+        return verdicts, metadata
 
     def _evaluate_criterion(self, context: str, criterion: str) -> tuple[bool, str]:
         """Evaluate a single criterion using the LLM.

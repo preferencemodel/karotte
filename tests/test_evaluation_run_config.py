@@ -433,3 +433,24 @@ def test_resolved_rubric_judge_model(fields: dict[str, Any], expected: str | Non
     config = EvaluationRunConfig(run_id="r", task_id="t", **fields)
 
     assert config.resolved_rubric_judge_model == expected
+
+
+def test_a_decision_model_cannot_drive_a_run():
+    """It answers typed questions with probabilities and writes no text, so it
+    can grade but can't take a turn."""
+    with pytest.raises(ValidationError, match="can grade, not drive a run"):
+        EvaluationRunConfig(
+            run_id="r", task_id="t", model="gemini/gemini-decision-1", model_api_key="k"
+        )
+
+
+def test_a_decision_model_can_grade_a_run_by_another_model():
+    config = EvaluationRunConfig(
+        run_id="r",
+        task_id="t",
+        model="claude-sonnet-5",
+        model_api_key="k",
+        rubric_judge_model="gemini/gemini-decision-1",
+    )
+
+    assert config.resolved_rubric_judge_model == "gemini/gemini-decision-1"
