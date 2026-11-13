@@ -864,11 +864,19 @@ def test_websocket_port_sets_the_first_runs_port():
 
 @pytest.mark.parametrize("runtime", ["docker", "firecracker", "modal"])
 def test_a_taken_port_stops_the_run_before_the_build(
-    runtime: Runtime, capsys: pytest.CaptureFixture[str]
+    runtime: Runtime,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """Separate `karotte run` commands all start at the default port."""
+    import importlib
     import socket
 
+    from karotte.run_helpers import ports_in_use
+
+    monkeypatch.setattr(
+        importlib.import_module("karotte.cli.run"), "ports_in_use", ports_in_use
+    )
     with socket.socket() as taken:
         taken.bind(("127.0.0.1", 0))
         taken.listen()
