@@ -70,9 +70,10 @@ if __name__ == "__main__":
 
     answer = Path(submission_path).read_text().strip()
 
-    # Match the whole answer. A substring check would also accept "3.12.110"
-    # or a list of guesses such as "3.10 3.11 3.12.11 3.13".
-    score = 1.0 if re.fullmatch(r"(Python )?3\.12\.11", answer) else 0.0
+    # Match the whole answer exactly. A substring check would also accept
+    # "3.12.110" or a list of guesses such as "3.10 3.11 3.12.11 3.13", and any
+    # extra text (e.g. "Python 3.12.11") means the agent ignored the instructions.
+    score = 1.0 if re.fullmatch(r"3\.12\.11", answer) else 0.0
 
     Path(output_path).write_text(json.dumps({"score": score, "metadata": {}}))
 ```

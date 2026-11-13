@@ -24,7 +24,7 @@ def _score(tmp_path: Path, answer: str) -> float:
 
 @pytest.mark.parametrize(
     "answer",
-    ["3.12.11", "3.12.11\n", "3.12.11\r\n", "Python 3.12.11", "Python 3.12.11\n"],
+    ["3.12.11", "3.12.11\n", "3.12.11\r\n"],
 )
 def test_scores_the_python_version(tmp_path: Path, answer: str):
     assert _score(tmp_path, answer) == 1.0
@@ -40,6 +40,9 @@ def test_scores_the_python_version(tmp_path: Path, answer: str):
         "3x12x11",
         "3.10 3.11 3.12.11 3.13",
         "3.12.10\n3.12.11\n3.12.12",
+        "Python 3.12.11",
+        "Python 3.12.11\n",
+        "python 3.12.11",
         "Python 3.12.11 or Python 3.13.0",
     ],
 )
