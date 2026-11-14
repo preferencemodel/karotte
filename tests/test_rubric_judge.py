@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, override
 from unittest.mock import MagicMock, patch
 
+import httpx
 import litellm
 import litellm.exceptions
 import pytest
@@ -872,3 +873,323 @@ def test_criterion_prompt_is_what_the_model_receives(
 )
 def test_parse_reply(reply: str, expected: tuple[bool, str]) -> None:
     assert RubricJudge.parse_reply(reply) == expected
+
+
+# A decision model, like Gemini Decision 1, answers typed questions about one
+# input with calibrated probabilities. It writes no text, so these tests drive the
+# real request and response shapes and check what the judge does with
+# probabilities: thresholds, confidence, and one shared input.
+
+_DECISION_MODEL = "gemini/gemini-decision-1"
+_DECISIONS_URL = "https://generativelanguage.googleapis.com/v1beta/decisions"
+
+# A graded answer from an agent that was asked why a test fails.
+_BUG_REPORT = (
+    "The failing test is tests/test_parse.py::test_parse_dates. Root cause: "
+    "parse_dates returns timezone-naive datetimes, and the test compares them "
+    "with timezone-aware ones. I only ran that one test file."
+)
+_BUG_RUBRIC: list[Any] = [
+    {
+        "criterion": "The answer names tests/test_parse.py::test_parse_dates as the failing test.",
+        "weight": 2.0,
+    },
+    {
+        "criterion": "The answer attributes the failure to naive datetimes compared with aware ones.",
+        "weight": 2.0,
+    },
+    {
+        "criterion": "The answer does not claim that the whole test suite was run.",
+        "weight": 1.0,
+    },
+]
+
+
+def _decisions_reply(*probabilities: float, tokens: int = 212) -> httpx.Response:
+    """What the Decisions API returns: one yes/no answer per question, no text, and
+    a usage block that bills input only."""
+    return httpx.Response(
+        200,
+        json={
+            "answers": {
+                f"q{i}": {
+                    "type": "noul",
+                    "noul": p,
+                    "confidence": max(p, 1 - p),
+                }
+                for i, p in enumerate(probabilities)
+            },
+            "usage": {
+                "total_input_tokens": tokens,
+                "input_tokens_by_modality": [{"modality": "text", "tokens": tokens}],
+                "total_output_tokens": 0,
+                "total_tokens": tokens,
+            },
+        },
+        request=httpx.Request("POST", _DECISIONS_URL),
+    )
+
+
+def _decision_judge(**kwargs: Any) -> RubricJudge:
+    kwargs.setdefault("rubric", _BUG_RUBRIC)
+    return RubricJudge(model=_DECISION_MODEL, api_key="test-key", **kwargs)
+
+
+def _graded_transcript(transcript: Transcript, answer: str = _BUG_REPORT) -> Transcript:
+    transcript.events.append(AnswersSubmittedEvent(answers={"response": answer}))
+    return transcript
+
+
+def test_a_whole_rubric_is_graded_in_one_request_that_carries_the_answer_once(
+    transcript: Transcript, mock_completion: MagicMock
+) -> None:
+    with patch("httpx.post", return_value=_decisions_reply(0.97, 0.88, 0.91)) as post:
+        _decision_judge().evaluate(_graded_transcript(transcript))
+
+    mock_completion.assert_not_called()
+    post.assert_called_once()
+    body = post.call_args.kwargs["json"]
+    assert json.dumps(body).count(_BUG_REPORT) == 1
+    assert list(body["questions"]) == ["q0", "q1", "q2"]
+    for question, item in zip(body["questions"].values(), _BUG_RUBRIC, strict=True):
+        assert question["type"] == "noul"
+        assert item["criterion"] in question["instructions"]
+
+
+def test_the_request_asks_for_a_decision_and_for_nothing_a_chat_model_takes(
+    transcript: Transcript,
+) -> None:
+    judge = _decision_judge(temperature=0.9)
+    with patch("httpx.post", return_value=_decisions_reply(0.9, 0.9, 0.9)) as post:
+        judge.evaluate(_graded_transcript(transcript))
+
+    assert post.call_args.args == (_DECISIONS_URL,)
+    assert set(post.call_args.kwargs["json"]) == {"model", "input", "questions"}
+    assert post.call_args.kwargs["json"]["model"] == "gemini-decision-1"
+
+
+def test_the_key_is_sent_as_a_header_and_nowhere_else(transcript: Transcript) -> None:
+    with patch("httpx.post", return_value=_decisions_reply(0.9, 0.9, 0.9)) as post:
+        _decision_judge().evaluate(_graded_transcript(transcript))
+
+    assert post.call_args.kwargs["headers"] == {"x-goog-api-key": "test-key"}
+    assert "test-key" not in json.dumps(post.call_args.kwargs["json"])
+    assert "test-key" not in post.call_args.args[0]
+
+
+def test_probabilities_are_cut_at_a_threshold_and_the_weights_of_met_criteria_add_up(
+    transcript: Transcript,
+) -> None:
+    # Clearly yes, leaning yes, clearly no.
+    with patch("httpx.post", return_value=_decisions_reply(0.97, 0.62, 0.03)):
+        scoring = _decision_judge().evaluate(_graded_transcript(transcript))
+
+    assert scoring.score == 4.0
+    assert scoring.continue_task
+    keys = [k for k in scoring.metadata if k.startswith("criterion_")]
+    assert [scoring.metadata[k][0] for k in keys] == ["✓", "✓", "✗"]
+    assert scoring.metadata[keys[0]] == "✓: P(yes)=0.97, confidence 0.97"
+    assert scoring.metadata[keys[2]] == "✗: P(yes)=0.03, confidence 0.97"
+
+
+@pytest.mark.parametrize(
+    ("threshold", "score"),
+    [
+        (0.5, 4.0),  # the default: 0.62 is a yes
+        (0.7, 2.0),  # a stricter grader: 0.62 is no longer enough
+        (0.97, 2.0),  # exactly at the threshold is met
+        (0.99, 0.0),  # nothing short of the ceiling passes
+    ],
+)
+def test_the_threshold_decides_what_a_probability_is_worth(
+    transcript: Transcript, threshold: float, score: float
+) -> None:
+    with patch("httpx.post", return_value=_decisions_reply(0.97, 0.62, 0.03)):
+        scoring = _decision_judge(decision_threshold=threshold).evaluate(
+            _graded_transcript(transcript)
+        )
+
+    assert scoring.score == score
+
+
+def test_the_top_of_the_models_range_meets_the_loosest_threshold_never_the_bottom(
+    transcript: Transcript,
+) -> None:
+    with patch("httpx.post", return_value=_decisions_reply(0.99, 0.01, 0.01)):
+        scoring = _decision_judge(decision_threshold=0.01).evaluate(
+            _graded_transcript(transcript)
+        )
+
+    # 0.01 is the lowest probability the model gives, so it meets a 0.01 threshold.
+    assert scoring.score == 5.0
+
+
+@pytest.mark.parametrize("threshold", [0.0, 0.005, 0.995, 1.0, -0.5, 2.0])
+def test_a_threshold_the_model_cannot_answer_in_is_refused(threshold: float) -> None:
+    # Yes/no probabilities stay within 0.01 to 0.99, so a threshold outside that
+    # range would match every answer or none.
+    with pytest.raises(ValueError, match="decision_threshold"):
+        _decision_judge(decision_threshold=threshold)
+
+
+@pytest.mark.parametrize("threshold", [0.01, 0.5, 0.99])
+def test_a_threshold_inside_the_range_is_accepted(threshold: float) -> None:
+    assert _decision_judge(decision_threshold=threshold).decision_threshold == threshold
+
+
+def test_the_models_confidence_flags_a_borderline_grade(
+    transcript: Transcript,
+) -> None:
+    # 0.52 is a pass at 0.5 but the model is barely more sure of yes than of no.
+    with patch("httpx.post", return_value=_decisions_reply(0.97, 0.52, 0.03)):
+        scoring = _decision_judge().evaluate(_graded_transcript(transcript))
+
+    assert scoring.metadata["decision_min_confidence"] == "0.52"
+    borderline = scoring.metadata[f"criterion_1_{_BUG_RUBRIC[1]['criterion'][:30]}"]
+    assert borderline == "✓: P(yes)=0.52, confidence 0.52"
+
+
+def test_a_clear_grade_reports_high_confidence_and_what_was_billed(
+    transcript: Transcript,
+) -> None:
+    with patch(
+        "httpx.post", return_value=_decisions_reply(0.97, 0.99, 0.01, tokens=212)
+    ):
+        scoring = _decision_judge().evaluate(_graded_transcript(transcript))
+
+    assert scoring.metadata["decision_min_confidence"] == "0.97"
+    assert scoring.metadata["decision_input_tokens"] == "212"
+
+
+def test_answers_are_matched_to_criteria_by_question_not_by_position(
+    transcript: Transcript,
+) -> None:
+    reply = _decisions_reply(0.97, 0.62, 0.03)
+    answers = reply.json()["answers"]
+    shuffled = httpx.Response(
+        200,
+        json={"answers": dict(reversed(list(answers.items())))},
+        request=reply.request,
+    )
+    with patch("httpx.post", return_value=shuffled):
+        scoring = _decision_judge().evaluate(_graded_transcript(transcript))
+
+    keys = [k for k in scoring.metadata if k.startswith("criterion_")]
+    assert [scoring.metadata[k][0] for k in keys] == ["✓", "✓", "✗"]
+
+
+def test_questions_are_independent_so_a_rubric_grades_the_same_in_any_order(
+    transcript: Transcript,
+) -> None:
+    probabilities = {"first": 0.97, "second": 0.62, "third": 0.03}
+    rubric = [
+        {"criterion": name, "weight": float(w)}
+        for w, name in enumerate(probabilities, start=1)
+    ]
+
+    def grade(items: list[Any]) -> float:
+        reply = _decisions_reply(*(probabilities[i["criterion"]] for i in items))
+        with patch("httpx.post", return_value=reply):
+            return (
+                _decision_judge(rubric=items)
+                .evaluate(_graded_transcript(transcript))
+                .score
+            )
+
+    assert grade(rubric) == grade(list(reversed(rubric))) == 3.0
+
+
+def test_a_criterion_is_sent_verbatim_whatever_it_contains(
+    transcript: Transcript,
+) -> None:
+    criterion = (
+        'The answer quotes "retry-after: 7" and the key path items[0].id\nin {braces}.'
+    )
+    with patch("httpx.post", return_value=_decisions_reply(0.9)) as post:
+        _decision_judge(rubric=[{"criterion": criterion, "weight": 1.0}]).evaluate(
+            _graded_transcript(transcript)
+        )
+
+    assert criterion in post.call_args.kwargs["json"]["questions"]["q0"]["instructions"]
+
+
+def test_structured_answers_go_in_as_text_for_the_model_to_read(
+    transcript: Transcript,
+) -> None:
+    answer = json.dumps({"verdict": "flaky", "evidence": [{"run": 3, "passed": False}]})
+    with patch("httpx.post", return_value=_decisions_reply(0.9, 0.9, 0.9)) as post:
+        _decision_judge().evaluate(_graded_transcript(transcript, answer))
+
+    sent = post.call_args.kwargs["json"]["input"]
+    assert isinstance(sent, str)
+    assert answer in sent
+
+
+def test_an_empty_rubric_makes_no_request(transcript: Transcript) -> None:
+    with patch("httpx.post") as post:
+        scoring = _decision_judge(rubric=[]).evaluate(_graded_transcript(transcript))
+
+    post.assert_not_called()
+    assert scoring.score == 0.0
+    assert "decision_min_confidence" not in scoring.metadata
+
+
+def test_nothing_to_grade_makes_no_request(transcript: Transcript) -> None:
+    with patch("httpx.post") as post:
+        scoring = _decision_judge().evaluate(transcript)
+
+    post.assert_not_called()
+    assert scoring.metadata == {"error": "No context available for evaluation"}
+
+
+def test_a_decision_model_takes_its_key_from_the_gemini_variable(
+    transcript: Transcript, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "from-env")
+    judge = RubricJudge(rubric=_BUG_RUBRIC, model=_DECISION_MODEL)
+    with patch("httpx.post", return_value=_decisions_reply(0.9, 0.9, 0.9)) as post:
+        judge.evaluate(_graded_transcript(transcript))
+
+    assert post.call_args.kwargs["headers"] == {"x-goog-api-key": "from-env"}
+
+
+def test_a_key_for_another_provider_is_not_sent_to_google(
+    transcript: Transcript, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    RubricJudge.default_model = "claude-opus-5"
+    RubricJudge.default_api_key = "sk-ant-secret"
+    judge = RubricJudge(rubric=_BUG_RUBRIC, model=_DECISION_MODEL)
+
+    with (
+        patch("httpx.post") as post,
+        pytest.raises(RubricJudgeError, match="GEMINI_API_KEY"),
+    ):
+        judge.evaluate(_graded_transcript(transcript))
+
+    post.assert_not_called()
+
+
+def test_a_rejected_request_is_a_judge_error_not_a_zero_score(
+    transcript: Transcript,
+) -> None:
+    refused = httpx.Response(
+        400,
+        json={"error": {"message": "Input can't be empty."}},
+        request=httpx.Request("POST", _DECISIONS_URL),
+    )
+    with (
+        patch("httpx.post", return_value=refused),
+        pytest.raises(RubricJudgeError, match="gemini-decision-1 gave no verdict"),
+    ):
+        _decision_judge().evaluate(_graded_transcript(transcript))
+
+
+def test_a_reply_missing_an_answer_is_a_judge_error_not_a_guess(
+    transcript: Transcript,
+) -> None:
+    with (
+        patch("httpx.post", return_value=_decisions_reply(0.97, 0.88)),
+        pytest.raises(RubricJudgeError, match="q2"),
+    ):
+        _decision_judge().evaluate(_graded_transcript(transcript))
