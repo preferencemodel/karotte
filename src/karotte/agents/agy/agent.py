@@ -25,8 +25,8 @@ _RELEASE_URL = (
 )
 
 _SHA256: dict[str, str] = {
-    "x64": "ed0526231e3916b6cc1b025cf356862e88cc036e27c3c5eae5a580495fc79773",
-    "arm64": "107b7499ca90018ab2b6c1b636cdec4251dfd836656526845e354be1bfe05eba",
+    "x64": "da696a8dc6122a63d5ffbdd21b02c8a62d5361fba0ed7d3bc2d2619889e62711",
+    "arm64": "cd155ecd9bc962037423e6826ed0b61d3b16d84d350cdc9a8c14478f24f5f235",
 }
 
 
@@ -34,7 +34,7 @@ _SHA256: dict[str, str] = {
 @register_cli_agent
 class AgyAgent(CliAgent):
     name: ClassVar[str] = "agy"
-    version: ClassVar[str] = "1.4.10"
+    version: ClassVar[str] = "1.5.2"
     provider_url: ClassVar[str] = "https://generativelanguage.googleapis.com"
     providers: ClassVar[tuple[str, ...]] = ("gemini", "vertex_ai")
     binary: ClassVar[str] = _AGY_BIN
