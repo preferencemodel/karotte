@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 from karotte.model_forwarder import (
     GeminiForwarder,
     ModelForwarder,
+    MuseForwarder,
     VertexForwarder,
     _error_text,  # pyright: ignore[reportPrivateUsage]
     vertex_forwarder,
@@ -298,6 +299,41 @@ class TestGeminiForwarder:
         assert seen["path_qs"] == (
             "/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse"
         )
+
+
+class TestMuseForwarder:
+    @pytest.mark.asyncio
+    async def test_lists_the_runs_model_itself(self, upstream: str):
+        forwarder = MuseForwarder(upstream, _KEY, "muse-spark-1.3", 128000)
+        url = await forwarder.start()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{url}/muse-code/models") as response:
+                    assert response.status == 200
+                    listed = await response.json()
+        finally:
+            await forwarder.stop()
+        assert listed == {
+            "object": "list",
+            "data": [
+                {
+                    "id": "muse-spark-1.3",
+                    "object": "model",
+                    "metadata": {"muse-code": {"limit": {"output": 128000}}},
+                }
+            ],
+        }
+
+    @pytest.mark.asyncio
+    async def test_relays_everything_else_with_the_real_key(self, upstream: str):
+        forwarder = MuseForwarder(upstream, _KEY, "muse-spark-1.3", 128000)
+        url = await forwarder.start()
+        try:
+            seen = await _post(f"{url}/v1/echo")
+        finally:
+            await forwarder.stop()
+        assert seen["authorization"] == f"Bearer {_KEY}"
+        assert seen["path_qs"] == "/v1/echo"
 
 
 class TestVertexForwarder:

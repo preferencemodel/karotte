@@ -107,6 +107,7 @@ class TestAgents:
         assert agents["mistral-vibe"]["providers"] == ["mistral"]
         assert agents["codex"]["providers"] == ["openai"]
         assert agents["agy"]["providers"] == ["gemini", "vertex_ai"]
+        assert agents["muse-code"]["providers"] == ["meta"]
 
     def test_list_json_run_settings(self):
         result = runner.invoke(app, ["agents", "list", "--json"])

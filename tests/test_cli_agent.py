@@ -4,6 +4,7 @@ and per-step process handling, driven by a stand-in tool script."""
 import asyncio
 import gzip
 import hashlib
+import os
 import platform
 import stat
 import subprocess
@@ -11,13 +12,14 @@ import sys
 import threading
 import time
 import tomllib
-from collections.abc import Callable, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar, Literal, final
 from unittest.mock import MagicMock
 
 import pytest
+from loguru import logger
 
 from karotte.agents import cli_agent
 from karotte.agents.agent import CliAgentExitedError, StepTimeLimitReachedError
@@ -38,8 +40,11 @@ from karotte.schemas.transcript import Event, MessageAddedEvent
 _FAKE_TOOL = """
 import os, pathlib, sys, time
 gate = pathlib.Path(sys.argv[2])
+out = open(sys.argv[5], "a") if sys.argv[5] else sys.stdout
+if sys.argv[5]:
+    print("not an event", flush=True)
 for i, line in enumerate(pathlib.Path(sys.argv[1]).read_text().splitlines()):
-    print(line, flush=True)
+    print(line, file=out, flush=True)
     if i == 0:
         while not gate.exists():
             time.sleep(0.01)
@@ -63,6 +68,7 @@ class _EchoAgent(CliAgent):
 
     after_output: str = ""
     exit_code: int = 0
+    event_log_name: str = "events.jsonl"
     held: str = ""
     reported: str | None = None
 
@@ -89,7 +95,12 @@ class _EchoAgent(CliAgent):
             str(self._home / "gate"),
             self.after_output,
             str(self.exit_code),
+            str(self._home / self.event_log_name) if self.events_from == "file" else "",
         ]
+
+    def _event_log(self) -> Path | None:
+        path = self._home / self.event_log_name
+        return path if os.path.lexists(path) else None
 
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
         def parse(line: str, i: int) -> Iterable[Event]:
@@ -467,6 +478,174 @@ class TestRunStep:
         started = time.monotonic()
         _ = [e async for e in agent.run_step("hi")]
         assert time.monotonic() - started < 5
+
+
+def _log_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _EchoAgent:
+    agent = _agent(tmp_path, monkeypatch)
+    monkeypatch.setattr(agent, "events_from", "file")
+    return agent
+
+
+class TestEventLog:
+    @pytest.mark.asyncio
+    async def test_yields_each_line_of_the_log_before_the_tool_exits(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        events = agent.run_step("first\nsecond")
+        assert isinstance(await anext(events), MessageAddedEvent)
+        first = await asyncio.wait_for(anext(events), 10)
+        assert _contents([first]) == ["0:first"]
+
+        (tmp_path / ".echo" / "gate").touch()
+        assert _contents([e async for e in events]) == ["1:second"]
+        steps = _step_dir(agent)
+        assert (steps / "step_0.ndjson").read_text() == "first\nsecond\n"
+        assert (steps / "step_0.stdout").read_text() == "not an event\n"
+
+    @pytest.mark.asyncio
+    async def test_a_later_step_reads_only_what_it_added(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        (tmp_path / ".echo" / "gate").touch()
+        _ = [e async for e in agent.run_step("one")]
+        events = [e async for e in agent.run_step("two\nthree")]
+        assert _contents(events) == ["0:two", "1:three"]
+        assert (_step_dir(agent) / "step_1.ndjson").read_text() == "two\nthree\n"
+
+    @pytest.mark.asyncio
+    async def test_time_limit_score_keeps_the_log_so_far(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        agent.after_output = "time.sleep(30)"
+        (tmp_path / ".echo" / "gate").touch()
+        events = [
+            e
+            async for e in agent.run_step(
+                "hi", time_limit_seconds=1, on_time_limit="score"
+            )
+        ]
+        assert _contents(events) == ["0:hi"]
+
+    @pytest.mark.asyncio
+    async def test_root_never_reads_through_a_link_the_student_plants(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        secret = tmp_path / "secret"
+        secret.write_text("secret\n")
+        (tmp_path / ".echo" / "events.jsonl").symlink_to(secret)
+        (tmp_path / ".echo" / "gate").touch()
+        events, error = await _step_error(agent.run_step("hi"))
+        assert _contents(events) == []
+        assert "event log refused" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_root_never_reads_through_a_linked_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "events.jsonl").write_text("secret\n")
+        (tmp_path / ".echo" / "linked").symlink_to(elsewhere)
+        agent.event_log_name = "linked/events.jsonl"
+        (tmp_path / ".echo" / "gate").touch()
+        events, error = await _step_error(agent.run_step("hi"))
+        assert _contents(events) == []
+        assert "event log refused" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_a_log_the_student_does_not_own_is_not_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            "karotte.agents.cli_agent.demoted_uid_gid", lambda: os.getuid() + 1
+        )
+        (tmp_path / ".echo" / "gate").touch()
+        events, error = await _step_error(agent.run_step("hi"))
+        assert _contents(events) == []
+        assert "event log refused" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_a_fifo_does_not_hold_up_the_step(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        agent.event_log_name = "fifo"
+        os.mkfifo(tmp_path / ".echo" / "fifo")
+        agent.after_output = "time.sleep(0.5)"
+        monkeypatch.setattr(agent, "_argv", _without_log_writes(agent))
+        (tmp_path / ".echo" / "gate").touch()
+        events, error = await _step_error(agent.run_step("hi", time_limit_seconds=10))
+        assert _contents(events) == []
+        assert "event log refused" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_a_refused_log_is_warned_about_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            "karotte.agents.cli_agent.demoted_uid_gid", lambda: os.getuid() + 1
+        )
+        agent.after_output = "time.sleep(1)"
+        (tmp_path / ".echo" / "gate").touch()
+        warnings: list[str] = []
+        handler = logger.add(warnings.append, level="WARNING", format="{message}")
+        try:
+            _ = await _step_error(agent.run_step("hi"))
+        finally:
+            logger.remove(handler)
+        assert sum("event log" in w for w in warnings) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_step_that_writes_no_event_log_is_an_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(agent, "_argv", _without_log_writes(agent))
+        (tmp_path / ".echo" / "gate").touch()
+        _, error = await _step_error(agent.run_step("hi"))
+        assert "no event log" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_a_time_limit_before_any_event_log_still_scores(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(agent, "_argv", _without_log_writes(agent))
+        agent.after_output = "time.sleep(30)"
+        (tmp_path / ".echo" / "gate").touch()
+        events = [
+            e
+            async for e in agent.run_step(
+                "hi", time_limit_seconds=1, on_time_limit="score"
+            )
+        ]
+        assert _contents(events) == []
+
+
+async def _step_error(
+    step: AsyncGenerator[Event],
+) -> tuple[list[Event], CliAgentExitedError]:
+    events: list[Event] = []
+    with pytest.raises(CliAgentExitedError) as raised:
+        async for event in step:
+            events.append(event)
+    return events, raised.value
+
+
+def _without_log_writes(agent: _EchoAgent) -> Callable[[str, Path | None], list[str]]:
+    argv = agent._argv  # pyright: ignore[reportPrivateUsage]
+
+    def without(instructions: str, prompt_file: Path | None) -> list[str]:
+        return [*argv(instructions, prompt_file)[:-1], ""]
+
+    return without
 
 
 class TestStepFiles:
