@@ -32,11 +32,11 @@ class FindPython(Task):
 class FindPythonStep(Step):
     @property
     def instructions(self) -> str:
-        return "Find the path to your Python executable. Answer with `path: <path>`."
+        return "Find the path to your Python executable. End your reply with `path: <path>`."
 
     @property
     def judge(self):
-        return RegexJudge([re.compile(r"path: .*/python3?")])
+        return RegexJudge([re.compile(r"path: \S*/python3?\.?\s*\Z")])
 ```
 
 The student gets the system prompt and the step's instructions, works on them with the `bash` tool, and the judge checks its final answer.
