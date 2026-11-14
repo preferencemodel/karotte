@@ -123,6 +123,46 @@ A custom tool with the same name as a built-in one replaces it.
 `karotte check` lists every tool it finds and fails if one doesn't meet these rules.
 Make sure that the tool's dependencies are in the root venv (see [Python dependencies](data-and-dependencies.md#python-dependencies)).
 
+### Validation tools
+
+An environment can provide a custom validation tool so the student can check its submission and use the feedback to decide what to try next.
+The environment owns the scorer, the feedback it exposes, and the safeguards needed to run it during a step.
+
+For example, put a `validate` callable in `src/environment/tools/validate.py`:
+
+```python
+from fastmcp.tools.tool import ToolResult
+
+from environment.validation import check_submission
+
+
+async def validate() -> ToolResult:
+    """Check your current submission on the development split."""
+    report = await check_submission()
+    return ToolResult(content=report)
+```
+
+Here, `check_submission` is an async function the environment implements; it returns a string containing only feedback the student may see.
+Add the tool explicitly to the task:
+
+```python
+@property
+def tools(self):
+    return ["bash", "validate"]
+```
+
+If the tool needs configuration, use `ToolBase` and write its config in `configure_tools()` as above.
+Initialize any call budget or other state once per episode; repeated setup must not replenish the budget.
+For a task with several steps, define which step's submission each call checks.
+Keep validation data separate from the final judge's held-out data, and keep labels, expected outputs and scorer secrets out of the feedback.
+The tool provides feedback; the step's judge still determines the final score.
+
+A validation scorer needs safeguards appropriate to its environment, just as the final judge does.
+If student-controlled files may change during a call, validate a consistent copy and discard it afterwards.
+Run student-controlled code, including code invoked while loading a submission, with student privileges and without harness secrets (see [Running commands as the student](#running-commands-as-the-student)).
+Bound execution time, memory and GPU use, accounting for student processes that may still be running.
+Check these safeguards with the environment's actual scorer; a subprocess timeout alone does not provide them.
+
 ## Running commands as the student
 
 !!! warning
