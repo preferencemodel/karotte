@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import signal
+import stat
 import tempfile
 from collections.abc import AsyncGenerator, Callable, Iterable, Mapping
 from importlib.metadata import entry_points
@@ -33,6 +34,7 @@ from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event, MessageAddedEvent
 from karotte.subprocess import demoted_uid_gid, make_preexec, scrub_harness_secrets
+from karotte.untrusted_paths import FILE_FLAGS, open_at, walk_to_parent
 
 # Root-owned, world-readable+executable directory the build installs CLI agents
 # into, so the student user can run them but not tamper with them.
@@ -43,6 +45,7 @@ AGENTS_BIN_DIR = f"{AGENTS_DIR}/bin"
 _READ_CHUNK_BYTES = 1 << 16
 _DRAIN_TIMEOUT_SECONDS = 10.0
 _EXIT_POLL_SECONDS = 0.05
+_EVENT_LOG_POLL_SECONDS = 0.2
 
 
 class CliAgent(abc.ABC):
@@ -89,6 +92,10 @@ class CliAgent(abc.ABC):
     """How the CLI gets each step's instructions: in :meth:`_argv`, from the
     file :meth:`_argv` is given, or on stdin."""
 
+    events_from: ClassVar[Literal["stdout", "file"]] = "stdout"
+    """Where the parser's lines come from: stdout, or the file :meth:`_event_log`
+    finds, for a CLI whose stdout leaves things out."""
+
     def __init__(self, config: EvaluationRunConfig) -> None:
         self._config: EvaluationRunConfig = config
         self._ctx: RunContext
@@ -96,6 +103,8 @@ class CliAgent(abc.ABC):
         self._step_index: int = 0
         self._home: Path = Path(os.environ.get("KAROTTE_WORKDIR", ".")) / self.home_dir
         self._step_dir: Path | None = None
+        self._event_log_read: int = 0
+        self._event_log_problem: str | None = None
 
     @classmethod
     @abc.abstractmethod
@@ -128,6 +137,11 @@ class CliAgent(abc.ABC):
     @abc.abstractmethod
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
         """Turns line ``i`` of one step's stdout into transcript events."""
+
+    def _event_log(self) -> Path | None:
+        """The file the CLI writes its events to, once it exists. Every step
+        appends to the same file."""
+        return None
 
     def _output_ended(self) -> Iterable[Event]:
         """Events the step's parser still holds when the CLI's output ends."""
@@ -294,51 +308,42 @@ class CliAgent(abc.ABC):
         assert proc.stderr is not None
         stderr_task = asyncio.ensure_future(proc.stderr.read())
 
-        loop = asyncio.get_running_loop()
-        deadline = (
-            None if time_limit_seconds is None else loop.time() + time_limit_seconds
+        clock = _StepClock(time_limit_seconds)
+        stdout_log = steps / f"step_{step}.stdout"
+        chunks = (
+            _stdout_chunks(proc, clock)
+            if self.events_from == "stdout"
+            else self._event_log_chunks(proc, clock, stdout_log)
         )
-
-        def remaining() -> float | None:
-            return None if deadline is None else max(0.0, deadline - loop.time())
-
-        timed_out = False
         line_index = 0
         pending = b""
         try:
             with log_path.open("wb") as log:
-                while True:
-                    try:
-                        chunk = await asyncio.wait_for(
-                            proc.stdout.read(_READ_CHUNK_BYTES), remaining()
-                        )
-                    except TimeoutError:
-                        timed_out = True
-                        kill_process_tree(proc)
-                        chunk = await _read_rest(proc.stdout)
+                async for chunk in chunks:
                     log.write(chunk)
                     log.flush()
                     pending += chunk
                     *lines, pending = pending.split(b"\n")
-                    if timed_out or not chunk:
-                        lines.append(pending)
                     for line in lines:
                         for event in parse(
                             line.decode("utf-8", errors="replace"), line_index
                         ):
                             yield event
                         line_index += 1
-                    if timed_out or not chunk:
-                        break
+                if pending:
+                    for event in parse(
+                        pending.decode("utf-8", errors="replace"), line_index
+                    ):
+                        yield event
             for event in self._output_ended():
                 yield event
-            if not timed_out:
+            if not clock.timed_out:
                 try:
-                    _ = await asyncio.wait_for(_exited(proc), remaining())
+                    _ = await asyncio.wait_for(_exited(proc), clock.remaining())
                 except TimeoutError:
                     # wait_for times out on a past deadline even once the CLI has exited.
                     if proc.returncode is None:
-                        timed_out = True
+                        clock.timed_out = True
                         kill_process_tree(proc)
                         _ = await _exited(proc)
         finally:
@@ -346,15 +351,18 @@ class CliAgent(abc.ABC):
             if proc.returncode is None:
                 kill_process_tree(proc)
                 _ = await _exited(proc)
+            await chunks.aclose()
             try:
                 stderr_b = await asyncio.wait_for(stderr_task, _DRAIN_TIMEOUT_SECONDS)
             except TimeoutError:
                 stderr_b = b""
             save_artifact(self._config, log_path)
+            if self.events_from == "file":
+                save_artifact(self._config, stdout_log)
             for path in self._step_artifacts():
                 save_artifact(self._config, path)
 
-        if timed_out:
+        if clock.timed_out:
             logger.warning(
                 "{} hit the {}s time limit on step {}", cli, time_limit_seconds, step
             )
@@ -368,6 +376,118 @@ class CliAgent(abc.ABC):
             )
             msg = f"{cli} exited {proc.returncode} on step {step}: {detail}"
             raise CliAgentExitedError(msg)
+        elif self._event_log_problem is not None:
+            msg = f"{cli} on step {step}: {self._event_log_problem}"
+            raise CliAgentExitedError(msg)
+
+    async def _event_log_chunks(
+        self, proc: asyncio.subprocess.Process, clock: "_StepClock", stdout_log: Path
+    ) -> AsyncGenerator[bytes]:
+        """What the CLI appends to its event log until it exits; its stdout,
+        drained so it never blocks, goes to ``stdout_log``."""
+        assert proc.stdout is not None
+        drain = asyncio.ensure_future(_copy(proc.stdout, stdout_log))
+        fd: int | None = None
+        refused = False
+        self._event_log_problem = "no event log found"
+        try:
+            while True:
+                remaining = clock.remaining()
+                poll = (
+                    _EVENT_LOG_POLL_SECONDS
+                    if remaining is None
+                    else min(_EVENT_LOG_POLL_SECONDS, remaining)
+                )
+                try:
+                    _ = await asyncio.wait_for(_exited(proc), poll)
+                except TimeoutError:
+                    if proc.returncode is None and clock.remaining() == 0:
+                        clock.timed_out = True
+                        kill_process_tree(proc)
+                        _ = await _exited(proc)
+                if fd is None and not refused:
+                    try:
+                        fd = self._open_event_log()
+                    except OSError as e:
+                        refused = True
+                        self._event_log_problem = f"event log refused: {e}"
+                        logger.warning("{}: {}", self.name, self._event_log_problem)
+                    if fd is not None:
+                        self._event_log_problem = None
+                while fd is not None and (chunk := self._read_event_log(fd)):
+                    yield chunk
+                if proc.returncode is not None:
+                    return
+        finally:
+            if fd is not None:
+                os.close(fd)
+            try:
+                await asyncio.wait_for(drain, _DRAIN_TIMEOUT_SECONDS)
+            except TimeoutError:
+                pass
+
+    def _open_event_log(self) -> int | None:
+        """The event log, opened without following a link anywhere on its
+        path, or None while it doesn't exist. Raises OSError unless it is a
+        regular file the student owns."""
+        if (path := self._event_log()) is None:
+            return None
+        parent, name = walk_to_parent(path.absolute())
+        try:
+            fd = open_at(parent, name, FILE_FLAGS)
+        finally:
+            os.close(parent)
+        info = os.fstat(fd)
+        uid = demoted_uid_gid()
+        if not stat.S_ISREG(info.st_mode) or (uid is not None and info.st_uid != uid):
+            os.close(fd)
+            raise OSError(f"{path} is not a regular file the student owns")
+        return fd
+
+    def _read_event_log(self, fd: int) -> bytes:
+        chunk = os.pread(fd, _READ_CHUNK_BYTES, self._event_log_read)
+        self._event_log_read += len(chunk)
+        return chunk
+
+
+class _StepClock:
+    def __init__(self, seconds: float | None) -> None:
+        loop = asyncio.get_running_loop()
+        self._loop: asyncio.AbstractEventLoop = loop
+        self._deadline: float | None = (
+            None if seconds is None else loop.time() + seconds
+        )
+        self.timed_out: bool = False
+
+    def remaining(self) -> float | None:
+        if self._deadline is None:
+            return None
+        return max(0.0, self._deadline - self._loop.time())
+
+
+async def _stdout_chunks(
+    proc: asyncio.subprocess.Process, clock: _StepClock
+) -> AsyncGenerator[bytes]:
+    assert proc.stdout is not None
+    while True:
+        try:
+            chunk = await asyncio.wait_for(
+                proc.stdout.read(_READ_CHUNK_BYTES), clock.remaining()
+            )
+        except TimeoutError:
+            clock.timed_out = True
+            kill_process_tree(proc)
+            yield await _read_rest(proc.stdout)
+            return
+        if not chunk:
+            return
+        yield chunk
+
+
+async def _copy(stream: asyncio.StreamReader, path: Path) -> None:
+    with path.open("wb") as out:
+        while chunk := await stream.read(_READ_CHUNK_BYTES):
+            out.write(chunk)
 
 
 def kill_process_tree(proc: asyncio.subprocess.Process) -> None:

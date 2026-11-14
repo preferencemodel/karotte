@@ -195,6 +195,31 @@ class GeminiForwarder(ModelForwarder):
         return {"x-goog-api-key": self._api_key}
 
 
+class MuseForwarder(ModelForwarder):
+    """Answers Muse Code's model list itself, which only Meta's API serves, so
+    Muse Code can run through a proxy too."""
+
+    def __init__(
+        self, upstream: str, api_key: str, model: str, max_output_tokens: int
+    ) -> None:
+        super().__init__(upstream, api_key)
+        self._models: dict[str, object] = {
+            "object": "list",
+            "data": [
+                {
+                    "id": model,
+                    "object": "model",
+                    "metadata": {"muse-code": {"limit": {"output": max_output_tokens}}},
+                }
+            ],
+        }
+
+    async def _forward(self, request: web.Request) -> web.StreamResponse:
+        if request.method == "GET" and request.rel_url.path == "/muse-code/models":
+            return web.json_response(self._models)
+        return await super()._forward(request)
+
+
 _GEMINI_API_GENERATE: Final = re.compile(
     r"/v1beta/models/([\w.-]+):(generateContent|streamGenerateContent)"
 )

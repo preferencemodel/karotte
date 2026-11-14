@@ -34,6 +34,7 @@ from karotte.agents.grok_build import GrokBuildAgent
 from karotte.agents.message_loop import MessageLoopAgent
 from karotte.agents.message_source import MessageSource
 from karotte.agents.mistral_vibe import MistralVibeAgent
+from karotte.agents.muse_code import MuseCodeAgent
 
 __all__ = [
     "AgyAgent",
@@ -54,6 +55,7 @@ __all__ = [
     "MessageLoopAgent",
     "MessageSource",
     "MistralVibeAgent",
+    "MuseCodeAgent",
     "RunContext",
     "TurnLimitReachedError",
     "cli_agent_types",

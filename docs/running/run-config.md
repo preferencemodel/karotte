@@ -191,13 +191,13 @@ A counter has no effect unless its limit is set.
 
 Agents that run a step in their own process can only enforce the limits their CLI supports.
 
-| Limit                              | `builtin`                          | `external` | CLI agents                                                                                    |
-| ---------------------------------- | ---------------------------------- | ---------- | --------------------------------------------------------------------------------------------- |
-| `turn_limit`                       | Yes                                | Yes        | Per step, through the CLI's `--max-turns`; `codex` and `agy` have none, so Karotte rejects it |
-| `step_time_limit_seconds`          | Yes                                | Yes        | Yes, by killing the CLI's processes                                                           |
-| `inject_time_remaining_counter`    | Yes                                | Yes        | No                                                                                            |
-| `step_context_window_limit`        | Yes, if the provider reports usage | No         | No                                                                                            |
-| `inject_context_remaining_counter` | Yes, if the provider reports usage | No[^ext]   | No                                                                                            |
+| Limit                              | `builtin`                          | `external` | CLI agents                                                                                                 |
+| ---------------------------------- | ---------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
+| `turn_limit`                       | Yes                                | Yes        | Per step, through the CLI's `--max-turns`; `codex`, `agy` and `muse-code` have none, so Karotte rejects it |
+| `step_time_limit_seconds`          | Yes                                | Yes        | Yes, by killing the CLI's processes                                                                        |
+| `inject_time_remaining_counter`    | Yes                                | Yes        | No                                                                                                         |
+| `step_context_window_limit`        | Yes, if the provider reports usage | No         | No                                                                                                         |
+| `inject_context_remaining_counter` | Yes, if the provider reports usage | No[^ext]   | No                                                                                                         |
 
 [^ext]: The external agent doesn't report token usage, so its context counter, if on, always shows the full limit.
 
@@ -207,11 +207,11 @@ The agent produces the student's messages and tool calls for each step.
 Don't confuse it with the model: `model` picks which LLM answers, `agent` picks the harness that calls it.
 Whichever agent you use, Karotte still runs the task's hooks, judges and artifacts.
 
-| Agent      | What it does                                                                                                                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                                                     |
-| `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).                                    |
-| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe`, `grok-build`, `claude-code`, `codex` or `agy`. |
+| Agent      | What it does                                                                                                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                                                                  |
+| `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).                                                 |
+| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe`, `grok-build`, `claude-code`, `codex`, `agy` or `muse-code`. |
 
 Set `agent` in the run config:
 
@@ -256,7 +256,7 @@ CLI agents differ from `builtin` in a few ways:
 - They run as the student and call the tool server directly.
   If they bring their own tools, those replace the task's tools that do the same job; their shell replaces `bash`, for example.
 - They send their own system prompt instead of the task's.
-- `reasoning_effort` isn't applied, except by `grok-build`, `claude-code`, `codex` and `agy`.
+- `reasoning_effort` isn't applied, except by `grok-build`, `claude-code`, `codex`, `agy` and `muse-code`.
 - The student's firewall only lets them reach localhost and the model proxy.
   Without a proxy (no `--proxy` and no plugin default), Karotte listens on a local port and forwards the agent's model calls from there to the provider, adding the API key itself.
   The agent gets a placeholder key, so the real one never reaches the student.
@@ -267,6 +267,7 @@ CLI agents differ from `builtin` in a few ways:
   `codex` sends OpenAI Responses calls to `<proxy>/v1/responses`, or through the forwarder to OpenAI's API.
   `agy` sends Gemini API calls to `<proxy>/v1beta/models/<model>`.
   Without a proxy, `gemini/` models go through the forwarder to Google's Gemini API, and `vertex_ai/` models go through it to Vertex AI.
+  `muse-code` always goes through the forwarder, to `<proxy>/v1/responses` or to Meta's API.
 
 `grok-build` specifics:
 
@@ -327,6 +328,23 @@ CLI agents differ from `builtin` in a few ways:
   It can't send `temperature` or stop at `turn_limit`, so a run config that sets either is rejected.
 - The transcript has no reasoning, because agy doesn't output it.
   Each model response's token usage counts thinking tokens as output.
+
+`muse-code` specifics:
+
+- All steps of a run share one Muse Code session, so later steps see the earlier conversation.
+- It runs Meta's models, such as `meta/muse-spark-1.3`.
+- Muse Code asks for its list of models before its first call, and only Meta's API serves that list.
+  The forwarder answers it with the run's model, so Muse Code works through a proxy too.
+- Its `exec --json` output leaves out tool arguments and per-call token usage, so Karotte reads Muse Code's session log instead.
+- Its shell and file tools replace `bash`, `view_lines_in_file`, `view_image_file` and `replace_in_file`.
+  The transcript records them under Muse Code's names, such as `bash`, `read_file` and `write_file`, and the task's tools as `mcp__karotte__<tool>`.
+- Muse Code's subagents, reminder agents and web tools stay on.
+  Its own command sandbox is off, since it needs bubblewrap; the student's sandbox still applies.
+  Its telemetry is turned off.
+- The token usage includes the calls of Muse Code's reminder agents and of its context compaction.
+- It sends `reasoning_effort` when the run config sets it.
+  It can't send `temperature` or stop at `turn_limit`, so a run config that sets either is rejected.
+- The transcript has no reasoning, because Meta returns it to Muse Code only encrypted.
 
 ## Fake model
 
