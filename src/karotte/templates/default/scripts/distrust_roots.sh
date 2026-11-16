@@ -2,12 +2,14 @@
 # Removes trust in the emSign roots and AAA Certificate Services, whose subordinate
 # CAs had private keys compromised (Mozilla, 2026-10-20). Covers the OS trust store
 # and every Mozilla-derived bundle a Python package ships (certifi, pip's vendored
-# certifi, httplib2), since those ignore the OS store.
+# certifi, httplib2, conda's ssl/cacert.pem), since those ignore the OS store.
 #
 # Run as root after every package install that could bring a bundle back: an apt or
 # dnf install regenerates the OS store but keeps the exclusion, while a `uv sync` that
 # reinstalls certifi does not, so it has to run again after it.
 set -euo pipefail
+# Conda environments on PATH ship their own `trust` and `openssl`, which read conda's store.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 LABEL_PATTERN='emSign|AAA Certificate Services'
 
@@ -40,14 +42,15 @@ bundles() {
         # changes images behind the runtime's back.
         find / -xdev \( -path /var/lib/containerd -o -path /var/lib/buildkit -o -path /var/lib/docker \
             -o -path /var/lib/containers \) -prune -o \
-            \( -path '*/certifi/cacert.pem' -o -path '*/httplib2/cacerts.txt' \) -type f -print 2>/dev/null || true
+            \( -path '*/certifi/cacert.pem' -o -path '*/httplib2/cacerts.txt' -o -path '*/ssl/cacert.pem' \) \
+            -type f -print 2>/dev/null || true
     else
         # Minimal images (amazonlinux) ship without findutils.
         local top f
         shopt -s globstar nullglob
         for top in /*/; do
             case "$top" in /proc/ | /sys/ | /dev/) continue ;; esac
-            for f in "$top"**/certifi/cacert.pem "$top"**/httplib2/cacerts.txt; do
+            for f in "$top"**/certifi/cacert.pem "$top"**/httplib2/cacerts.txt "$top"**/ssl/cacert.pem; do
                 if [ -f "$f" ] && [ ! -L "$f" ]; then echo "$f"; fi
             done
         done
@@ -55,7 +58,10 @@ bundles() {
 }
 
 bundles | while read -r bundle; do
-    awk -v RS= -v ORS='\n\n' -v pat="# Label: \"($LABEL_PATTERN)" '$0 !~ pat' "$bundle" >"$bundle.tmp"
+    # A matching block holding several certs means the file is not in this format.
+    awk -v RS= -v ORS='\n\n' -v pat="# Label: \"($LABEL_PATTERN)" '
+        $0 ~ pat && gsub(/BEGIN CERTIFICATE/, "&") > 1 { print FILENAME ": not one cert per block" >"/dev/stderr"; exit 1 }
+        $0 !~ pat' "$bundle" >"$bundle.tmp"
     cat "$bundle.tmp" >"$bundle"
     rm "$bundle.tmp"
 done
