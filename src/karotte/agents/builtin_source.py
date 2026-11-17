@@ -4,6 +4,7 @@ import random
 import re
 import socket
 import warnings
+from collections import Counter
 from collections.abc import AsyncGenerator, Iterator
 from dataclasses import dataclass
 from typing import Any, final
@@ -82,9 +83,6 @@ _INVALID_URL_ERRORS = (
 # How much of the chunks the warning shows. The transcript keeps all of them.
 MAX_LOGGED_PROVIDER_CHUNKS_CHARS = 2000
 
-# How much of a discarded reply the warning and error show.
-MAX_LOGGED_REPLY_CHARS = 200
-
 IMAGE_OMITTED_TEXT = "[image omitted: this model cannot take image input]"
 
 _RETRY_AFTER_BODY_RE = re.compile(r'"retry_after"\s*:\s*(\d+(?:\.\d+)?)')
@@ -135,14 +133,15 @@ def _retry_limit(exc: Exception) -> int:
     return LLM_RETRY_MAX_ATTEMPTS if _is_retryable(exc) else 1
 
 
-# Common shapes of model control tokens when a provider decodes them as text.
+# Control tokens as providers decode them into text: `<|...|>` (most open
+# vocabularies), DeepSeek's `<｜...｜>`, and Gemma's `<bos>`, `<eos>`, `<pad>`,
+# `<start_of_*>` and `<end_of_*>`.
 _CONTROL_TOKEN = re.compile(
     "|".join(
         (
             r"<\|[^|<>\s]+\|>",
             r"<｜[^｜<>\s]+｜>",
-            r"</?s>",
-            r"<(?:bos|eos|pad|unk)>",
+            r"<(?:bos|eos|pad)>",
             r"<(?:start|end)_of_[a-z_]+>",
         )
     )
@@ -169,6 +168,13 @@ def _is_only_control_tokens(message: Message) -> bool:
         return False
     text = _reply_text(message)
     return bool(text.strip()) and not _CONTROL_TOKEN.sub("", text).strip()
+
+
+def _describe_control_tokens(text: str) -> str:
+    """``text``'s control tokens and how often each occurs, e.g.
+    ``<end_of_image> x168``."""
+    counts = Counter(_CONTROL_TOKEN.findall(text))
+    return ", ".join(f"{token} x{n}" for token, n in counts.most_common())
 
 
 class MalformedReplyError(Exception):
@@ -446,13 +452,16 @@ class BuiltinSource:
             # loop would take it as the final answer and end the step.
             if _is_only_control_tokens(message):
                 malformed_replies += 1
-                text = truncate_middle(_reply_text(message), MAX_LOGGED_REPLY_CHARS)
+                tokens = _describe_control_tokens(_reply_text(message))
+                # The provider billed the attempt, so it still counts.
+                if usage_event := self._usage_event(full_response, traffic_types):
+                    yield usage_event
                 if attempt < LLM_RETRY_MAX_ATTEMPTS:
                     wait = _retry_wait(malformed_replies)
                     logger.warning(
-                        "Model {model} replied with only control tokens ({text!r}); discarding the reply and retrying (attempt {next} of {max}) after {wait:.1f}s...",
+                        "Model {model} replied with only control tokens ({tokens}); discarding the reply and retrying (attempt {next} of {max}) after {wait:.1f}s...",
                         model=self.config.model,
-                        text=text,
+                        tokens=tokens,
                         next=attempt + 1,
                         max=LLM_RETRY_MAX_ATTEMPTS,
                         wait=wait,
@@ -462,11 +471,9 @@ class BuiltinSource:
                     continue
                 msg = (
                     f"Model {self.config.model} replied with only control tokens "
-                    f"{malformed_replies} times; last reply: {text!r}"
+                    f"{malformed_replies} times; last reply: {tokens}"
                 )
                 raise MalformedReplyError(msg)
-
-            usage = getattr(full_response, "usage", None)
 
             # litellm normalizes a provider safety refusal (e.g. Claude's native
             # 'refusal' stop_reason) to the OpenAI 'content_filter' finish_reason.
@@ -491,18 +498,26 @@ class BuiltinSource:
                 message=message, finish_reason=finish_reason, raw=raw
             )
 
-            if usage:
-                cache_read_tokens, cache_write_tokens = cache_tokens(usage)
-                yield TokenUsageEvent(
-                    input_tokens=usage.prompt_tokens,
-                    output_tokens=usage.completion_tokens,
-                    cache_read_tokens=cache_read_tokens,
-                    cache_write_tokens=cache_write_tokens,
-                    service_tier=vertex_served_tier(traffic_types[-1])
-                    if traffic_types
-                    else self._service_tier,
-                )
+            if usage_event := self._usage_event(full_response, traffic_types):
+                yield usage_event
             return
+
+    def _usage_event(
+        self, response: ModelResponse, traffic_types: list[str]
+    ) -> TokenUsageEvent | None:
+        usage = getattr(response, "usage", None)
+        if not usage:
+            return None
+        cache_read_tokens, cache_write_tokens = cache_tokens(usage)
+        return TokenUsageEvent(
+            input_tokens=usage.prompt_tokens,
+            output_tokens=usage.completion_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+            service_tier=vertex_served_tier(traffic_types[-1])
+            if traffic_types
+            else self._service_tier,
+        )
 
     def get_completion_params(
         self,

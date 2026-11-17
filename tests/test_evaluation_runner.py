@@ -2791,16 +2791,16 @@ async def test_auth_errors_get_a_few_attempts_then_reraise():
         "<|im_end|>",
         "<|endoftext|><|endoftext|>",
         "<｜end▁of▁sentence｜>",
-        "</s>",
         "<eos> <pad>",
     ],
 )
 async def test_reply_of_only_control_tokens_is_retried(content: str):
     """The reply is dropped and the same request is sent again."""
     runner = _create_runner_with_tools_and_transcript()
+    usage = {"prompt_tokens": 100, "completion_tokens": 2}
     replies = [
-        _make_mock_model_response(content),
-        _make_mock_model_response("Done."),
+        _make_mock_model_response(content, usage=usage),
+        _make_mock_model_response("Done.", usage=usage),
     ]
     requests: list[Any] = []
 
@@ -2820,6 +2820,7 @@ async def test_reply_of_only_control_tokens_is_retried(content: str):
     assert sum(isinstance(e, MessageChunkResetEvent) for e in events) == 1
     message_events = [e for e in events if isinstance(e, MessageAddedEvent)]
     assert [e.message.content for e in message_events] == ["Done."]
+    assert sum(isinstance(e, TokenUsageEvent) for e in events) == 2
 
 
 @pytest.mark.asyncio
@@ -2892,7 +2893,7 @@ async def test_control_token_replies_fail_after_the_retry_limit():
         ),
         patch("karotte.agents.builtin_source._retry_wait", return_value=0),
     ):
-        with pytest.raises(MalformedReplyError, match="end_of_image"):
+        with pytest.raises(MalformedReplyError, match="<end_of_image> x2"):
             async for _ in _collect(runner):
                 pass
 
