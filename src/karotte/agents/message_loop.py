@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from collections.abc import AsyncGenerator, Sequence
 from typing import Any, ClassVar, Literal, cast
@@ -181,19 +182,23 @@ class MessageLoopAgent:
                 truncated = message_event.finish_reason == "length" or bool(
                     (message.reasoning_content or "").strip()
                 )
-                if _has_text(message) or not truncated:
+                # Leaked control tokens are decoder debris, not an answer the
+                # model chose to end the step with.
+                degenerate = _has_only_control_tokens(message)
+                if not degenerate and (_has_text(message) or not truncated):
                     break
 
                 empty_turns += 1
                 if empty_turns > MAX_CONSECUTIVE_EMPTY_TURNS:
                     msg = (
-                        f"Model produced neither text nor tool calls "
+                        f"Model produced neither usable text nor tool calls "
                         f"{empty_turns} turns in a row."
                     )
                     raise EmptyTurnLimitReachedError(msg)
 
                 logger.warning(
-                    "Empty turn ({n} of {max} allowed in a row); nudging the model.",
+                    "{kind} turn ({n} of {max} allowed in a row); nudging the model.",
+                    kind="Control-token-only" if degenerate else "Empty",
                     n=empty_turns,
                     max=MAX_CONSECUTIVE_EMPTY_TURNS,
                 )
@@ -228,21 +233,54 @@ class MessageLoopAgent:
         pass
 
 
+# Control tokens from model vocabularies that sometimes leak into a reply as
+# literal text: `<|...|>` and DeepSeek's full-width `<｜...｜>`, sentencepiece
+# `<s>`/`</s>`, and the `<bos>`/`<eos>`/`<start_of_*>`/`<end_of_*>` family.
+_CONTROL_TOKEN: re.Pattern[str] = re.compile(
+    "|".join(
+        (
+            r"<\|[^|<>\s]+\|>",
+            r"<｜[^｜<>\s]+｜>",
+            r"</?s>",
+            r"<(?:bos|eos|pad|unk)>",
+            r"<(?:start|end)_of_[a-z_]+>",
+        )
+    )
+)
+
+
+def _text_of(message: Message) -> str:
+    content = message.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            str(part.get("text") or "")
+            for part in content
+            if part.get("type") == "text"
+        )
+    return ""
+
+
+def _has_only_control_tokens(message: Message) -> bool:
+    """Whether the message's text is nothing but leaked control tokens.
+
+    A provider glitch can return a reply such as
+    ``<end_of_image><end_of_image>`` with ``finish_reason="stop"``. It has text,
+    so without this check it would end the step as if it were the model's final
+    answer. Text that also carries anything else is a real reply.
+    """
+    text = _text_of(message)
+    return bool(text.strip()) and not _CONTROL_TOKEN.sub("", text).strip()
+
+
 def _has_text(message: Message) -> bool:
     """Whether the message carries any non-blank text for the reader.
 
     Reasoning doesn't count: a turn is just as stalled with it as without, and
     healthy tool-calling turns carry it too.
     """
-    content = message.content
-    if isinstance(content, str):
-        return bool(content.strip())
-    if isinstance(content, list):
-        return any(
-            part.get("type") == "text" and str(part.get("text") or "").strip()
-            for part in content
-        )
-    return False
+    return bool(_text_of(message).strip())
 
 
 def _append_time_remaining(events: list[Event], remaining_seconds: float) -> None:
