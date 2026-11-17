@@ -475,7 +475,7 @@
     "max": {
       "sent_by_karotte": "max",
       "mapped_by_litellm": {
-        "reasoning_effort": "high"
+        "reasoning_effort": "max"
       }
     }
   },
@@ -856,6 +856,42 @@
     }
   },
   "openai/gpt-6.1-sol": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "max"
+      }
+    }
+  },
+  "openai/gpt-6.2-astra": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "max"
+      }
+    }
+  },
+  "openai/gpt-6.2-sol": {
     "None": {
       "sent_by_karotte": null,
       "mapped_by_litellm": {}
