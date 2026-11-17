@@ -82,6 +82,9 @@ _INVALID_URL_ERRORS = (
 # How much of the chunks the warning shows. The transcript keeps all of them.
 MAX_LOGGED_PROVIDER_CHUNKS_CHARS = 2000
 
+# How much of a discarded reply the warning and error show.
+MAX_LOGGED_REPLY_CHARS = 200
+
 IMAGE_OMITTED_TEXT = "[image omitted: this model cannot take image input]"
 
 _RETRY_AFTER_BODY_RE = re.compile(r'"retry_after"\s*:\s*(\d+(?:\.\d+)?)')
@@ -132,10 +135,7 @@ def _retry_limit(exc: Exception) -> int:
     return LLM_RETRY_MAX_ATTEMPTS if _is_retryable(exc) else 1
 
 
-# Control tokens from model vocabularies, as they read when a provider detokenizes
-# them into the reply's text: `<|...|>` and DeepSeek's full-width `<｜...｜>`,
-# sentencepiece `<s>`/`</s>`, and the `<bos>`/`<eos>`/`<start_of_*>`/`<end_of_*>`
-# family.
+# Common shapes of model control tokens when a provider decodes them as text.
 _CONTROL_TOKEN = re.compile(
     "|".join(
         (
@@ -147,9 +147,6 @@ _CONTROL_TOKEN = re.compile(
         )
     )
 )
-
-# How much of a discarded reply the warning shows.
-MAX_LOGGED_DISCARDED_REPLY_CHARS = 200
 
 
 def _reply_text(message: Message) -> str:
@@ -165,15 +162,9 @@ def _reply_text(message: Message) -> str:
     return ""
 
 
-def _is_control_tokens_only(message: Message) -> bool:
-    """Whether a reply with no tool calls has text that is only control tokens.
-
-    Providers occasionally serve a malformed reply such as
-    ``<end_of_image><end_of_image>`` with ``finish_reason="stop"``. It is not
-    something the model said: taken at face value it would end the step as if
-    it were the model's final answer. Text with anything else in it is a real
-    reply.
-    """
+def _is_only_control_tokens(message: Message) -> bool:
+    """Whether a reply without tool calls is nothing but control tokens,
+    e.g. ``<end_of_image><end_of_image>``."""
     if message.tool_calls:
         return False
     text = _reply_text(message)
@@ -181,7 +172,7 @@ def _is_control_tokens_only(message: Message) -> bool:
 
 
 class MalformedReplyError(Exception):
-    """The provider kept replying with nothing but control tokens."""
+    """The provider kept returning replies made only of control tokens."""
 
 
 class ModelEndpointUnreachableError(Exception):
@@ -451,16 +442,11 @@ class BuiltinSource:
                     message.tool_calls, TOOL_CALL_REPAIRS[name]
                 )
 
-            usage = getattr(full_response, "usage", None)
-
-            # A malformed reply is the provider's failure, not a turn the model
-            # took: drop it and ask again, like a server error, so it never
-            # reaches the transcript or ends the step.
-            if _is_control_tokens_only(message):
+            # Not a turn the model took: retry it like a server error, or the
+            # loop would take it as the final answer and end the step.
+            if _is_only_control_tokens(message):
                 malformed_replies += 1
-                text = truncate_middle(
-                    _reply_text(message), MAX_LOGGED_DISCARDED_REPLY_CHARS
-                )
+                text = truncate_middle(_reply_text(message), MAX_LOGGED_REPLY_CHARS)
                 if attempt < LLM_RETRY_MAX_ATTEMPTS:
                     wait = _retry_wait(malformed_replies)
                     logger.warning(
@@ -476,9 +462,11 @@ class BuiltinSource:
                     continue
                 msg = (
                     f"Model {self.config.model} replied with only control tokens "
-                    f"{malformed_replies} times in a row; last reply: {text!r}"
+                    f"{malformed_replies} times; last reply: {text!r}"
                 )
                 raise MalformedReplyError(msg)
+
+            usage = getattr(full_response, "usage", None)
 
             # litellm normalizes a provider safety refusal (e.g. Claude's native
             # 'refusal' stop_reason) to the OpenAI 'content_filter' finish_reason.

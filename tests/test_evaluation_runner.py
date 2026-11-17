@@ -2795,10 +2795,8 @@ async def test_auth_errors_get_a_few_attempts_then_reraise():
         "<eos> <pad>",
     ],
 )
-async def test_reply_of_only_control_tokens_is_discarded_and_retried(content: str):
-    """A provider serving leaked control tokens with finish_reason="stop" is
-    a failed call, not a final answer: the reply never reaches the transcript
-    and the same request is sent again."""
+async def test_reply_of_only_control_tokens_is_retried(content: str):
+    """The reply is dropped and the same request is sent again."""
     runner = _create_runner_with_tools_and_transcript()
     replies = [
         _make_mock_model_response(content),
@@ -2835,7 +2833,7 @@ async def test_reply_of_only_control_tokens_is_discarded_and_retried(content: st
         "",
     ],
 )
-async def test_reply_with_anything_besides_control_tokens_is_kept(content: str):
+async def test_reply_with_other_text_is_kept(content: str):
     runner = _create_runner_with_tools_and_transcript()
 
     with (
@@ -2853,8 +2851,7 @@ async def test_reply_with_anything_besides_control_tokens_is_kept(content: str):
 
 
 @pytest.mark.asyncio
-async def test_control_tokens_beside_tool_calls_are_kept():
-    """A reply with tool calls is usable whatever its text says."""
+async def test_control_tokens_with_tool_calls_are_kept():
     runner = _create_runner_with_tools_and_transcript()
     tool_calls = [
         {
@@ -2877,9 +2874,8 @@ async def test_control_tokens_beside_tool_calls_are_kept():
 
 
 @pytest.mark.asyncio
-async def test_control_token_replies_that_keep_coming_fail_the_call():
-    """A provider that never recovers fails the run loudly instead of letting
-    the step end on a malformed reply and be scored."""
+async def test_control_token_replies_fail_after_the_retry_limit():
+    """The run errors instead of the step ending on a malformed reply."""
     runner = _create_runner_with_tools_and_transcript()
     call_count = 0
 
@@ -2892,9 +2888,7 @@ async def test_control_token_replies_that_keep_coming_fail_the_call():
         patch("litellm.acompletion", side_effect=mock_acompletion),
         patch(
             "litellm.stream_chunk_builder",
-            side_effect=lambda *_a, **_k: _make_mock_model_response(  # pyright: ignore[reportUnknownLambdaType]
-                "<end_of_image>" * 2
-            ),
+            return_value=_make_mock_model_response("<end_of_image>" * 2),
         ),
         patch("karotte.agents.builtin_source._retry_wait", return_value=0),
     ):
