@@ -20,7 +20,9 @@ from karotte.agents import BackendSource, BuiltinSource
 from karotte.agents.backend_source import EXTERNAL_MESSAGE_TIMEOUT_S
 from karotte.agents.builtin_source import (
     LLM_RETRY_AFTER_MAX_S,
+    LLM_RETRY_MAX_ATTEMPTS,
     LLM_RETRY_WAIT_MIN_S,
+    MalformedReplyError,
     _retry_after,  # pyright: ignore[reportPrivateUsage]
     _retry_wait,  # pyright: ignore[reportPrivateUsage]
 )
@@ -2778,6 +2780,124 @@ async def test_auth_errors_get_a_few_attempts_then_reraise():
             async for _ in _collect(runner):
                 pass
     assert calls == AUTH_RETRY_MAX_ATTEMPTS == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    [
+        "<end_of_image>" * 40,
+        "<end_of_turn>\n",
+        "<|im_end|>",
+        "<|endoftext|><|endoftext|>",
+        "<｜end▁of▁sentence｜>",
+        "<eos> <pad>",
+    ],
+)
+async def test_reply_of_only_control_tokens_is_retried(content: str):
+    """The reply is dropped and the same request is sent again."""
+    runner = _create_runner_with_tools_and_transcript()
+    usage = {"prompt_tokens": 100, "completion_tokens": 2}
+    replies = [
+        _make_mock_model_response(content, usage=usage),
+        _make_mock_model_response("Done.", usage=usage),
+    ]
+    requests: list[Any] = []
+
+    async def mock_acompletion(**kwargs):  # pyright: ignore[reportMissingParameterType]
+        requests.append(kwargs["messages"])
+        return _make_mock_stream([])
+
+    with (
+        patch("litellm.acompletion", side_effect=mock_acompletion),
+        patch("litellm.stream_chunk_builder", side_effect=replies),
+        patch("karotte.agents.builtin_source._retry_wait", return_value=0),
+    ):
+        events = [event async for event in _collect(runner)]
+
+    assert len(requests) == 2
+    assert requests[0] == requests[1]
+    assert sum(isinstance(e, MessageChunkResetEvent) for e in events) == 1
+    message_events = [e for e in events if isinstance(e, MessageAddedEvent)]
+    assert [e.message.content for e in message_events] == ["Done."]
+    assert sum(isinstance(e, TokenUsageEvent) for e in events) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    [
+        "Done. <end_of_turn>",
+        "The tokenizer splits on <|im_end|> here.",
+        "<answer>42</answer>",
+        "<done>",
+        "",
+    ],
+)
+async def test_reply_with_other_text_is_kept(content: str):
+    runner = _create_runner_with_tools_and_transcript()
+
+    with (
+        patch("litellm.acompletion", return_value=_make_mock_stream([])),
+        patch(
+            "litellm.stream_chunk_builder",
+            return_value=_make_mock_model_response(content),
+        ),
+    ):
+        events = [event async for event in _collect(runner)]
+
+    message_events = [e for e in events if isinstance(e, MessageAddedEvent)]
+    assert [e.message.content for e in message_events] == [content]
+    assert not any(isinstance(e, MessageChunkResetEvent) for e in events)
+
+
+@pytest.mark.asyncio
+async def test_control_tokens_with_tool_calls_are_kept():
+    runner = _create_runner_with_tools_and_transcript()
+    tool_calls = [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "bash", "arguments": "{}"},
+        }
+    ]
+
+    with (
+        patch("litellm.acompletion", return_value=_make_mock_stream([])),
+        patch(
+            "litellm.stream_chunk_builder",
+            return_value=_make_mock_model_response("<end_of_turn>", tool_calls),
+        ),
+    ):
+        events = [event async for event in _collect(runner)]
+
+    assert len([e for e in events if isinstance(e, MessageAddedEvent)]) == 1
+
+
+@pytest.mark.asyncio
+async def test_control_token_replies_fail_after_the_retry_limit():
+    """The run errors instead of the step ending on a malformed reply."""
+    runner = _create_runner_with_tools_and_transcript()
+    call_count = 0
+
+    async def mock_acompletion(**_kwargs):  # pyright: ignore[reportMissingParameterType]
+        nonlocal call_count
+        call_count += 1
+        return _make_mock_stream([])
+
+    with (
+        patch("litellm.acompletion", side_effect=mock_acompletion),
+        patch(
+            "litellm.stream_chunk_builder",
+            return_value=_make_mock_model_response("<end_of_image>" * 2),
+        ),
+        patch("karotte.agents.builtin_source._retry_wait", return_value=0),
+    ):
+        with pytest.raises(MalformedReplyError, match="<end_of_image> x2"):
+            async for _ in _collect(runner):
+                pass
+
+    assert call_count == LLM_RETRY_MAX_ATTEMPTS
 
 
 @pytest.mark.asyncio
