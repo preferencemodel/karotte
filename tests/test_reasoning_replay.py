@@ -19,7 +19,11 @@ from karotte.agents.builtin_source import (
 from karotte.model_spec import spec_for
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
-from karotte.schemas.transcript import MessageAddedEvent, MessageChunkResetEvent
+from karotte.schemas.transcript import (
+    MessageAddedEvent,
+    MessageChunkResetEvent,
+    TokenUsageEvent,
+)
 
 _SIGNATURE = "EqQBCkgIARABGAIiQL+opaque/signature=="
 _SUMMARY = "Let me list the files first."
@@ -527,6 +531,82 @@ async def test_other_providers_neither_keep_nor_send_reasoning_state(
     sent = source.get_completion_params([user, assistant], [])["messages"][1]
     assert "thinking_blocks" not in sent
     assert "reasoning_items" not in sent
+
+
+def _usage_chunk(prompt_tokens: int, completion_tokens: int) -> ModelResponseStream:
+    """The chunk that ends a stream whose request asks for usage: the token
+    counts and no choice, as OpenAI's API sends it and litellm >= 1.109 builds
+    it for every provider."""
+    chunk = ModelResponseStream(
+        id="chatcmpl-1",
+        created=1735689600,
+        model="m",
+        usage=Usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+        ),
+    )
+    chunk.choices = []
+    return chunk
+
+
+@pytest.mark.parametrize(
+    ("model", "kept"),
+    [
+        (
+            "claude-sonnet-5-5",
+            {
+                "thinking_blocks": [
+                    {"type": "thinking", "thinking": "thought", "signature": "sig"}
+                ]
+            },
+        ),
+        (
+            "openai/gpt-5.5",
+            {"reasoning_items": [{"id": "rs_1", "type": "reasoning", "summary": []}]},
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_a_stream_ending_in_a_usage_chunk_with_no_choice_is_one_whole_turn(
+    model: str, kept: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+):
+    chunks = [
+        _chunk(LiteLlmDelta(role="assistant", reasoning_content="thought", **kept)),
+        ModelResponseStream(
+            id="chatcmpl-1",
+            created=1735689600,
+            model="m",
+            choices=[
+                StreamingChoices(
+                    index=0, delta=LiteLlmDelta(content="done"), finish_reason="stop"
+                )
+            ],
+        ),
+        _usage_chunk(prompt_tokens=12, completion_tokens=3),
+    ]
+
+    async def scripted(**_params: Any) -> _ScriptedStream:
+        return _ScriptedStream(chunks)
+
+    monkeypatch.setattr("litellm.acompletion", scripted)
+    source = BuiltinSource(_config(model))
+
+    events = [
+        event
+        async for event in source.collect(
+            [Message(role="user", content="Go.")], [_READ_FILE]
+        )
+    ]
+
+    (added,) = [e for e in events if isinstance(e, MessageAddedEvent)]
+    assert added.message.content == "done"
+    assert added.finish_reason == "stop"
+    for field, value in kept.items():
+        assert getattr(added.message, field) == value
+    (usage,) = [e for e in events if isinstance(e, TokenUsageEvent)]
+    assert (usage.input_tokens, usage.output_tokens) == (12, 3)
 
 
 def test_unsigned_thinking_before_a_redacted_block_is_not_kept():
