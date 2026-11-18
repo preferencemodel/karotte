@@ -74,8 +74,32 @@ def _read_config(config: str) -> Any:
             return None
 
 
-def _config_with_flags(config: str | None, flags: dict[str, str | float | None]) -> str:
-    """``config`` with the set ``flags`` on top, or a new config from them."""
+def _parse_agent_env(pairs: list[str]) -> dict[str, str]:
+    env: dict[str, str] = {}
+    for pair in pairs:
+        name, sep, value = pair.partition("=")
+        if not name or not sep:
+            _print_and_abort(f"--agent-env takes NAME=VALUE, got {pair!r}.")
+        env[name] = value
+    return env
+
+
+def _with_agent_env(data: dict[str, Any], agent_env: dict[str, str]) -> dict[str, Any]:
+    agent_config = data.get("agent_config") or {}
+    env = agent_config.get("env") or {} if isinstance(agent_config, dict) else None
+    if not isinstance(env, dict):
+        _print_and_abort(
+            "--agent-env needs the config's agent_config.env to be an object."
+        )
+    return {**data, "agent_config": {**agent_config, "env": {**env, **agent_env}}}
+
+
+def _config_with_flags(
+    config: str | None,
+    flags: dict[str, str | float | None],
+    agent_env: dict[str, str] | None = None,
+) -> str:
+    """``config`` with the set ``flags`` and ``agent_env`` on top, or a new config from them."""
     set_flags = {field: value for field, value in flags.items() if value is not None}
     if config is None:
         missing = [
@@ -85,17 +109,16 @@ def _config_with_flags(config: str | None, flags: dict[str, str | float | None])
         ]
         if missing:
             _print_and_abort(f"Pass --config, or {' and '.join(missing)}.")
-        return json.dumps(
-            {
-                "run_id": uuid.uuid4().hex[:8],
-                "transcript_file": "out/transcript.json",
-                **set_flags,
-            }
-        )
-    data = _read_config(config)
-    if not set_flags or not isinstance(data, dict):
-        return config
-    return json.dumps({**data, **set_flags})
+        base: Any = {
+            "run_id": uuid.uuid4().hex[:8],
+            "transcript_file": "out/transcript.json",
+        }
+    else:
+        base = _read_config(config)
+        if not (set_flags or agent_env) or not isinstance(base, dict):
+            return config
+    merged = {**base, **set_flags}
+    return json.dumps(_with_agent_env(merged, agent_env) if agent_env else merged)
 
 
 def _key_env_vars(config: str) -> list[str]:
@@ -179,6 +202,15 @@ def run(
         typer.Option(
             help="Sampling temperature. Overrides the config's temperature.",
             metavar="FLOAT",
+        ),
+    ] = None,
+    agent_env: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--agent-env",
+            metavar="NAME=VALUE",
+            help="Environment variable for a CLI agent's process. Repeatable. "
+            + "Added to the config's agent_config.env, replacing a variable of the same name.",
         ),
     ] = None,
     transcript_file: Annotated[
@@ -346,6 +378,7 @@ def run(
                 "temperature": temperature,
                 "transcript_file": transcript_file,
             },
+            _parse_agent_env(agent_env or []),
             pre_build=pre_build,
             no_pre_build=no_pre_build,
             dev=dev,
@@ -395,6 +428,7 @@ def run(
             "temperature": temperature,
             "transcript_file": transcript_file,
         },
+        _parse_agent_env(agent_env or []),
     )
 
     proxy_url = None if no_proxy else proxy or default_proxy_url()
@@ -611,6 +645,7 @@ def _run_from_source(
     source: str,
     config: str | None,
     flags: dict[str, str | float | None],
+    agent_env: dict[str, str],
     *,
     pre_build: list[str] | None,
     no_pre_build: bool,
@@ -633,7 +668,7 @@ def _run_from_source(
         _print_and_abort(str(e))
 
     run_config = json.loads(
-        _config_with_flags(None if data is None else json.dumps(data), flags)
+        _config_with_flags(None if data is None else json.dumps(data), flags, agent_env)
     )
     # The environment's karotte runs in its folder, but outputs belong here.
     if transcript := run_config.get("transcript_file"):

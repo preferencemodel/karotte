@@ -50,7 +50,7 @@ from karotte.providers import (
     repair_tool_calls,
 )
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
-from karotte.schemas.evaluation_run_config import EvaluationRunConfig
+from karotte.schemas.evaluation_run_config import AgentConfig, EvaluationRunConfig
 from karotte.schemas.http_mcp_server_config import HttpMcpServerConfig
 from karotte.schemas.transcript import (
     ErrorEvent,
@@ -4310,6 +4310,56 @@ class TestTurnLimitNeedsAnAgentThatEnforcesIt:
             sample_config, agent="no-turns", model="mistral/m", use_fake_model=True
         )
         _ = EvaluationRunner(config, _NoStepsTask(config))
+
+
+def test_an_agent_env_that_clashes_fails_before_the_run_starts(
+    sample_config: EvaluationRunConfig,
+):
+    config = sample_config.model_copy(
+        update={
+            "agent": "claude-code",
+            "model": "claude-opus-5",
+            "agent_config": AgentConfig(env={"ANTHROPIC_BASE_URL": "http://x"}),
+        }
+    )
+    with pytest.raises(
+        ValueError, match="agent_config.env can't set ANTHROPIC_BASE_URL"
+    ):
+        _ = EvaluationRunner(config, _NoStepsTask(config))
+
+
+def test_a_fake_model_run_ignores_an_agent_env_that_clashes(
+    sample_config: EvaluationRunConfig,
+):
+    config = sample_config.model_copy(
+        update={
+            "agent": "claude-code",
+            "model": "claude-opus-5",
+            "use_fake_model": True,
+            "agent_config": AgentConfig(env={"HOME": "/x"}),
+        }
+    )
+    _ = EvaluationRunner(config, _NoStepsTask(config))
+
+
+@pytest.mark.asyncio
+async def test_task_started_records_the_agent_config(
+    sample_config: EvaluationRunConfig,
+    mcp_server: HttpMcpServer,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+    agent_config = AgentConfig(env={"BASH_DEFAULT_TIMEOUT_MS": "3600000"})
+    config = sample_config.model_copy(
+        update={
+            "agent": "claude-code",
+            "model": "claude-opus-5",
+            "agent_config": agent_config,
+        }
+    )
+    started = await _task_started(config, mcp_server)
+    assert started.agent_config == agent_config
 
 
 @pytest.mark.asyncio

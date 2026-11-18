@@ -8,6 +8,9 @@
     "reasoning_effort": null,
     "temperature": null,
     "agent": "builtin",
+    "agent_config": {
+      "env": {}
+    },
     "use_hints": true
   },
   {
