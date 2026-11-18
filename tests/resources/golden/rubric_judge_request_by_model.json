@@ -422,6 +422,15 @@
       "the criterion is met"
     ]
   },
+  "vertex_ai/gemini-4-neon": {
+    "model": "vertex_ai/gemini-4-neon",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
   "vertex_ai/gemini-4-hydrogen": {
     "model": "vertex_ai/gemini-4-hydrogen",
     "max_tokens": 32000,
@@ -469,6 +478,15 @@
   },
   "vertex_ai/gemini-3.7-flash": {
     "model": "vertex_ai/gemini-3.7-flash",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
+  "gemini/gemini-4-neon": {
+    "model": "gemini/gemini-4-neon",
     "max_tokens": 32000,
     "temperature": 0.3,
     "parsed": [

@@ -1097,6 +1097,31 @@
       "extra_allowed_openai_params": []
     },
     {
+      "model": "vertex_ai/gemini-4-neon",
+      "model_display_name": "Gemini 4 Neon",
+      "provider": "vertex_ai",
+      "provider_display_name": "Google Vertex AI",
+      "litellm_model": "vertex_ai/gemini-4-neon",
+      "max_output_tokens": 1048576,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "reasoning_request": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": false,
+      "extra_allowed_openai_params": []
+    },
+    {
       "model": "vertex_ai/gemini-4-hydrogen",
       "model_display_name": "Gemini 4 Hydrogen",
       "provider": "vertex_ai",
@@ -1240,6 +1265,31 @@
       "supports_sampling_params": true,
       "tool_call_repairs": [],
       "requires_api_key": false,
+      "extra_allowed_openai_params": []
+    },
+    {
+      "model": "gemini/gemini-4-neon",
+      "model_display_name": "Gemini 4 Neon",
+      "provider": "gemini",
+      "provider_display_name": "Google",
+      "litellm_model": "gemini/gemini-4-neon",
+      "max_output_tokens": 1048576,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "reasoning_request": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
       "extra_allowed_openai_params": []
     },
     {

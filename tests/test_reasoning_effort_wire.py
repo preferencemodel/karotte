@@ -124,3 +124,11 @@ def test_gemini_4_body_carries_thinking_level(effort: str):
         "includeThoughts": True,
         "thinkingLevel": effort,
     }
+
+
+def test_gemini_4_neon_body_carries_xhigh():
+    body = _capture_request_body("gemini/gemini-4-neon", "xhigh")
+    assert body["generationConfig"]["thinkingConfig"] == {
+        "includeThoughts": True,
+        "thinkingLevel": "xhigh",
+    }

@@ -122,10 +122,6 @@ class Provider:
             merge_extra_body(params, extra_body)
         params.update(request)
         if effort is not None:
-            # litellm maps a Gemini effort to a thinking config that already includes
-            # summaries and 400s if we send our own, so the spec's thinkingConfig is
-            # dropped when an effort level is sent.
-            params.pop("thinkingConfig", None)
             # litellm >=1.83.13 auto-routes tool-using gpt-5.4+ calls through
             # OpenAI's Responses API, so reasoning_effort coexists with tools.
             params["reasoning_effort"] = effort
@@ -230,7 +226,25 @@ def _is_vertex_gemini(spec: ModelSpec) -> bool:
     return spec.model.startswith("vertex_ai/gemini-")
 
 
-class VertexProvider(Provider):
+class GeminiProvider(Provider):
+    @override
+    def apply_reasoning(
+        self, spec: ModelSpec, effort: str | None, params: dict[str, Any]
+    ) -> None:
+        super().apply_reasoning(spec, effort, params)
+        thinking = params.get("thinkingConfig")
+        if effort is None or thinking is None:
+            return
+        if effort == "xhigh":
+            # litellm rejects an effort above high but forwards thinkingConfig as is.
+            del params["reasoning_effort"]
+            params["thinkingConfig"] = {**thinking, "thinkingLevel": effort}
+        else:
+            # litellm builds its own thinkingConfig from the effort and 400s on ours.
+            del params["thinkingConfig"]
+
+
+class VertexProvider(GeminiProvider):
     proxied: bool = False
 
     @override
@@ -325,6 +339,7 @@ _PROVIDERS: Final[dict[str, Provider]] = {
     "openai": OpenAIProvider(),
     "xai": XaiProvider(),
     "meta": MetaProvider(),
+    "gemini": GeminiProvider(),
     "vertex_ai": VertexProvider(),
     "together_ai": TogetherAiProvider(),
     "fireworks_ai": FireworksProvider(),
