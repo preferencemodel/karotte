@@ -80,7 +80,8 @@ class ModelForwarder:
         )
         app = web.Application(client_max_size=0)
         app.router.add_route("*", "/{tail:.*}", self._forward)
-        self._runner = web.AppRunner(app, access_log=None)
+        # Preserve encoded request bodies to match their Content-Encoding header.
+        self._runner = web.AppRunner(app, access_log=None, auto_decompress=False)
         await self._runner.setup()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("127.0.0.1", 0))

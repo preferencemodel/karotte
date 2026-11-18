@@ -5,6 +5,7 @@ import gzip
 import json
 import logging
 import socket
+import zlib
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -51,6 +52,13 @@ async def _accept_encoding(request: web.Request) -> web.Response:
     return web.json_response(request.headers.get("Accept-Encoding"))
 
 
+async def _echo_body(request: web.Request) -> web.Response:
+    headers = {}
+    if encoding := request.headers.get("Content-Encoding"):
+        headers["Content-Encoding"] = encoding
+    return web.Response(body=await request.read(), headers=headers)
+
+
 async def _rate_limited(request: web.Request) -> web.Response:
     del request
     return web.json_response({"error": "slow down"}, status=429)
@@ -90,6 +98,7 @@ async def _stream(request: web.Request) -> web.StreamResponse:
 async def upstream() -> AsyncIterator[str]:
     app = web.Application()
     app.router.add_route("*", "/v1/echo", _echo)
+    app.router.add_post("/v1/echo-body", _echo_body)
     app.router.add_get("/v1/accept-encoding", _accept_encoding)
     app.router.add_post("/v1/limited", _rate_limited)
     app.router.add_post("/v1/limited-gzip", _rate_limited_gzip)
@@ -97,7 +106,7 @@ async def upstream() -> AsyncIterator[str]:
     app.router.add_route("*", "/v1/projects/{tail:.*}", _echo)
     app.router.add_get("/v1/stream", _stream)
     app.router.add_get("/v1/endless", _endless)
-    runner = web.AppRunner(app)
+    runner = web.AppRunner(app, auto_decompress=False)
     await runner.setup()
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -143,6 +152,39 @@ class TestModelForwarder:
             "custom": "kept",
             "body": '{"model": "m"}',
         }
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("encoding", "compress"),
+        [(None, bytes), ("gzip", gzip.compress), ("deflate", zlib.compress)],
+        ids=["plain", "gzip", "deflate"],
+    )
+    @pytest.mark.parametrize("chunked", [False, True])
+    async def test_preserves_request_body_and_encoding(
+        self,
+        forwarder: ModelForwarder,
+        encoding: str | None,
+        compress: Callable[[bytes], bytes],
+        chunked: bool,
+    ):
+        body = compress(b'{"model": "m", "messages": []}')
+        headers = {"Content-Type": "application/json"}
+        if encoding is not None:
+            headers["Content-Encoding"] = encoding
+
+        async def chunks() -> AsyncIterator[bytes]:
+            for i in range(0, len(body), 3):
+                yield body[i : i + 3]
+
+        async with aiohttp.ClientSession(auto_decompress=False) as session:
+            async with session.post(
+                f"{forwarder.url}/v1/echo-body",
+                data=chunks() if chunked else body,
+                headers=headers,
+            ) as response:
+                assert response.status == 200
+                assert response.headers.get("Content-Encoding") == encoding
+                assert await response.read() == body
 
     @pytest.mark.asyncio
     async def test_streams_server_sent_events(self, forwarder: ModelForwarder):
