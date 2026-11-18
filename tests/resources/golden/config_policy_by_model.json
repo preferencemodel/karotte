@@ -234,6 +234,11 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "vertex_ai/gemini-4-neon": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": false
+  },
   "vertex_ai/gemini-4-hydrogen": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,
@@ -263,6 +268,11 @@
     "resolved_agent": "builtin",
     "is_special_training_model": false,
     "api_key_required": false
+  },
+  "gemini/gemini-4-neon": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
   },
   "gemini/gemini-4-hydrogen": {
     "resolved_agent": "builtin",

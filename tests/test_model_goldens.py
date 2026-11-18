@@ -106,7 +106,13 @@ _LITELLM_REASONING_KEYS = (
     "thinkingConfig",
 )
 
-_REASONING_KEYS = ("reasoning_effort", "thinking")
+_REASONING_KEYS = ("reasoning_effort", "thinking", "thinkingConfig")
+
+
+def _sent_reasoning_params(model: str, level: ReasoningEffort | None) -> dict[str, Any]:
+    source = BuiltinSource(_config(model, reasoning_effort=level))
+    params = source.get_completion_params([Message(role="user", content="Go.")], [])
+    return {k: params[k] for k in _REASONING_KEYS if k in params}
 
 
 def _litellm_reasoning_params(model: str, level: ReasoningEffort | None) -> Any:
@@ -143,11 +149,7 @@ def test_golden_reasoning_effort_by_model(
         {
             model: {
                 str(level): {
-                    "sent_by_karotte": BuiltinSource(
-                        _config(model, reasoning_effort=level)
-                    )
-                    .get_completion_params([Message(role="user", content="Go.")], [])
-                    .get("reasoning_effort"),
+                    "sent_by_karotte": _sent_reasoning_params(model, level),
                     "mapped_by_litellm": _litellm_reasoning_params(model, level),
                 }
                 for level in (None, "min", "max")
@@ -172,6 +174,18 @@ def test_gemini_gets_thought_summaries_without_an_effort_level():
     assert "thinkingConfig" not in with_effort
 
     assert "thinkingConfig" not in _completion_params("claude-fable-5")
+
+
+def test_gemini_xhigh_goes_out_as_a_thinking_level():
+    """litellm raises on a Gemini effort above high, so karotte sends the level
+    in the thinking config itself."""
+    source = BuiltinSource(_config("vertex_ai/gemini-4-neon", reasoning_effort="max"))
+    params = source.get_completion_params([Message(role="user", content="Go.")], [])
+    assert params["thinkingConfig"] == {
+        "includeThoughts": True,
+        "thinkingLevel": "xhigh",
+    }
+    assert "reasoning_effort" not in params
 
 
 def test_gemini_3_8_flash_effort_gets_past_litellms_cost_map_check():

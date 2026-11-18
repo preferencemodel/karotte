@@ -1,7 +1,12 @@
 {
   "claude-opus-5-5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -10,7 +15,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -22,7 +33,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -36,7 +53,12 @@
   },
   "claude-fable-5-2": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -45,7 +67,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -57,7 +85,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -71,7 +105,12 @@
   },
   "claude-fable-5-1": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -80,7 +119,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -92,7 +137,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -106,7 +157,12 @@
   },
   "claude-fable-5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -115,7 +171,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -127,7 +189,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -141,7 +209,12 @@
   },
   "claude-opus-5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -150,7 +223,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -162,7 +241,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -176,7 +261,12 @@
   },
   "claude-sonnet-5-5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -185,7 +275,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -197,7 +293,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -211,7 +313,12 @@
   },
   "claude-sonnet-5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -220,7 +327,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -232,7 +345,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -246,7 +365,12 @@
   },
   "claude-haiku-5-5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -255,7 +379,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -267,7 +397,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -281,7 +417,12 @@
   },
   "claude-opus-4-8": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -290,7 +431,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -302,7 +449,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -316,7 +469,12 @@
   },
   "claude-opus-4-7": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -325,7 +483,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -337,7 +501,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -351,7 +521,12 @@
   },
   "claude-opus-4-6": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -360,7 +535,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -372,7 +553,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -386,7 +573,12 @@
   },
   "claude-sonnet-4-6": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -395,7 +587,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -407,7 +605,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -421,59 +625,63 @@
   },
   "claude-opus-4-5-20251101": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "claude-sonnet-4-5-20250929": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "claude-haiku-4-5-20251001": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "together_ai/moonshotai/Kimi-K3.1-Pro": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -481,17 +689,21 @@
   },
   "together_ai/moonshotai/Kimi-K3": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -499,45 +711,49 @@
   },
   "together_ai/moonshotai/Kimi-K2.6": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "together_ai/moonshotai/Kimi-K2.5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "high"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -545,17 +761,21 @@
   },
   "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "high"
       }
@@ -563,17 +783,21 @@
   },
   "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -581,31 +805,35 @@
   },
   "together_ai/deepseek-ai/DeepSeek-V3.1": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "fireworks_ai/accounts/fireworks/models/glm-5p3": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -613,17 +841,21 @@
   },
   "fireworks_ai/accounts/fireworks/models/glm-5p3-flash": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -631,45 +863,49 @@
   },
   "together_ai/zai-org/GLM-5.2": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "together_ai/zai-org/GLM-5.1": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "fireworks_ai/accounts/fireworks/models/qwen3p8-max": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "xhigh",
+      "sent_by_karotte": {
+        "reasoning_effort": "xhigh"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "xhigh"
       }
@@ -677,17 +913,21 @@
   },
   "openai/o1": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "high"
       }
@@ -695,17 +935,21 @@
   },
   "openai/o3": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "high"
       }
@@ -713,17 +957,21 @@
   },
   "openai/gpt-5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "minimal",
+      "sent_by_karotte": {
+        "reasoning_effort": "minimal"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "minimal"
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "high"
       }
@@ -731,17 +979,21 @@
   },
   "openai/gpt-5.1": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "high"
       }
@@ -749,17 +1001,21 @@
   },
   "openai/gpt-5.2": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "xhigh",
+      "sent_by_karotte": {
+        "reasoning_effort": "xhigh"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "xhigh"
       }
@@ -767,17 +1023,21 @@
   },
   "openai/gpt-5.4": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "xhigh",
+      "sent_by_karotte": {
+        "reasoning_effort": "xhigh"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "xhigh"
       }
@@ -785,17 +1045,21 @@
   },
   "openai/gpt-5.5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "xhigh",
+      "sent_by_karotte": {
+        "reasoning_effort": "xhigh"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "xhigh"
       }
@@ -803,17 +1067,21 @@
   },
   "openai/gpt-6-astra": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -821,17 +1089,21 @@
   },
   "openai/gpt-6-sol": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -839,17 +1111,21 @@
   },
   "openai/gpt-6-luna": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -857,17 +1133,21 @@
   },
   "openai/gpt-6.1-sol": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -875,17 +1155,21 @@
   },
   "openai/gpt-6.2-astra": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -893,17 +1177,21 @@
   },
   "openai/gpt-6.2-sol": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -911,17 +1199,21 @@
   },
   "openai/gpt-5.6": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -929,17 +1221,21 @@
   },
   "openai/gpt-5.6-sol": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -947,17 +1243,21 @@
   },
   "openai/gpt-5.6-terra": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -965,17 +1265,21 @@
   },
   "openai/gpt-5.6-luna": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -983,39 +1287,49 @@
   },
   "minimax/MiniMax-M3": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "minimax/MiniMax-M2.5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
-  "vertex_ai/gemini-4-hydrogen": {
+  "vertex_ai/gemini-4-neon": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1024,7 +1338,48 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true,
+          "thinkingLevel": "xhigh"
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true,
+          "thinkingLevel": "xhigh"
+        }
+      }
+    }
+  },
+  "vertex_ai/gemini-4-hydrogen": {
+    "None": {
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
+    },
+    "min": {
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1035,11 +1390,21 @@
   },
   "vertex_ai/gemini-4-carbon": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1048,7 +1413,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1059,11 +1426,21 @@
   },
   "vertex_ai/gemini-4-argon": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1072,7 +1449,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1083,11 +1462,21 @@
   },
   "vertex_ai/gemini-3.1-pro-preview": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1096,7 +1485,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1107,11 +1498,21 @@
   },
   "vertex_ai/gemini-3.8-flash": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1121,7 +1522,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1133,11 +1536,21 @@
   },
   "vertex_ai/gemini-3.7-flash": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1146,7 +1559,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1155,13 +1570,23 @@
       }
     }
   },
-  "gemini/gemini-4-hydrogen": {
+  "gemini/gemini-4-neon": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1170,7 +1595,48 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true,
+          "thinkingLevel": "xhigh"
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true,
+          "thinkingLevel": "xhigh"
+        }
+      }
+    }
+  },
+  "gemini/gemini-4-hydrogen": {
+    "None": {
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
+    },
+    "min": {
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1181,11 +1647,21 @@
   },
   "gemini/gemini-4-carbon": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1194,7 +1670,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1205,11 +1683,21 @@
   },
   "gemini/gemini-4-argon": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1218,7 +1706,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1229,11 +1719,21 @@
   },
   "gemini/gemini-3.1-pro-preview": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1242,7 +1742,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1253,11 +1755,21 @@
   },
   "gemini/gemini-3.8-flash": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1267,7 +1779,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1279,11 +1793,21 @@
   },
   "gemini/gemini-3.7-flash": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "low",
@@ -1292,7 +1816,9 @@
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "thinkingConfig": {
           "thinkingLevel": "high",
@@ -1303,17 +1829,21 @@
   },
   "xai/grok-4.7": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "xhigh",
+      "sent_by_karotte": {
+        "reasoning_effort": "xhigh"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "xhigh"
       }
@@ -1321,17 +1851,21 @@
   },
   "xai/grok-4.6": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "xhigh",
+      "sent_by_karotte": {
+        "reasoning_effort": "xhigh"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "xhigh"
       }
@@ -1339,31 +1873,35 @@
   },
   "xai/grok-4.3": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "meta/muse-wonder-1.0": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "minimal",
+      "sent_by_karotte": {
+        "reasoning_effort": "minimal"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "minimal"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -1371,17 +1909,21 @@
   },
   "meta/muse-spark-1.3": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "minimal",
+      "sent_by_karotte": {
+        "reasoning_effort": "minimal"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "minimal"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -1389,17 +1931,21 @@
   },
   "meta/muse-spark-1.2": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "minimal",
+      "sent_by_karotte": {
+        "reasoning_effort": "minimal"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "minimal"
       }
     },
     "max": {
-      "sent_by_karotte": "xhigh",
+      "sent_by_karotte": {
+        "reasoning_effort": "xhigh"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "xhigh"
       }
@@ -1407,21 +1953,26 @@
   },
   "__karotte_special__/training": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": "BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=__karotte_special__/training\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers"
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": "BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=__karotte_special__/training\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers"
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": "BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=__karotte_special__/training\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers"
     }
   },
   "anthropic/claude-opus-5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -1430,7 +1981,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -1442,7 +1999,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -1456,17 +2019,21 @@
   },
   "openai/gpt-5.3-codex": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "high",
+      "sent_by_karotte": {
+        "reasoning_effort": "high"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "high"
       }
@@ -1474,17 +2041,21 @@
   },
   "openai/gpt-5.6-2026-04-01": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "low"
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max"
+      },
       "mapped_by_litellm": {
         "reasoning_effort": "max"
       }
@@ -1492,49 +2063,78 @@
   },
   "fireworks_ai/accounts/fireworks/models/kimi-k2p5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "mistral/mistral-medium-3.5": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": {}
     }
   },
   "gemini/gemini-3-pro": {
     "None": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "min": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     },
     "max": {
-      "sent_by_karotte": null,
-      "mapped_by_litellm": {}
+      "sent_by_karotte": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      },
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "includeThoughts": true
+        }
+      }
     }
   },
   "vertex_ai/claude-opus-4-6": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -1543,7 +2143,13 @@
       }
     },
     "min": {
-      "sent_by_karotte": "low",
+      "sent_by_karotte": {
+        "reasoning_effort": "low",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -1555,7 +2161,13 @@
       }
     },
     "max": {
-      "sent_by_karotte": "max",
+      "sent_by_karotte": {
+        "reasoning_effort": "max",
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      },
       "mapped_by_litellm": {
         "thinking": {
           "type": "adaptive",
@@ -1569,29 +2181,29 @@
   },
   "pt/some-training-checkpoint": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": "BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=pt/some-training-checkpoint\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers"
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": "BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=pt/some-training-checkpoint\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers"
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": "BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=pt/some-training-checkpoint\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers"
     }
   },
   "some-unknown-model": {
     "None": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": "BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=some-unknown-model\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers"
     },
     "min": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": "BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=some-unknown-model\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers"
     },
     "max": {
-      "sent_by_karotte": null,
+      "sent_by_karotte": {},
       "mapped_by_litellm": "BadRequestError: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=some-unknown-model\n Pass model as E.g. For 'Huggingface' inference endpoints pass in `completion(model='huggingface/starcoder',..)` Learn more: https://docs.litellm.ai/docs/providers"
     }
   }
