@@ -286,12 +286,19 @@ def _tap_traffic_types(stream: CustomStreamWrapper) -> list[str]:
     return seen
 
 
+def _deltas(chunks: list[ModelResponseStream]) -> Iterator[Any]:
+    """Each chunk's delta. The usage chunk that ends a stream has no choice to
+    take one from: litellm sends it with ``choices=[]`` when the request asks
+    for usage, as OpenAI's API does."""
+    return (chunk.choices[0].delta for chunk in chunks if chunk.choices)
+
+
 def _thinking_blocks(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] | None:
     """The response's thinking blocks, exactly as the provider signed them."""
     blocks: list[dict[str, Any]] = []
     text = ""
-    for chunk in chunks:
-        for block in getattr(chunk.choices[0].delta, "thinking_blocks", None) or []:
+    for delta in _deltas(chunks):
+        for block in getattr(delta, "thinking_blocks", None) or []:
             if block.get("type") == "redacted_thinking":
                 blocks.append(dict(block))
                 text = ""
@@ -307,8 +314,8 @@ def _reasoning_items(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] 
     """The Responses API reasoning items, which litellm's stream_chunk_builder drops."""
     items = [
         dict(item)
-        for chunk in chunks
-        for item in getattr(chunk.choices[0].delta, "reasoning_items", None) or []
+        for delta in _deltas(chunks)
+        for item in getattr(delta, "reasoning_items", None) or []
     ]
     return items or None
 
@@ -358,8 +365,12 @@ class BuiltinSource:
 
                 async for chunk in response:
                     assert isinstance(chunk, ModelResponseStream)
-                    assert isinstance(chunk.choices[0], StreamingChoices)
+                    # Kept for stream_chunk_builder even when it has no
+                    # choice: the usage chunk carries the turn's token counts.
                     chunks.append(chunk)
+                    if not chunk.choices:
+                        continue
+                    assert isinstance(chunk.choices[0], StreamingChoices)
                     yield MessageChunkEvent(
                         delta=Delta(**chunk.choices[0].delta.model_dump())
                     )
