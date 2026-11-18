@@ -144,8 +144,13 @@ def _tool_call(call_id: str = "call_1") -> list[ChatCompletionMessageToolCall]:
 class _ScriptedSource:
     """Yields one scripted turn per call, with its finish_reason."""
 
-    def __init__(self, turns: Sequence[tuple[Message, str | None]]) -> None:
+    def __init__(
+        self,
+        turns: Sequence[tuple[Message, str | None]],
+        raw: dict[str, Any] | None = None,
+    ) -> None:
         self._turns = turns
+        self._raw = raw
         self.calls = 0
         self.histories: list[list[Message]] = []
 
@@ -159,7 +164,9 @@ class _ScriptedSource:
         self.histories.append(list(messages))
         message, finish_reason = self._turns[self.calls]
         self.calls += 1
-        yield MessageAddedEvent(message=message, finish_reason=finish_reason)
+        yield MessageAddedEvent(
+            message=message, finish_reason=finish_reason, raw=self._raw
+        )
 
 
 @final
@@ -177,9 +184,10 @@ class _StubMcpClient:
 async def _run(
     turns: Sequence[tuple[Message, str | None]],
     config: EvaluationRunConfig,
+    raw: dict[str, Any] | None = None,
 ) -> tuple[list[Event], _ScriptedSource]:
     """Drive one step over `turns`, mirroring the runner's transcript upkeep."""
-    source = _ScriptedSource(turns)
+    source = _ScriptedSource(turns, raw)
     agent = MessageLoopAgent(source)
     transcript = Transcript(run_id=config.run_id)
     await agent.start(
@@ -450,6 +458,18 @@ async def test_blocks_that_keep_coming_fail_the_step(
 ):
     with pytest.raises(BlockedTurnLimitReachedError):
         await _run([_blocked()] * (MAX_CONSECUTIVE_BLOCKED_TURNS + 1), sample_config)
+
+
+@pytest.mark.asyncio
+async def test_the_error_names_the_providers_reason(
+    sample_config: EvaluationRunConfig,
+):
+    raw = {"provider_specific_fields": {"stop_details": {"category": "cyber"}}}
+
+    with pytest.raises(BlockedTurnLimitReachedError, match='"category": "cyber"'):
+        await _run(
+            [_blocked()] * (MAX_CONSECUTIVE_BLOCKED_TURNS + 1), sample_config, raw
+        )
 
 
 @pytest.mark.asyncio
