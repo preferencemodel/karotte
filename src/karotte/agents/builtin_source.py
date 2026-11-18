@@ -5,7 +5,7 @@ import re
 import socket
 import warnings
 from collections import Counter
-from collections.abc import AsyncGenerator, Iterator
+from collections.abc import AsyncGenerator, Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any, final
 
@@ -80,8 +80,8 @@ _INVALID_URL_ERRORS = (
     aiohttp.NonHttpUrlClientError,
 )
 
-# How much of the chunks the warning shows. The transcript keeps all of them.
-MAX_LOGGED_PROVIDER_CHUNKS_CHARS = 2000
+# How much of the provider's reason the warning shows. The transcript keeps all of it.
+MAX_LOGGED_BLOCK_REASON_CHARS = 2000
 
 IMAGE_OMITTED_TEXT = "[image omitted: this model cannot take image input]"
 
@@ -320,6 +320,18 @@ def _reasoning_items(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] 
     return items or None
 
 
+def _block_reason(
+    message: Any, provider_chunks: Iterable[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """What the provider said about a blocked turn, as far as litellm passes it on."""
+    reason: dict[str, Any] = {}
+    if fields := getattr(message, "provider_specific_fields", None):
+        reason["provider_specific_fields"] = fields
+    if chunks := list(provider_chunks):
+        reason["provider_chunks"] = chunks
+    return reason or None
+
+
 def _provider_auth(config: EvaluationRunConfig) -> ProviderAuth:
     return ProviderAuth(api_key=config.model_api_key)
 
@@ -488,21 +500,18 @@ class BuiltinSource:
 
             # litellm normalizes a provider safety refusal (e.g. Claude's native
             # 'refusal' stop_reason) to the OpenAI 'content_filter' finish_reason.
-            # The provider's reason for the block is in its raw chunks.
             finish_reason = choice.finish_reason
             raw = None
             if finish_reason == "content_filter":
-                if provider_chunks:
-                    raw = {"provider_chunks": list(provider_chunks)}
+                raw = _block_reason(choice.message, provider_chunks)
                 logger.warning(
-                    "Model {model} declined the request (finish_reason=content_filter); provider's last chunks: {chunks}",
+                    "Model {model} declined the request (finish_reason=content_filter); provider's reason: {reason}",
                     model=self.config.model,
-                    chunks=truncate_middle(
-                        json.dumps(list(provider_chunks), default=str),
-                        MAX_LOGGED_PROVIDER_CHUNKS_CHARS,
+                    reason=truncate_middle(
+                        json.dumps(raw, default=str), MAX_LOGGED_BLOCK_REASON_CHARS
                     )
-                    if provider_chunks
-                    else "none kept",
+                    if raw
+                    else "none given",
                 )
 
             yield MessageAddedEvent(

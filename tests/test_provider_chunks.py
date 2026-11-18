@@ -1,4 +1,4 @@
-"""Tests for keeping the provider's raw chunks on blocked turns.
+"""Tests for keeping the provider's reason on blocked turns.
 
 The chunks go through litellm's real parser, and whole turns through karotte's
 builtin source. A litellm upgrade that moves the parser fails here.
@@ -154,13 +154,45 @@ def test_a_parser_litellm_moved_is_skipped():
 # transport.
 
 GEMINI = "vertex_ai/gemini-3.1-pro-preview"
+CLAUDE = "claude-opus-5-5"
+
+CLAUDE_STOP_DETAILS = {
+    "type": "refusal",
+    "category": "cyber",
+    "explanation": "This request was declined by a safeguard.",
+}
+
+
+def _claude_refusal() -> list[dict[str, Any]]:
+    usage = {"input_tokens": 10, "output_tokens": 0}
+    return [
+        {
+            "type": "message_start",
+            "message": {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": CLAUDE,
+                "content": [],
+                "stop_reason": None,
+                "stop_details": None,
+                "usage": usage,
+            },
+        },
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "refusal", "stop_details": CLAUDE_STOP_DETAILS},
+            "usage": usage,
+        },
+        {"type": "message_stop"},
+    ]
 
 
 def _sse(*chunks: dict[str, Any]) -> bytes:
     return "".join(f"data: {json.dumps(c)}\n\n" for c in chunks).encode()
 
 
-async def _collect_over_transport(body: bytes) -> list[Event]:
+async def _collect_over_transport(body: bytes, model: str = GEMINI) -> list[Event]:
     def respond(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200, content=body, headers={"content-type": "text/event-stream"}
@@ -173,7 +205,7 @@ async def _collect_over_transport(body: bytes) -> list[Event]:
     async def acompletion(**kwargs: Any) -> Any:
         return await real_acompletion(**kwargs, client=client)
 
-    runner = _create_runner_with_tools_and_transcript(GEMINI)
+    runner = _create_runner_with_tools_and_transcript(model)
     with (
         patch("litellm.acompletion", acompletion),
         patch.object(
@@ -194,6 +226,23 @@ async def test_a_blocked_turn_keeps_the_chunks():
 
     assert event.finish_reason == "content_filter"
     assert event.raw == {"provider_chunks": [VERTEX_PROMPT_BLOCK]}
+
+
+@pytest.mark.asyncio
+async def test_a_claude_refusal_keeps_its_stop_details(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+    events = await _collect_over_transport(_sse(*_claude_refusal()), CLAUDE)
+    event = _message_added(events)
+
+    assert event.finish_reason == "content_filter"
+    assert event.raw == {
+        "provider_specific_fields": {
+            "stop_reason": "refusal",
+            "stop_details": CLAUDE_STOP_DETAILS,
+        }
+    }
 
 
 @pytest.mark.asyncio

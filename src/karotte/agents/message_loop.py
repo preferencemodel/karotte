@@ -26,6 +26,7 @@ from karotte.schemas.transcript import (
     TokenUsageEvent,
     ToolCallStartedEvent,
 )
+from karotte.truncation import truncate_middle
 
 
 def _monotonic() -> float:
@@ -43,6 +44,9 @@ EMPTY_TURN_NUDGE = (
 
 # Blocks can come several in a row before a reply gets through.
 MAX_CONSECUTIVE_BLOCKED_TURNS = 10
+
+# How much of the provider's reason the error shows.
+MAX_BLOCK_REASON_CHARS = 2000
 
 BLOCKED_TURN_NUDGE = (
     "Your last reply was blocked by the model provider's content filter and "
@@ -153,6 +157,12 @@ class MessageLoopAgent:
                         f"Provider blocked the model's reply "
                         f"{blocked_turns} turns in a row."
                     )
+                    if message_event.raw:
+                        reason = truncate_middle(
+                            json.dumps(message_event.raw, default=str),
+                            MAX_BLOCK_REASON_CHARS,
+                        )
+                        msg += f" Provider's reason for the last one: {reason}"
                     raise BlockedTurnLimitReachedError(msg)
 
                 logger.warning(

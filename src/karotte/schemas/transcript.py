@@ -95,8 +95,8 @@ class MessageAddedEvent(BaseEvent):
     """Fields of the agent-native record this message was derived from that
     have no place in `message` (e.g. reasoning state, sub-agent markers).
     Set by transcript adapters; the full native log is saved as an artifact.
-    For a blocked turn, `provider_chunks` holds the provider's last raw stream
-    chunks."""
+    For a blocked turn it holds the provider's reason: `provider_specific_fields`
+    as litellm reports them and `provider_chunks`, the last raw stream chunks."""
 
 
 class ToolCallStartedEvent(BaseEvent):
