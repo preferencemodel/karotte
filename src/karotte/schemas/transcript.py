@@ -17,6 +17,7 @@ from pydantic import (
 from . import RunStatus
 from ._import_mcp_types import get_mcp_type
 from .chat import ChatCompletionMessageToolCall, Delta, Message
+from .evaluation_run_config import AgentConfig
 from .scoring import Scoring
 
 if TYPE_CHECKING:
@@ -55,6 +56,7 @@ class TaskStartedEvent(BaseEvent):
     temperature: float | None = None
     # The agent harness that drove the model, e.g. ``builtin``.
     agent: str | None = None
+    agent_config: AgentConfig | None = None
     use_hints: bool | None = None
 
 

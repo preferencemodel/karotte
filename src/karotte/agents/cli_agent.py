@@ -235,27 +235,41 @@ class CliAgent(abc.ABC):
             for path in written:
                 os.chown(path, uid, uid)
 
+    def check_agent_env(self) -> None:
+        """Fail if ``agent_config.env`` sets a variable Karotte sets itself."""
+        own = {"HOME", "USER", "LOGNAME", "PATH", self._key_env(), *self._extra_env()}
+        if self.home_env is not None:
+            own.add(self.home_env)
+        if clash := sorted(self._config.agent_config.env.keys() & own):
+            msg = f"agent_config.env can't set {', '.join(clash)}, which Karotte sets for the {self.name} agent"
+            raise ValueError(msg)
+
     def _env(self) -> dict[str, str]:
+        self.check_agent_env()
         # Only what the student may see; the model key is added on purpose below.
         env = scrub_harness_secrets(os.environ)
-        env["HOME"] = os.environ.get("KAROTTE_WORKDIR", str(Path.home()))
-        env["USER"] = "student"
-        env["LOGNAME"] = "student"
-        if self.home_env is not None:
-            env[self.home_env] = str(self._home)
         env.pop("PYTHONSAFEPATH", None)
+        env.update(self._config.agent_config.env)
+
+        own = {
+            "HOME": os.environ.get("KAROTTE_WORKDIR", str(Path.home())),
+            "USER": "student",
+            "LOGNAME": "student",
+        }
+        if self.home_env is not None:
+            own[self.home_env] = str(self._home)
 
         # sanitize_paths() strips the task venv's bin from PATH; the student needs it back.
         path_parts = [AGENTS_BIN_DIR]
         venv = env.get("VIRTUAL_ENV")
         if venv and (Path(venv) / "pyvenv.cfg").is_file():
             path_parts.insert(0, f"{venv}/bin")
-        env["PATH"] = ":".join([*path_parts, env.get("PATH", "")])
+        own["PATH"] = ":".join([*path_parts, env.get("PATH", "")])
 
-        env.update(self._extra_env())
+        own.update(self._extra_env())
         if (api_key := self.model_api_key) is not None:
-            env[self._key_env()] = api_key
-        return env
+            own[self._key_env()] = api_key
+        return env | own
 
     async def run_step(
         self,

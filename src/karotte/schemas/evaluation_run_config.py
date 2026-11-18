@@ -1,6 +1,6 @@
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from karotte.model_spec import (
     SPECIAL_TRAINING_MODEL_NAME,
@@ -16,8 +16,26 @@ from .websocket_config import WebSocketConfig
 __all__ = [
     "SPECIAL_TRAINING_MODEL_NAME",
     "SPECIAL_TRAINING_MODEL_PREFIX",
+    "AgentConfig",
     "EvaluationRunConfig",
 ]
+
+
+class AgentConfig(BaseModel):
+    """Settings for the agent harness that drives the model."""
+
+    env: dict[str, str] = {}
+    """Environment variables for a CLI agent's process. The student can read
+    them, so they're no place for secrets."""
+
+    @field_validator("env")
+    @classmethod
+    def _valid_env(cls, env: dict[str, str]) -> dict[str, str]:
+        for name, value in env.items():
+            if not name or "=" in name or "\x00" in name or "\x00" in value:
+                msg = f"agent_config.env can't hold the variable {name!r}"
+                raise ValueError(msg)
+        return env
 
 
 class EvaluationRunConfig(BaseModel):
@@ -76,6 +94,8 @@ class EvaluationRunConfig(BaseModel):
     step context-window limit is set. No effect without a limit, or for agents
     that run the step in one opaque subprocess (e.g. the Vibe CLI agent)."""
 
+    agent_config: AgentConfig = AgentConfig()
+
     mcp_server_config: HttpMcpServerConfig = HttpMcpServerConfig()
 
     websocket_config: WebSocketConfig = WebSocketConfig()
@@ -112,6 +132,19 @@ class EvaluationRunConfig(BaseModel):
     @model_validator(mode="after")
     def validate_extra_artifact_paths(self) -> Self:
         self._validate_str_or_str_list("extra_artifact_paths")
+        return self
+
+    @model_validator(mode="after")
+    def validate_agent_env(self) -> Self:
+        if (
+            self.agent_config.env
+            and not self.use_fake_model
+            and self.resolved_agent in ("builtin", "external")
+        ):
+            msg = (
+                f"agent_config.env can't be applied by the {self.resolved_agent} agent"
+            )
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")

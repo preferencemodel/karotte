@@ -138,6 +138,7 @@ def _agent(
             {
                 "run_id": "r",
                 "task_id": "t",
+                "agent": "echo",
                 "model": "mistral/m",
                 "model_api_key": "sk-real",
                 "save_artifacts": False,
@@ -212,6 +213,41 @@ class TestHomeAndEnv:
         env = agent._env()  # pyright: ignore[reportPrivateUsage]
         assert "ECHO_HOME" not in env
         assert all(isinstance(name, str) for name in env)
+
+    def test_agent_config_env_reaches_the_tool(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("LANG", "C")
+        agent = _agent(
+            tmp_path,
+            monkeypatch,
+            agent_config={"env": {"BASH_DEFAULT_TIMEOUT_MS": "3600000", "LANG": "en"}},
+        )
+        env = agent._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["BASH_DEFAULT_TIMEOUT_MS"] == "3600000"
+        assert env["LANG"] == "en"
+
+    @pytest.mark.parametrize(
+        "name", ["HOME", "USER", "PATH", "ECHO_HOME", "ECHO_TELEMETRY", "ECHO_API_KEY"]
+    )
+    def test_agent_config_env_cant_set_a_variable_karotte_sets(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+    ):
+        agent = _agent(tmp_path, monkeypatch, agent_config={"env": {name: "x"}})
+        with pytest.raises(ValueError, match=f"agent_config.env can't set {name}"):
+            _ = agent._env()  # pyright: ignore[reportPrivateUsage]
+
+    def test_agent_config_env_cant_set_the_key_variable_without_a_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(
+            tmp_path,
+            monkeypatch,
+            model_api_key=None,
+            agent_config={"env": {"ECHO_API_KEY": "sk-mine"}},
+        )
+        with pytest.raises(ValueError, match="ECHO_API_KEY"):
+            _ = agent._env()  # pyright: ignore[reportPrivateUsage]
 
 
 class TestForwarder:

@@ -24,13 +24,15 @@ The run gets a random `run_id`, and `transcript_file` defaults to `out/transcrip
 | -------------------- | ------------------ |
 | `--task`             | `task_id`          |
 | `--agent`            | `agent`            |
+| `--agent-env`        | `agent_config.env` |
 | `--model`            | `model`            |
 | `--model-api-key`    | `model_api_key`    |
 | `--reasoning-effort` | `reasoning_effort` |
 | `--temperature`      | `temperature`      |
 | `--transcript-file`  | `transcript_file`  |
 
-With `--config`, the flags override the config's fields, so one config can be run against several models:
+With `--config`, the flags override the config's fields, so one config can be run against several models.
+`--agent-env NAME=VALUE` is the exception: it's repeatable, and each one adds a variable to the config's `agent_config.env`, replacing one of the same name.
 
 ```sh
 uv run karotte run --config run_config.json --model openai/gpt-5.5
@@ -268,6 +270,26 @@ CLI agents differ from `builtin` in a few ways:
   `agy` sends Gemini API calls to `<proxy>/v1beta/models/<model>`.
   Without a proxy, `gemini/` models go through the forwarder to Google's Gemini API, and `vertex_ai/` models go through it to Vertex AI.
   `muse-code` always goes through the forwarder, to `<proxy>/v1/responses` or to Meta's API.
+
+`agent_config.env` sets environment variables for the CLI agent's process:
+
+```json
+{
+    "agent": "claude-code",
+    "agent_config": {
+        "env": {
+            "BASH_DEFAULT_TIMEOUT_MS": "3600000"
+        }
+    }
+}
+```
+
+- Values must be strings.
+- A variable Karotte sets itself, such as `HOME`, `PATH`, the API key or `ANTHROPIC_BASE_URL` for `claude-code`, can't be set; the run fails before it starts, with an error naming it.
+- The student can read these variables, so don't put secrets in them.
+  The transcript records them too, in its `task_started` event.
+- `builtin` and `external` run no process of their own, so a run config that sets `env` for them is rejected.
+  A `use_fake_model` run is the exception: it accepts `env` and ignores it.
 
 `grok-build` specifics:
 

@@ -433,3 +433,60 @@ def test_resolved_rubric_judge_model(fields: dict[str, Any], expected: str | Non
     config = EvaluationRunConfig(run_id="r", task_id="t", **fields)
 
     assert config.resolved_rubric_judge_model == expected
+
+
+def test_agent_config_env_defaults_to_empty():
+    config = EvaluationRunConfig(run_id="r", task_id="t", model="m")
+    assert config.agent_config.env == {}
+
+
+def test_agent_config_env_takes_strings_only():
+    with pytest.raises(ValidationError, match="env"):
+        _ = EvaluationRunConfig.model_validate(
+            {
+                "run_id": "r",
+                "task_id": "t",
+                "model": "m",
+                "agent_config": {"env": {"BASH_DEFAULT_TIMEOUT_MS": 3600000}},
+            }
+        )
+
+
+def _config_with_agent_env(**fields: Any) -> EvaluationRunConfig:
+    return EvaluationRunConfig.model_validate(
+        {
+            "run_id": "r",
+            "task_id": "t",
+            "model": "claude-opus-5",
+            "agent_config": {"env": {"A": "1"}},
+            **fields,
+        }
+    )
+
+
+def test_agent_config_env_is_accepted_for_a_cli_agent():
+    assert _config_with_agent_env(agent="claude-code").agent_config.env == {"A": "1"}
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{}, {"agent": "builtin"}, {"agent": "external"}, {"model": "pt/checkpoint"}],
+)
+def test_agent_config_env_is_rejected_without_a_cli_agent(fields: dict[str, Any]):
+    with pytest.raises(ValidationError, match="agent_config.env can't be applied"):
+        _ = _config_with_agent_env(**fields)
+
+
+def test_agent_config_env_is_ignored_by_a_fake_model_run():
+    config = _config_with_agent_env(agent="builtin", use_fake_model=True)
+    assert config.agent_config.env == {"A": "1"}
+
+
+@pytest.mark.parametrize(
+    "env", [{"": "x"}, {"A=B": "x"}, {"A\x00": "x"}, {"A": "x\x00"}]
+)
+def test_agent_config_env_rejects_what_a_process_environment_cant_hold(
+    env: dict[str, str],
+):
+    with pytest.raises(ValidationError, match="agent_config.env"):
+        _ = _config_with_agent_env(agent="claude-code", agent_config={"env": env})
