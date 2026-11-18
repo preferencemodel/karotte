@@ -1,9 +1,11 @@
 """The loopback forwarder a CLI agent reaches its model provider through."""
 
 import asyncio
+import gzip
 import json
 import logging
 import socket
+import zlib
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -12,6 +14,7 @@ import aiohttp
 import pytest
 import pytest_asyncio
 from aiohttp import web
+from loguru import logger
 from yarl import URL
 
 if TYPE_CHECKING:
@@ -20,7 +23,9 @@ if TYPE_CHECKING:
 from karotte.model_forwarder import (
     GeminiForwarder,
     ModelForwarder,
+    MuseForwarder,
     VertexForwarder,
+    _error_text,  # pyright: ignore[reportPrivateUsage]
     vertex_forwarder,
 )
 
@@ -40,6 +45,31 @@ async def _echo(request: web.Request) -> web.Response:
             "body": (await request.read()).decode(),
         },
         status=201,
+    )
+
+
+async def _accept_encoding(request: web.Request) -> web.Response:
+    return web.json_response(request.headers.get("Accept-Encoding"))
+
+
+async def _echo_body(request: web.Request) -> web.Response:
+    headers = {}
+    if encoding := request.headers.get("Content-Encoding"):
+        headers["Content-Encoding"] = encoding
+    return web.Response(body=await request.read(), headers=headers)
+
+
+async def _rate_limited(request: web.Request) -> web.Response:
+    del request
+    return web.json_response({"error": "slow down"}, status=429)
+
+
+async def _rate_limited_gzip(request: web.Request) -> web.Response:
+    del request
+    return web.Response(
+        body=gzip.compress(b'{"error": "slow down"}'),
+        status=429,
+        headers={"Content-Encoding": "gzip", "Content-Type": "application/json"},
     )
 
 
@@ -68,11 +98,15 @@ async def _stream(request: web.Request) -> web.StreamResponse:
 async def upstream() -> AsyncIterator[str]:
     app = web.Application()
     app.router.add_route("*", "/v1/echo", _echo)
+    app.router.add_post("/v1/echo-body", _echo_body)
+    app.router.add_get("/v1/accept-encoding", _accept_encoding)
+    app.router.add_post("/v1/limited", _rate_limited)
+    app.router.add_post("/v1/limited-gzip", _rate_limited_gzip)
     app.router.add_route("*", "/v1beta/{tail:.*}", _echo)
     app.router.add_route("*", "/v1/projects/{tail:.*}", _echo)
     app.router.add_get("/v1/stream", _stream)
     app.router.add_get("/v1/endless", _endless)
-    runner = web.AppRunner(app)
+    runner = web.AppRunner(app, auto_decompress=False)
     await runner.setup()
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -120,6 +154,39 @@ class TestModelForwarder:
         }
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("encoding", "compress"),
+        [(None, bytes), ("gzip", gzip.compress), ("deflate", zlib.compress)],
+        ids=["plain", "gzip", "deflate"],
+    )
+    @pytest.mark.parametrize("chunked", [False, True])
+    async def test_preserves_request_body_and_encoding(
+        self,
+        forwarder: ModelForwarder,
+        encoding: str | None,
+        compress: Callable[[bytes], bytes],
+        chunked: bool,
+    ):
+        body = compress(b'{"model": "m", "messages": []}')
+        headers = {"Content-Type": "application/json"}
+        if encoding is not None:
+            headers["Content-Encoding"] = encoding
+
+        async def chunks() -> AsyncIterator[bytes]:
+            for i in range(0, len(body), 3):
+                yield body[i : i + 3]
+
+        async with aiohttp.ClientSession(auto_decompress=False) as session:
+            async with session.post(
+                f"{forwarder.url}/v1/echo-body",
+                data=chunks() if chunked else body,
+                headers=headers,
+            ) as response:
+                assert response.status == 200
+                assert response.headers.get("Content-Encoding") == encoding
+                assert await response.read() == body
+
+    @pytest.mark.asyncio
     async def test_streams_server_sent_events(self, forwarder: ModelForwarder):
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{forwarder.url}/v1/stream") as response:
@@ -140,10 +207,44 @@ class TestModelForwarder:
         assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("sent", [None, "br"])
+    async def test_asks_upstream_only_for_the_agents_encodings(
+        self, forwarder: ModelForwarder, sent: str | None
+    ):
+        headers = {} if sent is None else {"Accept-Encoding": sent}
+        async with aiohttp.ClientSession(
+            skip_auto_headers=("Accept-Encoding",)
+        ) as session:
+            async with session.get(
+                f"{forwarder.url}/v1/accept-encoding", headers=headers
+            ) as response:
+                assert await response.json() == sent
+
+    @pytest.mark.asyncio
     async def test_passes_upstream_errors_through(self, forwarder: ModelForwarder):
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{forwarder.url}/v1/missing") as response:
                 assert response.status == 404
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("path", ["/v1/limited", "/v1/limited-gzip"])
+    async def test_logs_why_upstream_refused(
+        self, forwarder: ModelForwarder, path: str
+    ):
+        warnings: list[str] = []
+        handler = logger.add(warnings.append, level="WARNING", format="{message}")
+        try:
+            async with aiohttp.ClientSession(auto_decompress=False) as session:
+                async with session.post(f"{forwarder.url}{path}") as response:
+                    assert response.status == 429
+                async with session.post(f"{forwarder.url}/v1/echo") as response:
+                    assert response.status == 201
+        finally:
+            logger.remove(handler)
+        reason = '{"error": "slow down"}'
+        assert warnings == [
+            f"Model forwarder: POST {path} got 429 Too Many Requests: {reason}\n"
+        ]
 
     @pytest.mark.asyncio
     async def test_unreachable_upstream_is_a_502(self):
@@ -160,6 +261,21 @@ class TestModelForwarder:
                     assert _KEY not in await response.text()
         finally:
             await forwarder.stop()
+
+
+@pytest.mark.parametrize(
+    ("body", "encoding", "text"),
+    [
+        (b"plain", None, "plain"),
+        # Without the gzip trailer, as when the log takes only the start.
+        (gzip.compress(b"cut short")[:-8], "gzip", "cut short"),
+        (b"not gzip", "gzip", "<8 bytes of gzip>"),
+        (b"\x8b\x00", "br", "<2 bytes of br>"),
+    ],
+    ids=["plain", "gzip-cut-short", "not-gzip", "br"],
+)
+def test_error_text(body: bytes, encoding: str | None, text: str):
+    assert _error_text(body, encoding) == text
 
 
 class _Credentials:
@@ -225,6 +341,41 @@ class TestGeminiForwarder:
         assert seen["path_qs"] == (
             "/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse"
         )
+
+
+class TestMuseForwarder:
+    @pytest.mark.asyncio
+    async def test_lists_the_runs_model_itself(self, upstream: str):
+        forwarder = MuseForwarder(upstream, _KEY, "muse-spark-1.3", 128000)
+        url = await forwarder.start()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{url}/muse-code/models") as response:
+                    assert response.status == 200
+                    listed = await response.json()
+        finally:
+            await forwarder.stop()
+        assert listed == {
+            "object": "list",
+            "data": [
+                {
+                    "id": "muse-spark-1.3",
+                    "object": "model",
+                    "metadata": {"muse-code": {"limit": {"output": 128000}}},
+                }
+            ],
+        }
+
+    @pytest.mark.asyncio
+    async def test_relays_everything_else_with_the_real_key(self, upstream: str):
+        forwarder = MuseForwarder(upstream, _KEY, "muse-spark-1.3", 128000)
+        url = await forwarder.start()
+        try:
+            seen = await _post(f"{url}/v1/echo")
+        finally:
+            await forwarder.stop()
+        assert seen["authorization"] == f"Bearer {_KEY}"
+        assert seen["path_qs"] == "/v1/echo"
 
 
 class TestVertexForwarder:

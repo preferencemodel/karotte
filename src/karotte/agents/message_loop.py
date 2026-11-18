@@ -1,7 +1,7 @@
 import json
 import time
 from collections.abc import AsyncGenerator, Sequence
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from fastmcp import Client
 from fastmcp.client import StreamableHttpTransport
@@ -10,6 +10,7 @@ from loguru import logger
 from mcp.types import CallToolResult, TextContent
 
 from karotte.agents.agent import (
+    BlockedTurnLimitReachedError,
     EmptyTurnLimitReachedError,
     RunContext,
     StepContextWindowLimitReachedError,
@@ -39,6 +40,16 @@ EMPTY_TURN_NUDGE = (
     "where you left off. Do not apologize or recap. Break the remaining work "
     "into smaller pieces if necessary."
 )
+
+# Blocks can come several in a row before a reply gets through.
+MAX_CONSECUTIVE_BLOCKED_TURNS = 10
+
+BLOCKED_TURN_NUDGE = (
+    "Your last reply was blocked by the model provider's content filter and "
+    "never reached the environment. Continue the task from where you left off."
+)
+
+SKIPPED_TOOL_CALL_RESULT = "Not run: the model provider blocked this reply."
 
 
 class MessageLoopAgent:
@@ -85,6 +96,7 @@ class MessageLoopAgent:
         yield MessageAddedEvent(message=Message(**instructions_message.model_dump()))
 
         empty_turns = 0
+        blocked_turns = 0
 
         while True:
             self._turn_count += 1
@@ -132,8 +144,38 @@ class MessageLoopAgent:
                     n_tool_calls=len(message.tool_calls or []),
                 )
 
+            # litellm reports any provider block as "content_filter". The model
+            # never got to reply, so ask again instead of ending the step.
             if message_event.finish_reason == "content_filter":
-                break
+                blocked_turns += 1
+                if blocked_turns > MAX_CONSECUTIVE_BLOCKED_TURNS:
+                    msg = (
+                        f"Provider blocked the model's reply "
+                        f"{blocked_turns} turns in a row."
+                    )
+                    raise BlockedTurnLimitReachedError(msg)
+
+                logger.warning(
+                    "Blocked turn ({n} of {max} allowed in a row); asking the model again.",
+                    n=blocked_turns,
+                    max=MAX_CONSECUTIVE_BLOCKED_TURNS,
+                )
+                # Answer the blocked reply's tool calls without running them;
+                # providers reject a history with unanswered ones.
+                for tool_call in message.tool_calls or []:
+                    yield MessageAddedEvent(
+                        message=Message(
+                            role="tool",
+                            content=SKIPPED_TOOL_CALL_RESULT,
+                            tool_call_id=tool_call.id,
+                        )
+                    )
+                yield MessageAddedEvent(
+                    message=Message(role="user", content=BLOCKED_TURN_NUDGE)
+                )
+                continue
+
+            blocked_turns = 0
 
             if not message.tool_calls:
                 truncated = message_event.finish_reason == "length" or bool(
@@ -241,10 +283,7 @@ async def _execute_tool_calls(
         assert tool_call.function.name
 
         try:
-            result = await mcp_client.call_tool_mcp(
-                tool_call.function.name,
-                json.loads(tool_call.function.arguments or "{}"),
-            )
+            arguments = json.loads(tool_call.function.arguments or "{}")
         except json.JSONDecodeError:
             # Sanitize the tool call arguments to prevent downstream API errors.
             # Some providers (e.g., TogetherAI) validate JSON in tool_call arguments
@@ -256,6 +295,21 @@ async def _execute_tool_calls(
                 result="Error: Invalid JSON in tool arguments",
                 is_error=True,
             )
+        else:
+            if arguments is None or isinstance(arguments, dict):
+                result = await mcp_client.call_tool_mcp(
+                    tool_call.function.name, cast("dict[str, Any]", arguments)
+                )
+            else:
+                # MCP only takes an object (or nothing) as tool arguments, and
+                # rejects anything else before the call reaches the tool.
+                tool_call.function.arguments = json.dumps(
+                    {"_error": "original arguments are not a JSON object"}
+                )
+                result = _build_call_tool_result(
+                    result="Error: Tool arguments must be a JSON object",
+                    is_error=True,
+                )
 
         completed, message = tool_result_events(tool_call.id, result)
         yield completed
@@ -265,6 +319,6 @@ async def _execute_tool_calls(
 def _build_call_tool_result(result: str, is_error: bool) -> CallToolResult:
     return CallToolResult(
         content=[TextContent(type="text", text=result)],
-        structuredContent={"result": result},
-        isError=is_error,
+        structured_content={"result": result},
+        is_error=is_error,
     )

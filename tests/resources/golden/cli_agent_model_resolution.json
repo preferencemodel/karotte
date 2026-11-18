@@ -5,6 +5,12 @@
     "env": {},
     "key_env": null
   },
+  "claude-fable-5-2": {
+    "provider": "",
+    "model": "claude-fable-5-2",
+    "env": {},
+    "key_env": null
+  },
   "claude-fable-5-1": {
     "provider": "",
     "model": "claude-fable-5-1",
@@ -83,6 +89,12 @@
     "env": {},
     "key_env": null
   },
+  "together_ai/moonshotai/Kimi-K3.1-Pro": {
+    "provider": "together_ai",
+    "model": "moonshotai/Kimi-K3.1-Pro",
+    "env": {},
+    "key_env": null
+  },
   "together_ai/moonshotai/Kimi-K3": {
     "provider": "together_ai",
     "model": "moonshotai/Kimi-K3",
@@ -104,6 +116,18 @@
   "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813": {
     "provider": "together_ai",
     "model": "deepseek-ai/DeepSeek-V4-Pro-0813",
+    "env": {},
+    "key_env": null
+  },
+  "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "provider": "together_ai",
+    "model": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "env": {},
+    "key_env": null
+  },
+  "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+    "provider": "fireworks_ai",
+    "model": "accounts/fireworks/models/deepseek-v4p1-flash-1017",
     "env": {},
     "key_env": null
   },
@@ -137,9 +161,9 @@
     "env": {},
     "key_env": null
   },
-  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
-    "provider": "together_ai",
-    "model": "Qwen/Qwen3.8-2.4T-A95B",
+  "fireworks_ai/accounts/fireworks/models/qwen3p8-max": {
+    "provider": "fireworks_ai",
+    "model": "accounts/fireworks/models/qwen3p8-max",
     "env": {},
     "key_env": null
   },
@@ -239,6 +263,22 @@
     },
     "key_env": "OPENAI_API_KEY"
   },
+  "openai/gpt-6.2-astra": {
+    "provider": "openai",
+    "model": "gpt-6.2-astra",
+    "env": {
+      "OPENAI_API_KEY": "test_key"
+    },
+    "key_env": "OPENAI_API_KEY"
+  },
+  "openai/gpt-6.2-sol": {
+    "provider": "openai",
+    "model": "gpt-6.2-sol",
+    "env": {
+      "OPENAI_API_KEY": "test_key"
+    },
+    "key_env": "OPENAI_API_KEY"
+  },
   "openai/gpt-5.6": {
     "provider": "openai",
     "model": "gpt-5.6",
@@ -283,6 +323,18 @@
     "env": {},
     "key_env": null
   },
+  "vertex_ai/gemini-4-hydrogen": {
+    "provider": "vertex_ai",
+    "model": "gemini-4-hydrogen",
+    "env": {},
+    "key_env": null
+  },
+  "vertex_ai/gemini-4-carbon": {
+    "provider": "vertex_ai",
+    "model": "gemini-4-carbon",
+    "env": {},
+    "key_env": null
+  },
   "vertex_ai/gemini-4-argon": {
     "provider": "vertex_ai",
     "model": "gemini-4-argon",
@@ -306,6 +358,22 @@
     "model": "gemini-3.7-flash",
     "env": {},
     "key_env": null
+  },
+  "gemini/gemini-4-hydrogen": {
+    "provider": "gemini",
+    "model": "gemini-4-hydrogen",
+    "env": {
+      "GEMINI_API_KEY": "test_key"
+    },
+    "key_env": "GEMINI_API_KEY"
+  },
+  "gemini/gemini-4-carbon": {
+    "provider": "gemini",
+    "model": "gemini-4-carbon",
+    "env": {
+      "GEMINI_API_KEY": "test_key"
+    },
+    "key_env": "GEMINI_API_KEY"
   },
   "gemini/gemini-4-argon": {
     "provider": "gemini",

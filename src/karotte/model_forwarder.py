@@ -5,7 +5,8 @@ addresses and the model proxy. Without a proxy, the harness runs this
 forwarder in its own (root) process, which the firewall doesn't restrict: the
 agent talks to it on loopback, and it relays each request to the provider with
 the real API key. The agent is handed a placeholder key, so the key never
-reaches the student.
+reaches the student. An agent with ``proxy_via_forwarder`` reaches a proxy this
+way too when the run has a key.
 """
 
 import asyncio
@@ -13,6 +14,7 @@ import json
 import os
 import re
 import socket
+import zlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -46,6 +48,9 @@ _DROPPED_REQUEST_HEADERS: Final = _HOP_BY_HOP | {
 
 _DROPPED_RESPONSE_HEADERS: Final = _HOP_BY_HOP | {"content-length"}
 
+_LOGGED_ERROR_BYTES: Final = 2000
+"""How much of an error response's body the forwarder logs."""
+
 
 class ModelForwarder:
     """Relays every request under its URL to ``upstream`` with ``api_key``.
@@ -65,13 +70,18 @@ class ModelForwarder:
 
     async def start(self) -> str:
         """Listen on an unused loopback port; returns the forwarder's URL."""
-        # Bodies pass through byte for byte, compressed or not.
+        # Bodies pass through byte for byte, compressed or not, so the agent
+        # alone says which encodings it accepts. aiohttp would otherwise ask
+        # for gzip itself, and an agent that never asked can't decode it.
         self._session = aiohttp.ClientSession(
-            auto_decompress=False, timeout=aiohttp.ClientTimeout(total=None)
+            auto_decompress=False,
+            skip_auto_headers=("Accept-Encoding",),
+            timeout=aiohttp.ClientTimeout(total=None),
         )
         app = web.Application(client_max_size=0)
         app.router.add_route("*", "/{tail:.*}", self._forward)
-        self._runner = web.AppRunner(app, access_log=None)
+        # Preserve encoded request bodies to match their Content-Encoding header.
+        self._runner = web.AppRunner(app, access_log=None, auto_decompress=False)
         await self._runner.setup()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("127.0.0.1", 0))
@@ -134,15 +144,49 @@ class ModelForwarder:
                 if k.lower() not in _DROPPED_RESPONSE_HEADERS:
                     response.headers.add(k, v)
             await response.prepare(request)
+            # Only the agent sees an error response, and it may not show why
+            # the call failed, so the start of the body is logged as well.
+            error_body = bytearray()
             try:
                 async for chunk in upstream.content.iter_any():
+                    if upstream.status >= 400:
+                        error_body += chunk[: _LOGGED_ERROR_BYTES - len(error_body)]
                     await response.write(chunk)
                 await response.write_eof()
             except ConnectionResetError:
                 # The agent hung up, e.g. once it had read the end of a stream
                 # it cares about; drop the rest of the upstream response.
                 pass
+            if upstream.status >= 400:
+                logger.warning(
+                    "Model forwarder: {} {} got {} {}: {}",
+                    request.method,
+                    request.rel_url.path,
+                    upstream.status,
+                    upstream.reason,
+                    _error_text(
+                        bytes(error_body), upstream.headers.get("Content-Encoding")
+                    ),
+                )
         return response
+
+
+def _error_text(body: bytes, encoding: str | None) -> str:
+    """The start of an error response's body, for the log.
+
+    ``body`` is the start of the body as the provider sent it, so a gzip or
+    deflate stream is cut short; decompress what is there. Any other encoding
+    is reported by name.
+    """
+    if encoding in ("gzip", "deflate"):
+        try:
+            # wbits 47 reads either a gzip or a zlib header.
+            body = zlib.decompressobj(wbits=47).decompress(body)
+        except zlib.error:
+            return f"<{len(body)} bytes of {encoding}>"
+    elif encoding not in (None, "identity"):
+        return f"<{len(body)} bytes of {encoding}>"
+    return body[:_LOGGED_ERROR_BYTES].decode(errors="replace")
 
 
 class GeminiForwarder(ModelForwarder):
@@ -150,6 +194,31 @@ class GeminiForwarder(ModelForwarder):
 
     async def _auth_headers(self) -> dict[str, str]:
         return {"x-goog-api-key": self._api_key}
+
+
+class MuseForwarder(ModelForwarder):
+    """Answers Muse Code's model list itself, which only Meta's API serves, so
+    Muse Code can run through a proxy too."""
+
+    def __init__(
+        self, upstream: str, api_key: str, model: str, max_output_tokens: int
+    ) -> None:
+        super().__init__(upstream, api_key)
+        self._models: dict[str, object] = {
+            "object": "list",
+            "data": [
+                {
+                    "id": model,
+                    "object": "model",
+                    "metadata": {"muse-code": {"limit": {"output": max_output_tokens}}},
+                }
+            ],
+        }
+
+    async def _forward(self, request: web.Request) -> web.StreamResponse:
+        if request.method == "GET" and request.rel_url.path == "/muse-code/models":
+            return web.json_response(self._models)
+        return await super()._forward(request)
 
 
 _GEMINI_API_GENERATE: Final = re.compile(

@@ -1,9 +1,11 @@
 import gzip
 import io
 import os
-import shutil
+import stat
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 import httpx
 from loguru import logger
@@ -17,6 +19,17 @@ from tenacity import (
 from karotte.backend_client import read_token
 from karotte.container import is_containerized
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
+from karotte.untrusted_paths import (
+    DIR_FLAGS,
+    FILE_FLAGS,
+    lstat_at,
+    open_at,
+    walk_to_parent,
+)
+
+_MAX_FILE_BYTES = 1024**3
+_MAX_TOTAL_BYTES = 4 * 1024**3
+_MAX_ENTRIES = 10_000
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -39,32 +52,163 @@ def save_artifact(config: EvaluationRunConfig, path: Path) -> None:
 
     No-ops if `config.save_artifacts` is False.
 
-    Logs a warning and no-ops if the specified path does not exist.
+    The path may be written by the student, so symlinks, special files and files
+    over the size limits are skipped, and any failure is logged instead of raised.
     """
     if not config.save_artifacts:
         logger.debug("Artifact saving disabled, skipping {}", path)
         return
 
-    if not path.exists():
+    if not os.path.lexists(path):
         logger.warning("Artifact path {} does not exist, skipping save.", path)
         return
 
-    if config.backend_uri:
-        _upload_artifact_via_presigned_url(config, path)
-    else:
-        _save_artifact_locally(config, path)
+    try:
+        if config.backend_uri:
+            _upload_artifact_via_presigned_url(config, path)
+        else:
+            _save_artifact_locally(config, path)
+    except (_Refused, OSError) as e:
+        logger.warning("Not saving artifact {}: {}", path, e)
+
+
+class _Refused(Exception):
+    pass
+
+
+class _Listing(NamedTuple):
+    is_dir: bool
+    dirs: list[str]
+    files: list[str]
+
+
+@dataclass
+class _Budget:
+    total_bytes: int = 0
+
+    def take(self, n: int) -> None:
+        self.total_bytes += n
+        if self.total_bytes > _MAX_TOTAL_BYTES:
+            raise _Refused(f"artifact is larger than {_MAX_TOTAL_BYTES} bytes")
+
+
+def _list_artifact(path: Path) -> _Listing:
+    """Directories and regular files under `path`, relative to it, without following symlinks."""
+    parent_fd, final = walk_to_parent(Path(os.path.abspath(path)))
+    try:
+        st = lstat_at(parent_fd, final)
+    finally:
+        os.close(parent_fd)
+    if stat.S_ISREG(st.st_mode):
+        if st.st_size > _MAX_FILE_BYTES:
+            raise _Refused(f"larger than {_MAX_FILE_BYTES} bytes")
+        return _Listing(False, [], [""])
+    if not stat.S_ISDIR(st.st_mode):
+        raise _Refused("not a regular file or directory")
+
+    dirs: list[str] = []
+    files: list[str] = []
+    entries = 0
+    pending = [""]
+    while pending:
+        rel = pending.pop()
+        fd = _open_under(path, rel, DIR_FLAGS)
+        try:
+            with os.scandir(fd) as it:
+                for entry in it:
+                    entries += 1
+                    if entries > _MAX_ENTRIES:
+                        raise _Refused(f"more than {_MAX_ENTRIES} entries")
+                    child = f"{rel}/{entry.name}" if rel else entry.name
+                    if entry.is_dir(follow_symlinks=False):
+                        dirs.append(child)
+                        pending.append(child)
+                    elif not entry.is_file(follow_symlinks=False):
+                        logger.warning(
+                            "Skipping {}/{}: not a regular file", path, child
+                        )
+                    elif entry.stat(follow_symlinks=False).st_size > _MAX_FILE_BYTES:
+                        logger.warning("Skipping {}/{}: too large", path, child)
+                    else:
+                        files.append(child)
+        finally:
+            os.close(fd)
+    return _Listing(True, sorted(dirs), sorted(files))
+
+
+def _open_under(path: Path, rel: str, flags: int) -> int:
+    """Open `path/rel` without following a symlink anywhere in either."""
+    parts = rel.split("/") if rel else []
+    parent_fd, final = walk_to_parent(Path(os.path.abspath(path)))
+    try:
+        fd = open_at(parent_fd, final, DIR_FLAGS if parts else flags)
+    finally:
+        os.close(parent_fd)
+    for i, name in enumerate(parts):
+        try:
+            next_fd = os.open(
+                name, flags if i == len(parts) - 1 else DIR_FLAGS, dir_fd=fd
+            )
+        finally:
+            os.close(fd)
+        fd = next_fd
+    return fd
+
+
+def _open_file(path: Path, rel: str) -> int:
+    fd = _open_under(path, rel, FILE_FLAGS)
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise _Refused(f"{rel or path} is not a regular file")
+    return fd
+
+
+def _chunks(fd: int, budget: _Budget) -> Iterator[bytes]:
+    read = 0
+    while chunk := os.read(fd, _UPLOAD_CHUNK_SIZE):
+        read += len(chunk)
+        if read > _MAX_FILE_BYTES:
+            raise _Refused(f"a file grew past {_MAX_FILE_BYTES} bytes")
+        budget.take(len(chunk))
+        yield chunk
 
 
 def _save_artifact_locally(config: EvaluationRunConfig, path: Path) -> None:
-    """Save artifact to local filesystem."""
-    target_dir = _maybe_create_target_dir(config)
+    listing = _list_artifact(path)
+    dest_root = _maybe_create_target_dir(config) / path.name
+    logger.info("Saving artifact {} to {}", path, dest_root)
 
-    if path.is_dir():
-        logger.info("Saving artifact from {} to {}", path, target_dir / path.name)
-        shutil.copytree(path, target_dir / path.name, dirs_exist_ok=True)
-    else:
-        logger.info("Saving artifact {} to {}", path, target_dir / path.name)
-        shutil.copy2(path, target_dir / path.name)
+    if listing.is_dir:
+        dest_root.mkdir(exist_ok=True)
+        for rel in listing.dirs:
+            (dest_root / rel).mkdir(exist_ok=True)
+
+    budget = _Budget()
+    for rel in listing.files:
+        _copy_file(path, rel, dest_root / rel if rel else dest_root, budget)
+
+
+def _copy_file(path: Path, rel: str, dest: Path, budget: _Budget) -> None:
+    src = _open_file(path, rel)
+    try:
+        st = os.fstat(src)
+        out = os.open(
+            dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600
+        )
+        try:
+            for chunk in _chunks(src, budget):
+                view = memoryview(chunk)
+                while view:
+                    view = view[os.write(out, view) :]
+            os.fchmod(out, stat.S_IMODE(st.st_mode) & 0o777)
+            os.utime(out, ns=(st.st_atime_ns, st.st_mtime_ns))
+        except BaseException:
+            dest.unlink(missing_ok=True)
+            raise
+        finally:
+            os.close(out)
+    finally:
+        os.close(src)
 
 
 _created_target_dir: Path | None = None
@@ -112,48 +256,41 @@ def _maybe_create_target_dir(config: EvaluationRunConfig) -> Path:
 
 
 def _upload_artifact_via_presigned_url(config: EvaluationRunConfig, path: Path) -> None:
-    """Upload artifact to object storage via presigned URLs from the backend.
+    """Upload each file of the artifact to a presigned URL from the backend.
 
-    1. Collect all file paths to upload
-    2. Request presigned URLs from backend in batch
-    3. Upload each file directly to storage
-
-    Logs errors but does not raise - artifact upload failures should not fail the run.
+    Upload failures are logged, not raised.
     """
     artifact_name = path.name
+    listing = _list_artifact(path)
+    files_to_upload = [
+        (rel, f"{artifact_name}/{rel}" if rel else artifact_name)
+        for rel in listing.files
+    ]
+    if not files_to_upload:
+        logger.info("No files to upload for artifact {}", artifact_name)
+        return
 
     try:
-        # Collect all files to upload
-        if path.is_dir():
-            files_to_upload = [
-                (f, f"{artifact_name}/{f.relative_to(path)}")
-                for f in path.rglob("*")
-                if f.is_file()
-            ]
-        else:
-            files_to_upload = [(path, artifact_name)]
-
-        if not files_to_upload:
-            logger.info("No files to upload for artifact {}", artifact_name)
-            return
-
-        # Request presigned URLs from backend
-        artifact_paths = [artifact_path for _, artifact_path in files_to_upload]
-        presigned_urls = _get_presigned_urls(config, artifact_paths)
-
+        presigned_urls = _get_presigned_urls(
+            config, [artifact_path for _, artifact_path in files_to_upload]
+        )
         if not presigned_urls:
             return  # Error already logged
 
-        # Upload each file to storage
+        budget = _Budget()
         uploaded_count = 0
-        for file_path, artifact_path in files_to_upload:
+        for rel, artifact_path in files_to_upload:
             presigned_url = presigned_urls.get(artifact_path)
             if not presigned_url:
                 logger.error("No presigned URL for {}", artifact_path)
                 continue
 
-            if _upload_file(file_path, presigned_url):
-                uploaded_count += 1
+            fd = _open_file(path, rel)
+            try:
+                if _upload_file(_chunks(fd, budget), artifact_path, presigned_url):
+                    uploaded_count += 1
+            finally:
+                os.close(fd)
 
         logger.info(
             "Uploaded {}/{} files for artifact {}",
@@ -162,6 +299,8 @@ def _upload_artifact_via_presigned_url(config: EvaluationRunConfig, path: Path) 
             artifact_name,
         )
 
+    except _Refused:
+        raise
     except Exception as e:
         logger.error("Failed to upload artifact {}: {}", artifact_name, e)
 
@@ -212,13 +351,10 @@ def _get_presigned_urls(
 _UPLOAD_CHUNK_SIZE = 1 << 20
 
 
-def _gzip_stream(file_path: Path) -> Iterator[bytes]:
+def _gzip_stream(chunks: Iterator[bytes]) -> Iterator[bytes]:
     buf = io.BytesIO()
-    with (
-        file_path.open("rb") as src,
-        gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as gz,
-    ):
-        while chunk := src.read(_UPLOAD_CHUNK_SIZE):
+    with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as gz:
+        for chunk in chunks:
             gz.write(chunk)
             if buf.tell():
                 yield buf.getvalue()
@@ -227,15 +363,12 @@ def _gzip_stream(file_path: Path) -> Iterator[bytes]:
     yield buf.getvalue()
 
 
-def _upload_file(file_path: Path, presigned_url: str) -> bool:
-    """Stream a single file, gzipped, to a presigned URL.
-
-    Returns True if successful, False otherwise.
-    """
+def _upload_file(chunks: Iterator[bytes], name: str, presigned_url: str) -> bool:
+    """Stream one file, gzipped, to a presigned URL. Returns whether it succeeded."""
     try:
         response = httpx.put(
             presigned_url,
-            content=_gzip_stream(file_path),
+            content=_gzip_stream(chunks),
             headers={
                 "Content-Encoding": "gzip",
             },
@@ -250,12 +383,8 @@ def _upload_file(file_path: Path, presigned_url: str) -> bool:
         return True
 
     except httpx.HTTPStatusError as e:
-        logger.error(
-            "Failed to upload {}: HTTP {}",
-            file_path.name,
-            e.response.status_code,
-        )
+        logger.error("Failed to upload {}: HTTP {}", name, e.response.status_code)
         return False
     except httpx.RequestError as e:
-        logger.error("Failed to upload {}: {}", file_path.name, e)
+        logger.error("Failed to upload {}: {}", name, e)
         return False

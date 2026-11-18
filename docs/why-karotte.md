@@ -120,6 +120,7 @@ Over thousands of runs across different models, every rare failure in the loop w
 Karotte calls inference endpoints through [litellm](https://docs.litellm.ai/), which mostly abstracts away provider-specific settings.
 Additionally, Karotte retries failed calls with backoff, honoring providers' `retry-after` headers.
 When a turn comes back empty because the model ran out of tokens or only produced reasoning, Karotte nudges it to continue.
+When the provider's content filter blocks a reply, Karotte asks again.
 
 However, litellm's list of models lags behind new releases, so Karotte also keeps a catalog of the models it supports: their output-token limits, their reasoning levels, and what each provider needs in the request to send back reasoning summaries.
 You can set `reasoning_effort: "min"` or `"max"`, and Karotte picks the provider's lowest or highest level, whatever it's called in their API.

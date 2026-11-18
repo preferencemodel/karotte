@@ -20,7 +20,9 @@ from karotte.agents import BackendSource, BuiltinSource
 from karotte.agents.backend_source import EXTERNAL_MESSAGE_TIMEOUT_S
 from karotte.agents.builtin_source import (
     LLM_RETRY_AFTER_MAX_S,
+    LLM_RETRY_MAX_ATTEMPTS,
     LLM_RETRY_WAIT_MIN_S,
+    MalformedReplyError,
     _retry_after,  # pyright: ignore[reportPrivateUsage]
     _retry_wait,  # pyright: ignore[reportPrivateUsage]
 )
@@ -48,7 +50,7 @@ from karotte.providers import (
     repair_tool_calls,
 )
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
-from karotte.schemas.evaluation_run_config import EvaluationRunConfig
+from karotte.schemas.evaluation_run_config import AgentConfig, EvaluationRunConfig
 from karotte.schemas.http_mcp_server_config import HttpMcpServerConfig
 from karotte.schemas.transcript import (
     ErrorEvent,
@@ -664,7 +666,7 @@ async def test_json_decode_error_handling_in_execute_tool_calls():
     # Verify the completed event contains an error result
     completed_event = events[1]
     assert isinstance(completed_event, ToolCallCompletedEvent)
-    assert completed_event.result.isError is True
+    assert completed_event.result.is_error is True
     assert isinstance(completed_event.result.content[0], TextContent)
     assert (
         completed_event.result.content[0].text
@@ -703,7 +705,7 @@ async def test_guard_case_malformed_json_cat_redirect():
     # Check the ToolCallCompletedEvent has the error
     completed_event = events[1]
     assert isinstance(completed_event, ToolCallCompletedEvent)
-    assert completed_event.result.isError is True
+    assert completed_event.result.is_error is True
     assert isinstance(completed_event.result.content[0], TextContent)
     assert (
         completed_event.result.content[0].text
@@ -2781,6 +2783,124 @@ async def test_auth_errors_get_a_few_attempts_then_reraise():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    [
+        "<end_of_image>" * 40,
+        "<end_of_turn>\n",
+        "<|im_end|>",
+        "<|endoftext|><|endoftext|>",
+        "<｜end▁of▁sentence｜>",
+        "<eos> <pad>",
+    ],
+)
+async def test_reply_of_only_control_tokens_is_retried(content: str):
+    """The reply is dropped and the same request is sent again."""
+    runner = _create_runner_with_tools_and_transcript()
+    usage = {"prompt_tokens": 100, "completion_tokens": 2}
+    replies = [
+        _make_mock_model_response(content, usage=usage),
+        _make_mock_model_response("Done.", usage=usage),
+    ]
+    requests: list[Any] = []
+
+    async def mock_acompletion(**kwargs):  # pyright: ignore[reportMissingParameterType]
+        requests.append(kwargs["messages"])
+        return _make_mock_stream([])
+
+    with (
+        patch("litellm.acompletion", side_effect=mock_acompletion),
+        patch("litellm.stream_chunk_builder", side_effect=replies),
+        patch("karotte.agents.builtin_source._retry_wait", return_value=0),
+    ):
+        events = [event async for event in _collect(runner)]
+
+    assert len(requests) == 2
+    assert requests[0] == requests[1]
+    assert sum(isinstance(e, MessageChunkResetEvent) for e in events) == 1
+    message_events = [e for e in events if isinstance(e, MessageAddedEvent)]
+    assert [e.message.content for e in message_events] == ["Done."]
+    assert sum(isinstance(e, TokenUsageEvent) for e in events) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    [
+        "Done. <end_of_turn>",
+        "The tokenizer splits on <|im_end|> here.",
+        "<answer>42</answer>",
+        "<done>",
+        "",
+    ],
+)
+async def test_reply_with_other_text_is_kept(content: str):
+    runner = _create_runner_with_tools_and_transcript()
+
+    with (
+        patch("litellm.acompletion", return_value=_make_mock_stream([])),
+        patch(
+            "litellm.stream_chunk_builder",
+            return_value=_make_mock_model_response(content),
+        ),
+    ):
+        events = [event async for event in _collect(runner)]
+
+    message_events = [e for e in events if isinstance(e, MessageAddedEvent)]
+    assert [e.message.content for e in message_events] == [content]
+    assert not any(isinstance(e, MessageChunkResetEvent) for e in events)
+
+
+@pytest.mark.asyncio
+async def test_control_tokens_with_tool_calls_are_kept():
+    runner = _create_runner_with_tools_and_transcript()
+    tool_calls = [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "bash", "arguments": "{}"},
+        }
+    ]
+
+    with (
+        patch("litellm.acompletion", return_value=_make_mock_stream([])),
+        patch(
+            "litellm.stream_chunk_builder",
+            return_value=_make_mock_model_response("<end_of_turn>", tool_calls),
+        ),
+    ):
+        events = [event async for event in _collect(runner)]
+
+    assert len([e for e in events if isinstance(e, MessageAddedEvent)]) == 1
+
+
+@pytest.mark.asyncio
+async def test_control_token_replies_fail_after_the_retry_limit():
+    """The run errors instead of the step ending on a malformed reply."""
+    runner = _create_runner_with_tools_and_transcript()
+    call_count = 0
+
+    async def mock_acompletion(**_kwargs):  # pyright: ignore[reportMissingParameterType]
+        nonlocal call_count
+        call_count += 1
+        return _make_mock_stream([])
+
+    with (
+        patch("litellm.acompletion", side_effect=mock_acompletion),
+        patch(
+            "litellm.stream_chunk_builder",
+            return_value=_make_mock_model_response("<end_of_image>" * 2),
+        ),
+        patch("karotte.agents.builtin_source._retry_wait", return_value=0),
+    ):
+        with pytest.raises(MalformedReplyError, match="<end_of_image> x2"):
+            async for _ in _collect(runner):
+                pass
+
+    assert call_count == LLM_RETRY_MAX_ATTEMPTS
+
+
+@pytest.mark.asyncio
 async def test_retry_exhaustion_reraises_original_error():
     """Test that after exhausting all retries, the original error is reraised."""
     runner = _create_runner_with_tools_and_transcript()
@@ -4190,6 +4310,56 @@ class TestTurnLimitNeedsAnAgentThatEnforcesIt:
             sample_config, agent="no-turns", model="mistral/m", use_fake_model=True
         )
         _ = EvaluationRunner(config, _NoStepsTask(config))
+
+
+def test_an_agent_env_that_clashes_fails_before_the_run_starts(
+    sample_config: EvaluationRunConfig,
+):
+    config = sample_config.model_copy(
+        update={
+            "agent": "claude-code",
+            "model": "claude-opus-5",
+            "agent_config": AgentConfig(env={"ANTHROPIC_BASE_URL": "http://x"}),
+        }
+    )
+    with pytest.raises(
+        ValueError, match="agent_config.env can't set ANTHROPIC_BASE_URL"
+    ):
+        _ = EvaluationRunner(config, _NoStepsTask(config))
+
+
+def test_a_fake_model_run_ignores_an_agent_env_that_clashes(
+    sample_config: EvaluationRunConfig,
+):
+    config = sample_config.model_copy(
+        update={
+            "agent": "claude-code",
+            "model": "claude-opus-5",
+            "use_fake_model": True,
+            "agent_config": AgentConfig(env={"HOME": "/x"}),
+        }
+    )
+    _ = EvaluationRunner(config, _NoStepsTask(config))
+
+
+@pytest.mark.asyncio
+async def test_task_started_records_the_agent_config(
+    sample_config: EvaluationRunConfig,
+    mcp_server: HttpMcpServer,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+    agent_config = AgentConfig(env={"BASH_DEFAULT_TIMEOUT_MS": "3600000"})
+    config = sample_config.model_copy(
+        update={
+            "agent": "claude-code",
+            "model": "claude-opus-5",
+            "agent_config": agent_config,
+        }
+    )
+    started = await _task_started(config, mcp_server)
+    assert started.agent_config == agent_config
 
 
 @pytest.mark.asyncio

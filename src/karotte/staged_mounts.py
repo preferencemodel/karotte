@@ -21,7 +21,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -92,7 +92,7 @@ def copy_in() -> None:
 
 
 @contextmanager
-def copied_back() -> Iterator[None]:
+def copied_back() -> Generator[None]:
     """Copy the writable staged mounts back to the host on the way out."""
     try:
         yield

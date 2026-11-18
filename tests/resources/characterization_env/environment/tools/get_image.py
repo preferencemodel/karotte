@@ -1,4 +1,4 @@
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from mcp.types import ImageContent
 
 # 1x1 pixel PNG, fixed so tool output is byte-identical across runs.
@@ -8,5 +8,7 @@ _PNG_1PX_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mMID
 def get_image() -> ToolResult:
     """Returns a fixed 1x1 pixel PNG image."""
     return ToolResult(
-        content=[ImageContent(type="image", data=_PNG_1PX_BASE64, mimeType="image/png")]
+        content=[
+            ImageContent(type="image", data=_PNG_1PX_BASE64, mime_type="image/png")
+        ]
     )

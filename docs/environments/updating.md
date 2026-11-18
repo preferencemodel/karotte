@@ -129,3 +129,26 @@ uvx karotte update --with my-package --add-template rust
 Karotte looks up releases on the environment's own non-explicit `[[tool.uv.index]]` entries.
 It uses the same 7-day age limit as the environment's `exclude-newer` setting.
 Karotte itself and template packages are exempt from that limit.
+
+## Updating past the fastmcp 4 upgrade
+
+Karotte now uses fastmcp 4 and mcp 2.
+`karotte update` doesn't rewrite your own code, so check these by hand.
+
+- `fastmcp.tools.tool` is gone.
+  Import `ToolResult` from `fastmcp.tools`.
+  Tools that still use the old path keep loading, but Karotte logs a warning for each run.
+- The mcp types (`CallToolResult`, `TextContent`, `ImageContent`, `Tool`) use snake_case attributes.
+  Code that reads a tool result, such as a scorer or a hook, needs the new names:
+
+  | Before              | After                |
+  | ------------------- | -------------------- |
+  | `isError`           | `is_error`           |
+  | `structuredContent` | `structured_content` |
+  | `mimeType`          | `mime_type`          |
+  | `inputSchema`       | `input_schema`       |
+
+  The constructors still accept the old names, so the old names only fail when you read them, with an `AttributeError`.
+- In stored transcripts, a tool result's `meta` key is now `_meta`, on the result and on each content block, and each result has `resultType`.
+  Karotte still loads transcripts written before the change.
+  Check any code of your own that reads transcript JSON.

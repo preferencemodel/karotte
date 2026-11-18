@@ -12,10 +12,18 @@ from litellm import CustomStreamWrapper
 from litellm.types.utils import Delta as LiteLlmDelta
 from litellm.types.utils import ModelResponseStream, StreamingChoices, Usage
 
-from karotte.agents.builtin_source import BuiltinSource
+from karotte.agents.builtin_source import (
+    BuiltinSource,
+    _thinking_blocks,  # pyright: ignore[reportPrivateUsage]
+)
+from karotte.model_spec import spec_for
 from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
-from karotte.schemas.transcript import MessageAddedEvent
+from karotte.schemas.transcript import (
+    MessageAddedEvent,
+    MessageChunkResetEvent,
+    TokenUsageEvent,
+)
 
 _SIGNATURE = "EqQBCkgIARABGAIiQL+opaque/signature=="
 _SUMMARY = "Let me list the files first."
@@ -231,6 +239,26 @@ async def test_claude_thinking_is_sent_back_with_its_signature(fake_provider: Se
         },
     ]
     assert replayed["content"][-1]["type"] == "tool_use"
+
+
+@pytest.mark.asyncio
+async def test_a_textless_claude_turn_is_sent_back_without_a_text_block(
+    fake_provider: Serve,
+):
+    bodies = fake_provider(_THINK_THEN_CALL_BASH)
+    source = BuiltinSource(_config("claude-sonnet-5-5"))
+    user = Message(role="user", content="List the files.")
+
+    assistant = await _turn(source, [user])
+    tool_result = Message(role="tool", content="a.txt", tool_call_id="toolu_1")
+    await _turn(source, [user, assistant, tool_result])
+
+    replayed = bodies[1]["messages"][1]
+    assert [block["type"] for block in replayed["content"]] == [
+        "thinking",
+        "thinking",
+        "tool_use",
+    ]
 
 
 _ENCRYPTED = "gAAAAABopaque-encrypted-reasoning=="
@@ -503,3 +531,410 @@ async def test_other_providers_neither_keep_nor_send_reasoning_state(
     sent = source.get_completion_params([user, assistant], [])["messages"][1]
     assert "thinking_blocks" not in sent
     assert "reasoning_items" not in sent
+
+
+def _usage_chunk(prompt_tokens: int, completion_tokens: int) -> ModelResponseStream:
+    """The chunk that ends a stream whose request asks for usage: the token
+    counts and no choice, as OpenAI's API sends it and litellm >= 1.109 builds
+    it for every provider."""
+    chunk = ModelResponseStream(
+        id="chatcmpl-1",
+        created=1735689600,
+        model="m",
+        usage=Usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+        ),
+    )
+    chunk.choices = []
+    return chunk
+
+
+@pytest.mark.parametrize(
+    ("model", "kept"),
+    [
+        (
+            "claude-sonnet-5-5",
+            {
+                "thinking_blocks": [
+                    {"type": "thinking", "thinking": "thought", "signature": "sig"}
+                ]
+            },
+        ),
+        (
+            "openai/gpt-5.5",
+            {"reasoning_items": [{"id": "rs_1", "type": "reasoning", "summary": []}]},
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_a_stream_ending_in_a_usage_chunk_with_no_choice_is_one_whole_turn(
+    model: str, kept: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+):
+    chunks = [
+        _chunk(LiteLlmDelta(role="assistant", reasoning_content="thought", **kept)),
+        ModelResponseStream(
+            id="chatcmpl-1",
+            created=1735689600,
+            model="m",
+            choices=[
+                StreamingChoices(
+                    index=0, delta=LiteLlmDelta(content="done"), finish_reason="stop"
+                )
+            ],
+        ),
+        _usage_chunk(prompt_tokens=12, completion_tokens=3),
+    ]
+
+    async def scripted(**_params: Any) -> _ScriptedStream:
+        return _ScriptedStream(chunks)
+
+    monkeypatch.setattr("litellm.acompletion", scripted)
+    source = BuiltinSource(_config(model))
+
+    events = [
+        event
+        async for event in source.collect(
+            [Message(role="user", content="Go.")], [_READ_FILE]
+        )
+    ]
+
+    (added,) = [e for e in events if isinstance(e, MessageAddedEvent)]
+    assert added.message.content == "done"
+    assert added.finish_reason == "stop"
+    for field, value in kept.items():
+        assert getattr(added.message, field) == value
+    (usage,) = [e for e in events if isinstance(e, TokenUsageEvent)]
+    assert (usage.input_tokens, usage.output_tokens) == (12, 3)
+
+
+def test_unsigned_thinking_before_a_redacted_block_is_not_kept():
+    chunks = [
+        _chunk(
+            LiteLlmDelta(thinking_blocks=[{"type": "thinking", "thinking": "lost "}])
+        ),
+        _chunk(
+            LiteLlmDelta(thinking_blocks=[{"type": "redacted_thinking", "data": "r"}])
+        ),
+        _chunk(LiteLlmDelta(thinking_blocks=[{"type": "thinking", "thinking": "b"}])),
+        _chunk(
+            LiteLlmDelta(
+                thinking_blocks=[{"type": "thinking", "thinking": "", "signature": "s"}]
+            )
+        ),
+    ]
+
+    assert _thinking_blocks(chunks) == [
+        {"type": "redacted_thinking", "data": "r"},
+        {"type": "thinking", "thinking": "b", "signature": "s"},
+    ]
+
+
+def _chat_chunk(
+    delta: dict[str, Any],
+    finish_reason: str | None = None,
+    usage: dict[str, int] | None = None,
+) -> bytes:
+    chunk: dict[str, Any] = {
+        "id": "chatcmpl-1",
+        "object": "chat.completion.chunk",
+        "created": 1735689600,
+        "model": "qwen",
+        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+    }
+    if usage is not None:
+        chunk["usage"] = usage
+    return f"data: {json.dumps(chunk)}\n\n".encode()
+
+
+def _thinks_then_reads_a_file(thought: str, call_id: str) -> tuple[int, bytes]:
+    """A self-hosted server's stream: reasoning in two pieces, then a tool call."""
+    return 200, b"".join(
+        [
+            _chat_chunk({"role": "assistant", "reasoning_content": thought[:4]}),
+            _chat_chunk({"reasoning_content": thought[4:]}),
+            _chat_chunk(
+                {
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": "read_file",
+                                "arguments": '{"path": "a.txt"}',
+                            },
+                        }
+                    ]
+                }
+            ),
+            _chat_chunk(
+                {},
+                "tool_calls",
+                {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+            ),
+            b"data: [DONE]\n\n",
+        ]
+    )
+
+
+# SGLang's 400 when the prompt plus the requested output doesn't fit.
+_CONTEXT_WINDOW_FULL_MESSAGE = " ".join(
+    [
+        "Requested token count exceeds the model's maximum context length of 32768 tokens.",
+        "You requested a total of 40000 tokens: 8000 tokens from the input messages",
+        "and 32000 tokens for the completion.",
+    ]
+)
+_CONTEXT_WINDOW_FULL = (
+    400,
+    json.dumps(
+        {
+            "object": "error",
+            "message": _CONTEXT_WINDOW_FULL_MESSAGE,
+            "type": "BadRequestError",
+            "param": None,
+            "code": 400,
+        }
+    ).encode(),
+)
+
+type ServeReplies = Callable[[list[tuple[int, bytes]]], list[dict[str, Any]]]
+
+
+@pytest.fixture
+def self_hosted_server(monkeypatch: pytest.MonkeyPatch) -> Iterator[ServeReplies]:
+    """Serves the given (status, body) replies in order at the run's proxy URL,
+    the way a self-hosted model is reached; returns the request bodies."""
+    servers: list[HTTPServer] = []
+
+    def serve(replies: list[tuple[int, bytes]]) -> list[dict[str, Any]]:
+        bodies: list[dict[str, Any]] = []
+        pending = list(replies)
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                n = int(self.headers.get("content-length", 0))
+                bodies.append(json.loads(self.rfile.read(n)))
+                status, body = pending.pop(0)
+                self.send_response(status)
+                self.send_header(
+                    "content-type",
+                    "text/event-stream" if status == 200 else "application/json",
+                )
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format: str, *args: Any) -> None:
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        servers.append(server)
+        threading.Thread(
+            target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+        ).start()
+        monkeypatch.setenv(
+            "KAROTTE_PROXY_URL", f"http://127.0.0.1:{server.server_port}"
+        )
+        return bodies
+
+    yield serve
+    for server in servers:
+        server.shutdown()
+
+
+def _self_hosted_config() -> EvaluationRunConfig:
+    return EvaluationRunConfig(
+        run_id="run",
+        task_id="task",
+        model="hosted_vllm/qwen",
+        model_api_key="test_key",
+    )
+
+
+def _stored(message: Message) -> Message:
+    """``message`` as the transcript hands it back on the next turn."""
+    return MessageAddedEvent.model_validate_json(
+        MessageAddedEvent(message=message).model_dump_json()
+    ).message
+
+
+def _read_result(call_id: str) -> Message:
+    return Message(role="tool", content="hello", tool_call_id=call_id)
+
+
+@pytest.mark.asyncio
+async def test_a_self_hosted_model_is_sent_its_earlier_reasoning(
+    self_hosted_server: ServeReplies,
+):
+    bodies = self_hosted_server(
+        [
+            _thinks_then_reads_a_file("I should read a.txt.", "call_1"),
+            _thinks_then_reads_a_file("It says hello.", "call_2"),
+        ]
+    )
+    source = BuiltinSource(_self_hosted_config())
+    user = Message(role="user", content="Read a.txt.")
+
+    first = await _turn(source, [user])
+    assert first.reasoning_content == "I should read a.txt."
+    await _turn(source, [user, _stored(first), _read_result("call_1")])
+
+    assert bodies[1]["model"] == "qwen"
+    replayed = bodies[1]["messages"][1]
+    assert replayed["role"] == "assistant"
+    assert replayed["reasoning_content"] == "I should read a.txt."
+
+
+@pytest.mark.asyncio
+async def test_a_full_context_window_drops_the_reasoning_so_far_and_keeps_later_turns(
+    self_hosted_server: ServeReplies,
+):
+    bodies = self_hosted_server(
+        [
+            _thinks_then_reads_a_file("Read a.txt first.", "call_1"),
+            _CONTEXT_WINDOW_FULL,
+            _thinks_then_reads_a_file("Now read b.txt.", "call_2"),
+            _thinks_then_reads_a_file("Both say hello.", "call_3"),
+        ]
+    )
+    source = BuiltinSource(_self_hosted_config())
+    history = [Message(role="user", content="Read a.txt and b.txt.")]
+
+    first = await _turn(source, history)
+    history += [_stored(first), _read_result("call_1")]
+    second = await _turn(source, history)
+    history += [_stored(second), _read_result("call_2")]
+    await _turn(source, history)
+
+    refused, retried, later = bodies[1], bodies[2], bodies[3]
+    assert refused["messages"][1]["reasoning_content"] == "Read a.txt first."
+    assert "reasoning_content" not in retried["messages"][1]
+    assert "reasoning_content" not in later["messages"][1]
+    assert later["messages"][3]["reasoning_content"] == "Now read b.txt."
+
+
+@pytest.mark.asyncio
+async def test_a_full_context_window_with_no_reasoning_left_to_drop_fails(
+    self_hosted_server: ServeReplies,
+):
+    self_hosted_server(
+        [
+            _thinks_then_reads_a_file("Read a.txt first.", "call_1"),
+            _CONTEXT_WINDOW_FULL,
+            _CONTEXT_WINDOW_FULL,
+        ]
+    )
+    source = BuiltinSource(_self_hosted_config())
+    user = Message(role="user", content="Read a.txt.")
+
+    first = await _turn(source, [user])
+    with pytest.raises(litellm.exceptions.BadRequestError, match="context length"):
+        await _turn(source, [user, _stored(first), _read_result("call_1")])
+
+
+@pytest.mark.asyncio
+async def test_a_failed_self_hosted_call_is_retried_by_karotte_alone(
+    self_hosted_server: ServeReplies, monkeypatch: pytest.MonkeyPatch
+):
+    def no_wait(*_: object) -> float:
+        return 0
+
+    monkeypatch.setattr("karotte.agents.builtin_source._retry_wait", no_wait)
+    bodies = self_hosted_server(
+        [
+            (500, b'{"error": {"message": "overloaded"}}'),
+            _thinks_then_reads_a_file("I should read a.txt.", "call_1"),
+        ]
+    )
+    source = BuiltinSource(_self_hosted_config())
+
+    events = [
+        event
+        async for event in source.collect(
+            [Message(role="user", content="Read a.txt.")], [_READ_FILE]
+        )
+    ]
+
+    # One request per attempt: the 500 reaches karotte, which retries it once,
+    # rather than the HTTP client answering it out of sight.
+    assert len(bodies) == 2
+    assert sum(isinstance(e, MessageChunkResetEvent) for e in events) == 1
+
+
+def test_a_self_hosted_model_needs_its_servers_url(monkeypatch: pytest.MonkeyPatch):
+    """Without one, litellm's openai route would send the conversation to OpenAI."""
+    monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
+    monkeypatch.delenv("HOSTED_VLLM_API_BASE", raising=False)
+    source = BuiltinSource(_self_hosted_config())
+
+    with pytest.raises(ValueError, match="--proxy"):
+        source.get_completion_params([Message(role="user", content="Go.")], [])
+
+
+@pytest.mark.parametrize(
+    ("configured", "env", "sent"),
+    [
+        ("test_key", None, "test_key"),
+        (None, "env_key", "env_key"),
+        (None, None, "fake-api-key"),
+    ],
+)
+def test_a_self_hosted_model_is_sent_the_key_the_hosted_vllm_route_would_send(
+    monkeypatch: pytest.MonkeyPatch,
+    configured: str | None,
+    env: str | None,
+    sent: str,
+):
+    """The openai route refuses to send no key; a server that needs none ignores it."""
+    monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+    if env is None:
+        monkeypatch.delenv("HOSTED_VLLM_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("HOSTED_VLLM_API_KEY", env)
+    config = EvaluationRunConfig(
+        run_id="run", task_id="task", model="hosted_vllm/qwen", model_api_key=configured
+    )
+
+    params = BuiltinSource(config).get_completion_params(
+        [Message(role="user", content="Go.")], []
+    )
+
+    assert params["api_key"] == sent
+
+
+def test_a_self_hosted_server_can_be_named_by_litellms_own_variable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
+    monkeypatch.setenv("HOSTED_VLLM_API_BASE", "http://vllm:8000/v1")
+    source = BuiltinSource(_self_hosted_config())
+
+    params = source.get_completion_params([Message(role="user", content="Go.")], [])
+
+    assert params["api_base"] == "http://vllm:8000/v1"
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "claude-sonnet-5-5",
+        "openai/gpt-5.6-sol",
+        "xai/grok-4.7",
+        "together_ai/moonshotai/Kimi-K3",
+    ],
+)
+def test_only_a_self_hosted_conversation_changes_route(model: str):
+    """Every other provider's conversation goes where its model spec says."""
+    params = BuiltinSource(_config(model)).get_completion_params(
+        [Message(role="user", content="Go.")], []
+    )
+
+    assert params["model"] == spec_for(model).litellm_model
+    assert "max_retries" not in params
+
+
+def test_a_self_hosted_rubric_judge_keeps_the_hosted_vllm_route():
+    """A judge's call is one turn, with no reasoning history to send back."""
+    assert spec_for("hosted_vllm/qwen").litellm_model == "hosted_vllm/qwen"

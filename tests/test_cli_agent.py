@@ -4,6 +4,7 @@ and per-step process handling, driven by a stand-in tool script."""
 import asyncio
 import gzip
 import hashlib
+import os
 import platform
 import stat
 import subprocess
@@ -11,17 +12,22 @@ import sys
 import threading
 import time
 import tomllib
-from collections.abc import Callable, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar, Literal, final
 from unittest.mock import MagicMock
 
 import pytest
+from loguru import logger
 
+from karotte.agents import cli_agent
 from karotte.agents.agent import CliAgentExitedError, StepTimeLimitReachedError
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     CliAgent,
+    cli_agent_types,
+    get_cli_agent_type,
     install_release,
     toml_string,
 )
@@ -34,8 +40,11 @@ from karotte.schemas.transcript import Event, MessageAddedEvent
 _FAKE_TOOL = """
 import os, pathlib, sys, time
 gate = pathlib.Path(sys.argv[2])
+out = open(sys.argv[5], "a") if sys.argv[5] else sys.stdout
+if sys.argv[5]:
+    print("not an event", flush=True)
 for i, line in enumerate(pathlib.Path(sys.argv[1]).read_text().splitlines()):
-    print(line, flush=True)
+    print(line, file=out, flush=True)
     if i == 0:
         while not gate.exists():
             time.sleep(0.01)
@@ -59,7 +68,9 @@ class _EchoAgent(CliAgent):
 
     after_output: str = ""
     exit_code: int = 0
+    event_log_name: str = "events.jsonl"
     held: str = ""
+    reported: str | None = None
 
     @classmethod
     def install(cls) -> list[str]:
@@ -84,7 +95,12 @@ class _EchoAgent(CliAgent):
             str(self._home / "gate"),
             self.after_output,
             str(self.exit_code),
+            str(self._home / self.event_log_name) if self.events_from == "file" else "",
         ]
+
+    def _event_log(self) -> Path | None:
+        path = self._home / self.event_log_name
+        return path if os.path.lexists(path) else None
 
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
         def parse(line: str, i: int) -> Iterable[Event]:
@@ -103,6 +119,9 @@ class _EchoAgent(CliAgent):
                 message=Message(role="assistant", content=self.held)
             )
 
+    def _reported_error(self) -> str | None:
+        return self.reported
+
 
 def _agent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **config: object
@@ -119,6 +138,7 @@ def _agent(
             {
                 "run_id": "r",
                 "task_id": "t",
+                "agent": "echo",
                 "model": "mistral/m",
                 "model_api_key": "sk-real",
                 "save_artifacts": False,
@@ -194,6 +214,41 @@ class TestHomeAndEnv:
         assert "ECHO_HOME" not in env
         assert all(isinstance(name, str) for name in env)
 
+    def test_agent_config_env_reaches_the_tool(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("LANG", "C")
+        agent = _agent(
+            tmp_path,
+            monkeypatch,
+            agent_config={"env": {"BASH_DEFAULT_TIMEOUT_MS": "3600000", "LANG": "en"}},
+        )
+        env = agent._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["BASH_DEFAULT_TIMEOUT_MS"] == "3600000"
+        assert env["LANG"] == "en"
+
+    @pytest.mark.parametrize(
+        "name", ["HOME", "USER", "PATH", "ECHO_HOME", "ECHO_TELEMETRY", "ECHO_API_KEY"]
+    )
+    def test_agent_config_env_cant_set_a_variable_karotte_sets(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+    ):
+        agent = _agent(tmp_path, monkeypatch, agent_config={"env": {name: "x"}})
+        with pytest.raises(ValueError, match=f"agent_config.env can't set {name}"):
+            _ = agent._env()  # pyright: ignore[reportPrivateUsage]
+
+    def test_agent_config_env_cant_set_the_key_variable_without_a_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(
+            tmp_path,
+            monkeypatch,
+            model_api_key=None,
+            agent_config={"env": {"ECHO_API_KEY": "sk-mine"}},
+        )
+        with pytest.raises(ValueError, match="ECHO_API_KEY"):
+            _ = agent._env()  # pyright: ignore[reportPrivateUsage]
+
 
 class TestForwarder:
     @pytest.mark.asyncio
@@ -226,6 +281,24 @@ class TestForwarder:
         assert agent.model_url == "http://proxy:4000"
 
     @pytest.mark.asyncio
+    async def test_a_proxy_via_the_forwarder_keeps_the_key_from_the_cli(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(_EchoAgent, "proxy_via_forwarder", True)
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://proxy:4000/")
+        await agent.start(MagicMock())
+        try:
+            forwarder = agent._forwarder  # pyright: ignore[reportPrivateUsage]
+            assert forwarder is not None
+            assert forwarder.upstream == "http://proxy:4000"
+            assert agent.model_url == forwarder.url
+            env = agent._env()  # pyright: ignore[reportPrivateUsage]
+            assert env["ECHO_API_KEY"] == PROXY_PLACEHOLDER_KEY
+        finally:
+            await agent.stop()
+
+    @pytest.mark.asyncio
     async def test_the_forwarder_is_made_off_the_event_loop(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
@@ -238,6 +311,74 @@ class TestForwarder:
         await agent.stop()
         assert threads
         assert threads != [threading.get_ident()]
+
+
+class TestStepArtifacts:
+    @pytest.mark.asyncio
+    async def test_the_agents_own_files_are_saved_after_each_step(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        own = tmp_path / "calls.jsonl"
+        monkeypatch.setattr(agent, "_step_artifacts", lambda: [own])
+        saved: list[str] = []
+        monkeypatch.setattr(
+            "karotte.agents.cli_agent.save_artifact",
+            lambda _config, path: saved.append(path.name),  # pyright: ignore[reportUnknownLambdaType]
+        )
+        (tmp_path / ".echo" / "gate").touch()
+        _ = [e async for e in agent.run_step("one")]
+        _ = [e async for e in agent.run_step("two")]
+        assert saved == ["step_0.ndjson", "calls.jsonl", "step_1.ndjson", "calls.jsonl"]
+
+    def test_the_step_dir_path_has_no_symlinks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        steps = agent._step_files()  # pyright: ignore[reportPrivateUsage]
+        assert steps == steps.resolve()
+
+
+class TestPluginAgents:
+    @pytest.fixture
+    def plugins(self, monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+        """Entry points to offer, by name; each value is what loading returns,
+        or an exception to raise."""
+        offered: dict[str, object] = {}
+
+        def load(value: object) -> object:
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+        def fake_entry_points(*, group: str) -> list[SimpleNamespace]:
+            assert group == "karotte.cli_agents"
+            return [
+                SimpleNamespace(name=name, load=lambda v=value: load(v))
+                for name, value in offered.items()
+            ]
+
+        monkeypatch.setattr(cli_agent, "entry_points", fake_entry_points)
+        monkeypatch.setattr(cli_agent, "_CLI_AGENTS", dict(cli_agent._CLI_AGENTS))  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr(cli_agent, "_plugins_loaded", False)
+        return offered
+
+    def test_a_plugins_agent_is_registered(self, plugins: dict[str, object]):
+        plugins["echo"] = _EchoAgent
+        assert get_cli_agent_type("echo") is _EchoAgent
+        assert "echo" in cli_agent_types()
+
+    def test_a_plugin_cant_replace_a_builtin_agent(self, plugins: dict[str, object]):
+        builtin = get_cli_agent_type("claude-code")
+        cli_agent._plugins_loaded = False  # pyright: ignore[reportPrivateUsage]
+        plugins["impostor"] = type("Impostor", (_EchoAgent,), {"name": "claude-code"})
+        assert get_cli_agent_type("claude-code") is builtin
+
+    def test_a_broken_plugin_is_skipped(self, plugins: dict[str, object]):
+        plugins["broken"] = ImportError("no module")
+        plugins["not_an_agent"] = object()
+        plugins["echo"] = _EchoAgent
+        assert get_cli_agent_type("echo") is _EchoAgent
 
 
 class TestRunStep:
@@ -281,6 +422,20 @@ class TestRunStep:
             async for event in agent.run_step("hi"):
                 seen.append(event)
         assert _contents(seen) == ["0:hi"]
+
+    @pytest.mark.asyncio
+    async def test_nonzero_exit_quotes_the_clis_own_error_over_stderr(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        agent.exit_code = 1
+        agent.reported = "API Error: 400 bad request"
+        (tmp_path / ".echo" / "gate").touch()
+        with pytest.raises(CliAgentExitedError) as raised:
+            _ = [e async for e in agent.run_step("hi")]
+        assert (
+            str(raised.value) == "echo exited 1 on step 0: API Error: 400 bad request"
+        )
 
     @pytest.mark.asyncio
     async def test_time_limit_score_keeps_output_so_far(
@@ -359,6 +514,174 @@ class TestRunStep:
         started = time.monotonic()
         _ = [e async for e in agent.run_step("hi")]
         assert time.monotonic() - started < 5
+
+
+def _log_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _EchoAgent:
+    agent = _agent(tmp_path, monkeypatch)
+    monkeypatch.setattr(agent, "events_from", "file")
+    return agent
+
+
+class TestEventLog:
+    @pytest.mark.asyncio
+    async def test_yields_each_line_of_the_log_before_the_tool_exits(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        events = agent.run_step("first\nsecond")
+        assert isinstance(await anext(events), MessageAddedEvent)
+        first = await asyncio.wait_for(anext(events), 10)
+        assert _contents([first]) == ["0:first"]
+
+        (tmp_path / ".echo" / "gate").touch()
+        assert _contents([e async for e in events]) == ["1:second"]
+        steps = _step_dir(agent)
+        assert (steps / "step_0.ndjson").read_text() == "first\nsecond\n"
+        assert (steps / "step_0.stdout").read_text() == "not an event\n"
+
+    @pytest.mark.asyncio
+    async def test_a_later_step_reads_only_what_it_added(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        (tmp_path / ".echo" / "gate").touch()
+        _ = [e async for e in agent.run_step("one")]
+        events = [e async for e in agent.run_step("two\nthree")]
+        assert _contents(events) == ["0:two", "1:three"]
+        assert (_step_dir(agent) / "step_1.ndjson").read_text() == "two\nthree\n"
+
+    @pytest.mark.asyncio
+    async def test_time_limit_score_keeps_the_log_so_far(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        agent.after_output = "time.sleep(30)"
+        (tmp_path / ".echo" / "gate").touch()
+        events = [
+            e
+            async for e in agent.run_step(
+                "hi", time_limit_seconds=1, on_time_limit="score"
+            )
+        ]
+        assert _contents(events) == ["0:hi"]
+
+    @pytest.mark.asyncio
+    async def test_root_never_reads_through_a_link_the_student_plants(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        secret = tmp_path / "secret"
+        secret.write_text("secret\n")
+        (tmp_path / ".echo" / "events.jsonl").symlink_to(secret)
+        (tmp_path / ".echo" / "gate").touch()
+        events, error = await _step_error(agent.run_step("hi"))
+        assert _contents(events) == []
+        assert "event log refused" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_root_never_reads_through_a_linked_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "events.jsonl").write_text("secret\n")
+        (tmp_path / ".echo" / "linked").symlink_to(elsewhere)
+        agent.event_log_name = "linked/events.jsonl"
+        (tmp_path / ".echo" / "gate").touch()
+        events, error = await _step_error(agent.run_step("hi"))
+        assert _contents(events) == []
+        assert "event log refused" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_a_log_the_student_does_not_own_is_not_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            "karotte.agents.cli_agent.demoted_uid_gid", lambda: os.getuid() + 1
+        )
+        (tmp_path / ".echo" / "gate").touch()
+        events, error = await _step_error(agent.run_step("hi"))
+        assert _contents(events) == []
+        assert "event log refused" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_a_fifo_does_not_hold_up_the_step(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        agent.event_log_name = "fifo"
+        os.mkfifo(tmp_path / ".echo" / "fifo")
+        agent.after_output = "time.sleep(0.5)"
+        monkeypatch.setattr(agent, "_argv", _without_log_writes(agent))
+        (tmp_path / ".echo" / "gate").touch()
+        events, error = await _step_error(agent.run_step("hi", time_limit_seconds=10))
+        assert _contents(events) == []
+        assert "event log refused" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_a_refused_log_is_warned_about_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            "karotte.agents.cli_agent.demoted_uid_gid", lambda: os.getuid() + 1
+        )
+        agent.after_output = "time.sleep(1)"
+        (tmp_path / ".echo" / "gate").touch()
+        warnings: list[str] = []
+        handler = logger.add(warnings.append, level="WARNING", format="{message}")
+        try:
+            _ = await _step_error(agent.run_step("hi"))
+        finally:
+            logger.remove(handler)
+        assert sum("event log" in w for w in warnings) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_step_that_writes_no_event_log_is_an_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(agent, "_argv", _without_log_writes(agent))
+        (tmp_path / ".echo" / "gate").touch()
+        _, error = await _step_error(agent.run_step("hi"))
+        assert "no event log" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_a_time_limit_before_any_event_log_still_scores(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _log_agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(agent, "_argv", _without_log_writes(agent))
+        agent.after_output = "time.sleep(30)"
+        (tmp_path / ".echo" / "gate").touch()
+        events = [
+            e
+            async for e in agent.run_step(
+                "hi", time_limit_seconds=1, on_time_limit="score"
+            )
+        ]
+        assert _contents(events) == []
+
+
+async def _step_error(
+    step: AsyncGenerator[Event],
+) -> tuple[list[Event], CliAgentExitedError]:
+    events: list[Event] = []
+    with pytest.raises(CliAgentExitedError) as raised:
+        async for event in step:
+            events.append(event)
+    return events, raised.value
+
+
+def _without_log_writes(agent: _EchoAgent) -> Callable[[str, Path | None], list[str]]:
+    argv = agent._argv  # pyright: ignore[reportPrivateUsage]
+
+    def without(instructions: str, prompt_file: Path | None) -> list[str]:
+        return [*argv(instructions, prompt_file)[:-1], ""]
+
+    return without
 
 
 class TestStepFiles:

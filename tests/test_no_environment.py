@@ -15,7 +15,7 @@ from karotte.load_tasks import (
 )
 from karotte.load_tasks import require_environment
 
-runner = CliRunner(mix_stderr=False)
+runner = CliRunner()
 
 NO_ENVIRONMENT = (
     "No karotte environment found. cd into one and run `uv run karotte ...` there."
@@ -37,7 +37,7 @@ def _parse_config_unreachable():
 
 
 @pytest.fixture(autouse=True)
-def _real_task_loader(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+def _real_task_loader(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(karotte.load_tasks, "_get_task_loader", real_task_loader)
     monkeypatch.setattr(
         karotte.load_tasks, "_environment_is_installed", real_environment_is_installed

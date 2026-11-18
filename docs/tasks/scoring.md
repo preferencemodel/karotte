@@ -48,8 +48,11 @@ ExecutableJudge(
   Karotte puts the file in a fresh temporary directory, passes the script that path, and deletes the directory after scoring finishes.
 - The script must write `{"score": <float>, "metadata": {...}}` to that file, with both keys.
   Karotte converts the metadata values to strings and adds the script's `stdout` and `stderr`.
+  The script's `stdin` is empty.
 - The script must exit 0.
   A non-zero exit, a missing executable, or an output file that is missing or not valid JSON scores 0 with `continue_task=False` and the error in the scoring metadata.
+- Scoring ends when the script exits.
+  Karotte then kills every process the script started that is still running in its process group.
 - `continue_threshold` (default `-1`): the task continues if the score is at least this.
   With the default, every score of -1 or higher continues the task.
 - `cwd` sets the script's working directory.
@@ -58,6 +61,7 @@ The scoring script of the `example-task` task:
 
 ```python
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -66,7 +70,10 @@ if __name__ == "__main__":
 
     answer = Path(submission_path).read_text().strip()
 
-    score = 1.0 if "3.12.11" in answer else 0.0
+    # Match the whole answer exactly. A substring check would also accept
+    # "3.12.110" or a list of guesses such as "3.10 3.11 3.12.11 3.13", and any
+    # extra text (e.g. "Python 3.12.11") means the agent ignored the instructions.
+    score = 1.0 if re.fullmatch(r"3\.12\.11", answer) else 0.0
 
     Path(output_path).write_text(json.dumps({"score": score, "metadata": {}}))
 ```
@@ -101,6 +108,26 @@ Their output is joined with blank lines:
 | `TranscriptContext(tool="bash")` | Calls to one tool with their arguments and results; `tool="*"` for all tools. `last=n` keeps the last `n`. |
 
 Subclass `RubricContext` and implement `render(transcript) -> str` for your own provider.
+
+### RegexJudge
+
+`RegexJudge` checks whether the student's assistant messages match every supplied
+regular expression using `re.search`.
+It joins the text with blank lines, including text blocks in multipart messages.
+System messages, task instructions, tool results, reasoning, tool-call arguments,
+and non-text blocks are excluded.
+
+```python
+import re
+
+from karotte.judges import RegexJudge
+
+RegexJudge([re.compile(r"answer: 42")])
+```
+
+Every pattern must match for a score of 1 and `continue_task=True`; otherwise the
+score is 0 and the metadata lists the patterns that did not match.
+Matching includes assistant text from earlier steps in the same task.
 
 ### AlwaysPassJudge
 
@@ -143,10 +170,14 @@ class FinalMessageJudge(Judge):
 
     @override
     def evaluate(self, transcript: Transcript) -> Scoring:
-        replies = [m for m in transcript.messages if m.role == "assistant" and m.content]
+        replies = [
+            m for m in transcript.messages if m.role == "assistant" and m.content
+        ]
         last = str(replies[-1].content) if replies else ""
         passed = self.expected in last
-        return Scoring(score=float(passed), metadata={"last_message": last}, continue_task=passed)
+        return Scoring(
+            score=float(passed), metadata={"last_message": last}, continue_task=passed
+        )
 ```
 
 A judge can score from:

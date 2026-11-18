@@ -4,6 +4,11 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "claude-fable-5-2": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
   "claude-fable-5-1": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,
@@ -69,6 +74,11 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "together_ai/moonshotai/Kimi-K3.1-Pro": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
   "together_ai/moonshotai/Kimi-K3": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,
@@ -85,6 +95,16 @@
     "api_key_required": true
   },
   "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,
     "api_key_required": true
@@ -114,7 +134,7 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
-  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
+  "fireworks_ai/accounts/fireworks/models/qwen3p8-max": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,
     "api_key_required": true
@@ -179,6 +199,16 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "openai/gpt-6.2-astra": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "openai/gpt-6.2-sol": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
   "openai/gpt-5.6": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,
@@ -209,6 +239,16 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "vertex_ai/gemini-4-hydrogen": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": false
+  },
+  "vertex_ai/gemini-4-carbon": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": false
+  },
   "vertex_ai/gemini-4-argon": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,
@@ -228,6 +268,16 @@
     "resolved_agent": "builtin",
     "is_special_training_model": false,
     "api_key_required": false
+  },
+  "gemini/gemini-4-hydrogen": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
+  "gemini/gemini-4-carbon": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
   },
   "gemini/gemini-4-argon": {
     "resolved_agent": "builtin",

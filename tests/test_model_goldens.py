@@ -27,7 +27,7 @@ from litellm.types.utils import Delta as LiteLlmDelta
 from litellm.types.utils import Function as LiteLlmFunction
 from litellm.utils import get_optional_params
 
-from karotte.agents.builtin_source import BuiltinSource
+from karotte.agents.builtin_source import IMAGE_OMITTED_TEXT, BuiltinSource
 from karotte.agents.models import resolve_model
 from karotte.judges.rubric_judge import RubricJudge
 from karotte.model_catalog import CATALOG_MODEL_IDS
@@ -235,6 +235,8 @@ def test_gpt_6_goes_through_the_responses_bridge():
         "openai/gpt-6-luna",
         "openai/gpt-6.1-sol",
         "openai/gpt-6.1-terra",
+        "openai/gpt-6.2-astra",
+        "openai/gpt-6.2-sol",
     ):
         params = _completion_params(model)
         assert params["model"] == model.replace("openai/", "openai/responses/")
@@ -268,14 +270,21 @@ def test_together_effort_gets_past_litellms_param_check():
     assert _litellm_reasoning_params("together_ai/zai-org/GLM-5.3", "max") == {
         "reasoning_effort": "high"
     }
-    assert _litellm_reasoning_params("together_ai/Qwen/Qwen3.8-2.4T-A95B", "max") == {
-        "reasoning_effort": "xhigh"
-    }
     assert _litellm_reasoning_params("together_ai/moonshotai/Kimi-K3", "min") == {
         "reasoning_effort": "low"
     }
     # Models without an effort range send nothing, so there is nothing to allow.
     assert _litellm_reasoning_params("together_ai/zai-org/GLM-5.2", "max") == {}
+
+
+def test_fireworks_effort_gets_past_litellms_param_check():
+    """Same for fireworks_ai: its litellm param list has no reasoning_effort."""
+    assert _litellm_reasoning_params(
+        "fireworks_ai/accounts/fireworks/models/qwen3p8-max", "max"
+    ) == {"reasoning_effort": "xhigh"}
+    assert _litellm_reasoning_params(
+        "fireworks_ai/accounts/fireworks/models/glm-5p3", "min"
+    ) == {"reasoning_effort": "low"}
 
 
 def test_tools_are_offered_when_the_task_has_them(monkeypatch: pytest.MonkeyPatch):
@@ -290,6 +299,125 @@ def test_tools_are_offered_when_the_task_has_them(monkeypatch: pytest.MonkeyPatc
     )
     assert params["tools"] == [tool]
     assert params["tool_choice"] == "auto"
+
+
+_GLM = "fireworks_ai/accounts/fireworks/models/glm-5p3"
+
+_IMAGE = {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,AAAA"}}
+
+# Verbatim from the providers and litellm; don't tidy them.
+_IMAGES_REJECTED = [
+    "Together_aiException - Invalid multimodal request: multimodal not supported for model: zai-org/GLM-5.2",
+    "Together_aiException - Multimodal processing failed: Multimodal not supported for model: Qwen/Qwen3.8-2.4T-A95B",
+    'Together_aiException - {"error":{"type":"invalid_request_error","code":"multimodal_not_supported","message":"the router has no media spec for this model\'s family and cannot process its media itself; a vLLM worker with --mm-processor inprocess|redis processes it under --mm-processing worker (or auto, when every worker of the model does)","param":null}}',
+    "Fireworks AI model accounts/fireworks/models/glm-5p3 does not support image inputs. Use a Fireworks vision model or remove image_url content blocks.",
+    'Fireworks_aiException - {"error":{"object":"error","type":"invalid_request_error","code":"invalid_request_error","message":"This model does not support image inputs"}}',
+    'Fireworks_aiException - {"error":{"message":"This model does not support image inputs","type":"invalid_request_error","code":400}}',
+]
+
+
+def _messages_with_image() -> list[Message]:
+    return [
+        Message(role="user", content="Go."),
+        Message(role="tool", tool_call_id="call-1", content=[_IMAGE]),
+    ]
+
+
+def _text_chunks(model: str) -> list[ModelResponseStream]:
+    return [
+        ModelResponseStream(
+            model=model,
+            choices=[
+                StreamingChoices(
+                    index=0,
+                    delta=LiteLlmDelta(role="assistant", content="Done."),
+                    finish_reason="stop",
+                )
+            ],
+        )
+    ]
+
+
+def _bad_request(message: str) -> litellm.exceptions.BadRequestError:
+    return litellm.exceptions.BadRequestError(
+        message=message, model=_GLM, llm_provider="x"
+    )
+
+
+def _script_completions(
+    monkeypatch: pytest.MonkeyPatch, *errors: Exception
+) -> list[dict[str, Any]]:
+    """Fails the first calls with ``errors``, then streams a reply; returns the
+    params of every call."""
+    calls: list[dict[str, Any]] = []
+    pending = list(errors)
+
+    async def scripted_acompletion(**kwargs: Any) -> _ScriptedStream:
+        calls.append(kwargs)
+        if pending:
+            raise pending.pop(0)
+        return _ScriptedStream(_text_chunks(kwargs["model"]))
+
+    monkeypatch.setattr("litellm.acompletion", scripted_acompletion)
+    monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
+    return calls
+
+
+async def _turn(source: BuiltinSource, messages: list[Message]) -> None:
+    async for _ in source.collect(messages, []):
+        pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", _IMAGES_REJECTED)
+async def test_rejected_images_are_swapped_for_a_note_and_retried(
+    monkeypatch: pytest.MonkeyPatch, error: str
+):
+    calls = _script_completions(monkeypatch, _bad_request(error))
+    messages = _messages_with_image()
+    await _turn(BuiltinSource(_config(_GLM)), messages)
+
+    assert len(calls) == 2
+    assert calls[1]["messages"][1]["content"] == [
+        {"type": "text", "text": IMAGE_OMITTED_TEXT}
+    ]
+    # Only the request changes; the transcript keeps the image.
+    assert messages[1].model_dump()["content"] == [_IMAGE]
+
+
+@pytest.mark.asyncio
+async def test_images_stay_out_for_the_rest_of_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls = _script_completions(monkeypatch, _bad_request(_IMAGES_REJECTED[0]))
+    source = BuiltinSource(_config(_GLM))
+    await _turn(source, _messages_with_image())
+    await _turn(source, _messages_with_image())
+
+    assert len(calls) == 3
+    assert calls[2]["messages"][1]["content"][0]["type"] == "text"
+
+
+@pytest.mark.asyncio
+async def test_images_are_sent_until_the_provider_rejects_them(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls = _script_completions(monkeypatch)
+    await _turn(BuiltinSource(_config(_GLM)), _messages_with_image())
+
+    assert len(calls) == 1
+    assert calls[0]["messages"][1]["content"] == [_IMAGE]
+
+
+@pytest.mark.asyncio
+async def test_other_bad_requests_still_fail(monkeypatch: pytest.MonkeyPatch):
+    calls = _script_completions(
+        monkeypatch, _bad_request("Unsupported parameter: 'max_tokens'")
+    )
+    with pytest.raises(litellm.exceptions.BadRequestError):
+        await _turn(BuiltinSource(_config(_GLM)), _messages_with_image())
+
+    assert len(calls) == 1
 
 
 # A DeepSeek special token inside a value that is itself JSON-encoded the way

@@ -80,6 +80,8 @@ class EvaluationRunner:
         ):
             msg = f"turn_limit can't be enforced by the {config.resolved_agent} agent"
             raise ValueError(msg)
+        if isinstance(self._agent, CliAgent) and not config.use_fake_model:
+            self._agent.check_agent_env()
 
     def _make_agent(self) -> Agent:
         match self.config.resolved_agent:
@@ -180,6 +182,7 @@ class EvaluationRunner:
                 reasoning_effort=effort,
                 temperature=self.config.temperature,
                 agent=self.config.resolved_agent,
+                agent_config=self.config.agent_config,
                 use_hints=self.config.use_hints,
                 n_steps=len(self.task.steps)  # pyright: ignore[reportArgumentType]
                 if hasattr(self.task.steps, "__len__")
@@ -304,7 +307,7 @@ class EvaluationRunner:
             function=ChatCompletionToolParamFunctionChunk(
                 name=tool.name,
                 description=tool.description,
-                parameters=tool.inputSchema,
+                parameters=tool.input_schema,
             ),
         )
 

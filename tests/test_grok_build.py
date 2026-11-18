@@ -22,6 +22,7 @@ from karotte.agents.grok_build.adapter import parse_stream
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import (
+    ContextCompactedEvent,
     Event,
     MessageAddedEvent,
     TokenUsageEvent,
@@ -73,6 +74,7 @@ class TestGrokBuildAgent:
         assert first[first.index("-m") + 1] == "grok-4.7"
         assert first[first.index("--max-turns") + 1] == "7"
         assert "--always-approve" in first
+        assert "--no-wait-for-background" in first
         session_id = first[first.index("--session-id") + 1]
 
         agent._step_index = 1  # pyright: ignore[reportPrivateUsage]
@@ -107,6 +109,7 @@ class TestGrokBuildAgent:
         model = config["model"]["grok-4.7"]  # pyright: ignore[reportIndexIssue]
         assert model["base_url"] == "https://api.x.ai/v1"
         assert model["env_key"] == "XAI_API_KEY"
+        assert model["api_backend"] == "responses"
         assert config["models"]["session_summary"] == "grok-4.7"  # pyright: ignore[reportIndexIssue]
         assert config["features"]["telemetry"] == "off"  # pyright: ignore[reportIndexIssue]
         assert "url" in config["mcp_servers"]["karotte"]  # pyright: ignore[reportIndexIssue]
@@ -225,8 +228,8 @@ class TestParseStream:
         ]
         completed = [e for e in events if isinstance(e, ToolCallCompletedEvent)]
         assert started == [c.tool_call_id for c in completed] == ["call_a", "call_b"]
-        assert completed[0].result.isError is False
-        assert completed[1].result.isError is True
+        assert completed[0].result.is_error is False
+        assert completed[1].result.is_error is True
 
     def test_usage_is_reported_not_estimated(self):
         usage = [e for e in self._events() if isinstance(e, TokenUsageEvent)]
@@ -299,7 +302,7 @@ class TestParseStream:
         assert isinstance(completed, ToolCallCompletedEvent)
         assert completed.tool_call_id == "call_img"
         assert completed.result.content == [
-            ImageContent(type="image", data="", mimeType="image/jpeg")
+            ImageContent(type="image", data="", mime_type="image/jpeg")
         ]
         assert isinstance(message, MessageAddedEvent)
         assert message.message.role == "tool"
@@ -330,6 +333,19 @@ class TestParseStream:
         assert completed.result.content == [TextContent(type="text", text=text)]
         assert isinstance(message, MessageAddedEvent)
         assert message.message.content == text
+
+    def test_compact_boundary_marks_a_compaction(self):
+        boundary = json.dumps(
+            {
+                "type": "system",
+                "subtype": "compact_boundary",
+                "compact_metadata": {"trigger": "auto", "pre_tokens": 31219},
+                "session_id": "54f2e817-d518-40c8-9689-95c1f8c32ccb",
+                "uuid": "b7640f41-5d56-4aff-bd38-4d9ba557c1b8",
+            }
+        )
+
+        assert [type(e) for e in parse_stream([boundary])] == [ContextCompactedEvent]
 
 
 _FAKE_GROK = """

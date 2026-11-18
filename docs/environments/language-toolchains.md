@@ -111,6 +111,7 @@ Register it in each task that uses it:
 def tools(self):
     return ["bash", "view_lines_in_file", "replace_in_file", "build"]
 
+
 def configure_tools(self):
     from karotte import ToolConfigWriter
     from environment.tools.build import BuildConfig
@@ -130,10 +131,19 @@ See [Tools](../tasks/tools.md) for how tool configuration works in general.
 
 ```python
 from environment.toolchain_grading import (
-    Submission, chosen_submission, make_build_dir, stage_submission,
-    build_submission, resolve_argv, harden_run_argv, sandboxed_env,
-    run_noexec_dirs, make_run_preexec, check_native_sandbox,
-    SAFE_PATH, UTF8_LOCALE,
+    Submission,
+    chosen_submission,
+    make_build_dir,
+    stage_submission,
+    build_submission,
+    resolve_argv,
+    harden_run_argv,
+    sandboxed_env,
+    run_noexec_dirs,
+    make_run_preexec,
+    check_native_sandbox,
+    SAFE_PATH,
+    UTF8_LOCALE,
 )
 from environment.toolchains import Language, seal_toolchain
 from environment.paths import STUDENT_WORKDIR
@@ -143,12 +153,16 @@ RUST = Submission(
     build=(("rustc", "-C", "opt-level=3", "-o", "{artifact}", "{source}"),),
 )
 
-submission, why_not = chosen_submission([RUST])          # symlink-safe file pick
-build_dir = make_build_dir()                             # random name under root-owned /opt/grader/build
-source = stage_submission(submission, build_dir)         # copy the one file; nothing resolves beside it
-result = build_submission(submission, source, build_dir) # demoted build, env from scratch, then sealed read-only
+submission, why_not = chosen_submission([RUST])  # symlink-safe file pick
+build_dir = make_build_dir()  # random name under root-owned /opt/grader/build
+source = stage_submission(
+    submission, build_dir
+)  # copy the one file; nothing resolves beside it
+result = build_submission(
+    submission, source, build_dir
+)  # demoted build, env from scratch, then sealed read-only
 # result is a BuildResult: .artifact, .error (None on success), .stdout, .stderr
-seal_toolchain(Language.RUST)                            # no compiler during the scored run
+seal_toolchain(Language.RUST)  # no compiler during the scored run
 
 run_argv = harden_run_argv(
     resolve_argv(submission.run, source, result.artifact, build_dir), Language.RUST

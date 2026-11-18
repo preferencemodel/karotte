@@ -198,13 +198,13 @@ def _result(item: dict[str, Any]) -> CallToolResult:
                         type="text", text=str(item.get("aggregated_output") or "")
                     )
                 ],
-                isError=item.get("exit_code") != 0,
+                is_error=item.get("exit_code") != 0,
             )
         case "mcp_tool_call":
             if (error := item.get("error")) is not None:
                 message = error.get("message") if isinstance(error, dict) else error
                 return CallToolResult(
-                    content=[TextContent(type="text", text=str(message))], isError=True
+                    content=[TextContent(type="text", text=str(message))], is_error=True
                 )
             result = item.get("result")
             content = result.get("content") if isinstance(result, dict) else None
@@ -213,7 +213,7 @@ def _result(item: dict[str, Any]) -> CallToolResult:
             status = str(item.get("status") or "")
             return CallToolResult(
                 content=[TextContent(type="text", text=status)],
-                isError=status != "completed",
+                is_error=status != "completed",
             )
 
 
@@ -231,7 +231,9 @@ def _mcp_content(content: Any) -> list[ContentBlock]:
                 ImageContent(
                     type="image",
                     data=str(block.get("data") or ""),
-                    mimeType=str(block.get("mimeType") or block.get("mime_type") or ""),
+                    mime_type=str(
+                        block.get("mimeType") or block.get("mime_type") or ""
+                    ),
                 )
             )
     return blocks

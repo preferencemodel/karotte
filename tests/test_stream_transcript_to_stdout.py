@@ -14,6 +14,7 @@ from karotte.schemas.chat import (
 from karotte.schemas.scoring import Scoring
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
+    ContextCompactedEvent,
     ErrorEvent,
     MessageAddedEvent,
     MessageChunkEvent,
@@ -340,7 +341,7 @@ async def test_tool_completed_with_square_brackets_preserved():
     """Test that square brackets in tool result structuredContent are preserved."""
     result = CallToolResult(
         content=[],
-        structuredContent={"key[1]": "value[2]", "result": "text1[text2]text3"},
+        structured_content={"key[1]": "value[2]", "result": "text1[text2]text3"},
     )
     event = ToolCallCompletedEvent(tool_call_id="test_id", result=result)
 
@@ -606,7 +607,7 @@ async def test_message_chunk_event_empty_content():
 @pytest.mark.asyncio
 async def test_tool_completed_without_structured_content():
     """Test that ToolCallCompletedEvent without structuredContent prints header only."""
-    result = CallToolResult(content=[], structuredContent=None)
+    result = CallToolResult(content=[], structured_content=None)
     event = ToolCallCompletedEvent(tool_call_id="test_id", result=result)
 
     async def event_generator():
@@ -736,14 +737,27 @@ async def test_streamed_message_ending_in_a_newline_gets_no_extra_one():
 
 
 @pytest.mark.asyncio
-async def test_unknown_event_type():
-    """Test that unknown event types print an error message."""
+async def test_context_compaction_is_marked():
+    async def event_generator():
+        yield ContextCompactedEvent()
+
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        await stream_transcript_to_stdout(event_generator())
+        output = mock_stdout.getvalue()
+
+    assert "Context compacted" in output
+    assert "Unknown event type" not in output
+
+
+@pytest.mark.asyncio
+async def test_unhandled_event_type():
+    """Test that event types the printer doesn't handle print an error message."""
     from pydantic import BaseModel
 
-    class UnknownEvent(BaseModel):
-        type: str = "unknown"
+    class UnhandledEvent(BaseModel):
+        type: str = "unhandled"
 
-    event = UnknownEvent()
+    event = UnhandledEvent()
 
     async def event_generator():
         yield event
@@ -752,7 +766,7 @@ async def test_unknown_event_type():
         await stream_transcript_to_stdout(event_generator())  # pyright: ignore[reportArgumentType]
         output = mock_stdout.getvalue()
 
-    assert "Unknown event type: UnknownEvent" in output
+    assert "Unknown event type: UnhandledEvent" in output
 
 
 @pytest.mark.asyncio
@@ -764,7 +778,7 @@ async def test_all_event_types_are_handled():
     """
     from typing import get_args
 
-    from karotte.schemas.transcript import Event, TokenUsageEvent
+    from karotte.schemas.transcript import Event, TokenUsageEvent, UnknownEvent
 
     # Get all event types from the Event union
     event_types = get_args(Event)
@@ -801,7 +815,7 @@ async def test_all_event_types_are_handled():
             )
             test_events.append(ToolCallStartedEvent(tool_call=tool_call))
         elif event_type == ToolCallCompletedEvent:
-            result = CallToolResult(content=[], structuredContent={})
+            result = CallToolResult(content=[], structured_content={})
             test_events.append(
                 ToolCallCompletedEvent(tool_call_id="test_id", result=result)
             )
@@ -820,6 +834,10 @@ async def test_all_event_types_are_handled():
             )
         elif event_type == TokenUsageEvent:
             test_events.append(TokenUsageEvent(input_tokens=100, output_tokens=50))
+        elif event_type == UnknownEvent:
+            test_events.append(UnknownEvent(type="from_the_future"))
+        elif event_type == ContextCompactedEvent:
+            test_events.append(ContextCompactedEvent())
         elif hasattr(event_type, "__name__") and event_type.__name__ == "MetadataEvent":
             # MetadataEvent is handled by TaskPreHookCompletedEvent which is a subclass
             # Skip it as it's abstract
@@ -865,7 +883,7 @@ async def test_scoring_metadata_display_is_truncated():
 
 @pytest.mark.asyncio
 async def test_structured_content_display_is_truncated():
-    result = CallToolResult(content=[], structuredContent={"output": "x" * 1_000_000})
+    result = CallToolResult(content=[], structured_content={"output": "x" * 1_000_000})
 
     async def event_generator():
         yield ToolCallCompletedEvent(tool_call_id="test_id", result=result)

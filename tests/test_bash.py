@@ -14,7 +14,7 @@ import pytest_asyncio
 from fastmcp import Client, FastMCP
 from fastmcp.client.transports.memory import FastMCPTransport
 from fastmcp.exceptions import ToolError
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from mcp.types import TextContent
 
 from karotte.tools.bash import (

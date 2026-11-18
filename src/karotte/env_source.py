@@ -61,9 +61,11 @@ def _parse_pip_url(url: str) -> GitSource:
     if not at:
         path, ref = parts.path, None
     subdirectory = parse_qs(parts.fragment).get("subdirectory", [""])[0].strip("/")
-    return GitSource(
-        parts._replace(path=path, fragment="").geturl(), ref or None, subdirectory
-    )
+    url = parts._replace(path=path, fragment="").geturl()
+    for value in (url, ref):
+        if value and value.startswith("-"):
+            raise SourceError(f"A Git URL or ref cannot start with '-': {value}")
+    return GitSource(url, ref or None, subdirectory)
 
 
 def _parse_github_url(source: str, path: str) -> GitSource:
@@ -110,6 +112,7 @@ def _remote_refs(url: str) -> set[str]:
         "ls-remote",
         "--heads",
         "--tags",
+        "--",
         url,
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
     )
@@ -139,7 +142,7 @@ def fetch(url: str, ref: str | None, subdirectory: str, cache: Path) -> Path:
     tmp = Path(tempfile.mkdtemp(prefix=".fetch-", dir=repo_cache))
     try:
         _git(tmp, "init", "-q")
-        _git(tmp, "remote", "add", "origin", url)
+        _git(tmp, "remote", "add", "--", "origin", url)
         _git(
             tmp,
             "fetch",
@@ -148,6 +151,7 @@ def fetch(url: str, ref: str | None, subdirectory: str, cache: Path) -> Path:
             "1",
             "--filter=blob:none",
             "origin",
+            "--",
             ref or "HEAD",
         )
         commit = _git(tmp, "rev-parse", "FETCH_HEAD^{commit}")

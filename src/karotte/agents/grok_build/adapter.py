@@ -26,6 +26,7 @@ from karotte.agents.tool_results import tool_result_events
 from karotte.agents.usage import messages_usage_event
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
+    ContextCompactedEvent,
     Event,
     MessageAddedEvent,
     ToolCallCompletedEvent,
@@ -49,8 +50,9 @@ def parse_line(line: str, i: int) -> Iterator[Event]:
     An ``assistant`` line yields a `MessageAddedEvent`, a `TokenUsageEvent`
     and one `ToolCallStartedEvent` per tool call. Each ``tool_result`` block of
     a ``user`` line yields a `ToolCallCompletedEvent` and the tool
-    `MessageAddedEvent`. ``system`` and ``result`` lines carry only metadata
-    and yield nothing.
+    `MessageAddedEvent`. A ``compact_boundary`` line yields a
+    `ContextCompactedEvent`; other ``system`` lines and ``result`` lines yield
+    nothing.
     """
     record = parse_json_line(line, i, "grok")
     if record is None:
@@ -60,6 +62,9 @@ def parse_line(line: str, i: int) -> Iterator[Event]:
 
     kind = record.get("type")
     message = record.get("message")
+    if kind == "system" and record.get("subtype") == "compact_boundary":
+        yield ContextCompactedEvent()
+        return
     if kind not in ("assistant", "user"):
         return
     if not isinstance(message, dict):
@@ -132,14 +137,14 @@ def _user_events(blocks: list[Any]) -> Iterator[Event]:
         is_error = bool(block.get("is_error"))
         if (image := _read_file_image(text)) is not None:
             yield from tool_result_events(
-                tool_call_id, CallToolResult(content=[image], isError=is_error)
+                tool_call_id, CallToolResult(content=[image], is_error=is_error)
             )
             continue
         yield ToolCallCompletedEvent(
             tool_call_id=tool_call_id,
             result=CallToolResult(
                 content=[TextContent(type="text", text=text)],
-                isError=is_error,
+                is_error=is_error,
             ),
         )
         yield MessageAddedEvent(
@@ -165,7 +170,7 @@ def _read_file_image(text: str) -> ImageContent | None:
     data, mime_type = image.get("data"), image.get("mime_type")
     if not isinstance(data, str) or not isinstance(mime_type, str):
         return None
-    return ImageContent(type="image", data=data, mimeType=mime_type)
+    return ImageContent(type="image", data=data, mime_type=mime_type)
 
 
 def _result_text(content: Any) -> str:

@@ -1,8 +1,10 @@
 import asyncio
+import json
 import random
 import re
 import socket
 import warnings
+from collections import Counter
 from collections.abc import AsyncGenerator, Iterator
 from dataclasses import dataclass
 from typing import Any, final
@@ -19,13 +21,16 @@ from litellm import (
 from litellm.types.utils import ModelResponse, ModelResponseStream, StreamingChoices
 from loguru import logger
 
+from karotte.agents.provider_chunks import (
+    install_provider_chunk_taps,
+    tap_provider_chunks,
+)
 from karotte.model_spec import spec_for
 from karotte.providers import (
     TOOL_CALL_REPAIRS,
     ProviderAuth,
     cache_tokens,
     provider_for,
-    proxy_api_base,
     repair_tool_calls,
     service_tier_mode,
     vertex_served_tier,
@@ -39,9 +44,12 @@ from karotte.schemas.transcript import (
     MessageChunkResetEvent,
     TokenUsageEvent,
 )
+from karotte.truncation import truncate_middle
 
 # litellm's success logging for Responses API streams dumps a chat usage dict into ResponseAPIUsage.
 warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
+
+install_provider_chunk_taps()
 
 # Retry configuration for transient LLM errors (overloaded, rate-limited, etc.)
 # 16 retries lead to a maximum wait time of around 10 minutes
@@ -72,7 +80,42 @@ _INVALID_URL_ERRORS = (
     aiohttp.NonHttpUrlClientError,
 )
 
+# How much of the chunks the warning shows. The transcript keeps all of them.
+MAX_LOGGED_PROVIDER_CHUNKS_CHARS = 2000
+
+IMAGE_OMITTED_TEXT = "[image omitted: this model cannot take image input]"
+
 _RETRY_AFTER_BODY_RE = re.compile(r'"retry_after"\s*:\s*(\d+(?:\.\d+)?)')
+
+# How Together and Fireworks (and litellm on Fireworks' behalf) word a 400 for
+# an image sent to a text-only model.
+_IMAGES_REJECTED_RE = re.compile(
+    r"multimodal[ _]not[ _]supported|does not support image inputs", re.IGNORECASE
+)
+
+# How SGLang and vLLM word a 400 for a prompt that, with the requested output,
+# doesn't fit the model's context window.
+_CONTEXT_WINDOW_FULL_RE = re.compile(r"context length", re.IGNORECASE)
+
+
+def _rejects_images(exc: Exception) -> bool:
+    return isinstance(exc, litellm.exceptions.BadRequestError) and bool(
+        _IMAGES_REJECTED_RE.search(str(exc))
+    )
+
+
+def _context_window_full(exc: Exception) -> bool:
+    # litellm maps only some of the ways servers word a full context window to
+    # ContextWindowExceededError; SGLang's "Requested token count exceeds the
+    # model's maximum context length" arrives as a plain 400.
+    return isinstance(exc, litellm.exceptions.ContextWindowExceededError) or (
+        isinstance(exc, litellm.exceptions.BadRequestError)
+        and bool(_CONTEXT_WINDOW_FULL_RE.search(str(exc)))
+    )
+
+
+def _has_reasoning(messages: list[Message]) -> bool:
+    return any(m.role == "assistant" and m.reasoning_content for m in messages)
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -88,6 +131,54 @@ def _retry_limit(exc: Exception) -> int:
     if isinstance(exc, litellm.exceptions.AuthenticationError):
         return AUTH_RETRY_MAX_ATTEMPTS
     return LLM_RETRY_MAX_ATTEMPTS if _is_retryable(exc) else 1
+
+
+# Control tokens as providers decode them into text: `<|...|>` (most open
+# vocabularies), DeepSeek's `<｜...｜>`, and Gemma's `<bos>`, `<eos>`, `<pad>`,
+# `<start_of_*>` and `<end_of_*>`.
+_CONTROL_TOKEN = re.compile(
+    "|".join(
+        (
+            r"<\|[^|<>\s]+\|>",
+            r"<｜[^｜<>\s]+｜>",
+            r"<(?:bos|eos|pad)>",
+            r"<(?:start|end)_of_[a-z_]+>",
+        )
+    )
+)
+
+
+def _reply_text(message: Message) -> str:
+    content = message.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            str(part.get("text") or "")
+            for part in content
+            if part.get("type") == "text"
+        )
+    return ""
+
+
+def _is_only_control_tokens(message: Message) -> bool:
+    """Whether a reply without tool calls is nothing but control tokens,
+    e.g. ``<end_of_image><end_of_image>``."""
+    if message.tool_calls:
+        return False
+    text = _reply_text(message)
+    return bool(text.strip()) and not _CONTROL_TOKEN.sub("", text).strip()
+
+
+def _describe_control_tokens(text: str) -> str:
+    """``text``'s control tokens and how often each occurs, e.g.
+    ``<end_of_image> x168``."""
+    counts = Counter(_CONTROL_TOKEN.findall(text))
+    return ", ".join(f"{token} x{n}" for token, n in counts.most_common())
+
+
+class MalformedReplyError(Exception):
+    """The provider kept returning replies made only of control tokens."""
 
 
 class ModelEndpointUnreachableError(Exception):
@@ -195,18 +286,27 @@ def _tap_traffic_types(stream: CustomStreamWrapper) -> list[str]:
     return seen
 
 
-def _thinking_blocks(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] | None:
-    """The response's thinking blocks, exactly as the provider signed them.
+def _deltas(chunks: list[ModelResponseStream]) -> Iterator[Any]:
+    """Each chunk's delta. The usage chunk that ends a stream has no choice to
+    take one from: litellm sends it with ``choices=[]`` when the request asks
+    for usage, as OpenAI's API does."""
+    return (chunk.choices[0].delta for chunk in chunks if chunk.choices)
 
-    litellm's stream_chunk_builder joins each block's text twice, as the signature
-    chunk repeats the whole block.
-    """
-    blocks = [
-        dict(block)
-        for chunk in chunks
-        for block in getattr(chunk.choices[0].delta, "thinking_blocks", None) or []
-        if block.get("signature") or block.get("type") == "redacted_thinking"
-    ]
+
+def _thinking_blocks(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] | None:
+    """The response's thinking blocks, exactly as the provider signed them."""
+    blocks: list[dict[str, Any]] = []
+    text = ""
+    for delta in _deltas(chunks):
+        for block in getattr(delta, "thinking_blocks", None) or []:
+            if block.get("type") == "redacted_thinking":
+                blocks.append(dict(block))
+                text = ""
+            elif block.get("signature"):
+                blocks.append({**block, "thinking": block.get("thinking") or text})
+                text = ""
+            else:
+                text += block.get("thinking") or ""
     return blocks or None
 
 
@@ -214,8 +314,8 @@ def _reasoning_items(chunks: list[ModelResponseStream]) -> list[dict[str, Any]] 
     """The Responses API reasoning items, which litellm's stream_chunk_builder drops."""
     items = [
         dict(item)
-        for chunk in chunks
-        for item in getattr(chunk.choices[0].delta, "reasoning_items", None) or []
+        for delta in _deltas(chunks)
+        for item in getattr(delta, "reasoning_items", None) or []
     ]
     return items or None
 
@@ -238,6 +338,12 @@ class BuiltinSource:
         # replica, and with it the prompt cache.
         self._escalated = False
         self._service_tier: str | None = None
+        # Sticky for the run, so later turns don't pay for another 400.
+        self._omit_images = False
+        # Messages before this index go without their reasoning: the context
+        # window filled up while they were the whole conversation. Sticky for
+        # the run, so the history the model sees changes once, not every turn.
+        self._reasoning_dropped_before = 0
 
     async def collect(
         self,
@@ -245,8 +351,10 @@ class BuiltinSource:
         tools: list[ChatCompletionToolParam],
     ) -> AsyncGenerator[Event]:
         unreachable_attempts = 0
+        malformed_replies = 0
         for attempt in range(1, LLM_RETRY_MAX_ATTEMPTS + 1):
             chunks: list[ModelResponseStream] = []
+            provider_chunks = tap_provider_chunks()
 
             try:
                 response = await litellm.acompletion(
@@ -257,13 +365,43 @@ class BuiltinSource:
 
                 async for chunk in response:
                     assert isinstance(chunk, ModelResponseStream)
-                    assert isinstance(chunk.choices[0], StreamingChoices)
+                    # Kept for stream_chunk_builder even when it has no
+                    # choice: the usage chunk carries the turn's token counts.
                     chunks.append(chunk)
+                    if not chunk.choices:
+                        continue
+                    assert isinstance(chunk.choices[0], StreamingChoices)
                     yield MessageChunkEvent(
                         delta=Delta(**chunk.choices[0].delta.model_dump())
                     )
 
             except Exception as e:
+                if (
+                    not self._omit_images
+                    and _rejects_images(e)
+                    and attempt < LLM_RETRY_MAX_ATTEMPTS
+                ):
+                    logger.warning(
+                        "{model} does not take image input; replacing images with a note for the rest of the run",
+                        model=self.config.model,
+                    )
+                    self._omit_images = True
+                    yield MessageChunkResetEvent()
+                    continue
+                if (
+                    self._provider.replays_reasoning_content
+                    and _context_window_full(e)
+                    and _has_reasoning(messages[self._reasoning_dropped_before :])
+                    and attempt < LLM_RETRY_MAX_ATTEMPTS
+                ):
+                    logger.warning(
+                        "{model}'s context window is full; leaving out the reasoning of the {n} messages so far",
+                        model=self.config.model,
+                        n=len(messages),
+                    )
+                    self._reasoning_dropped_before = len(messages)
+                    yield MessageChunkResetEvent()
+                    continue
                 if (
                     not self._escalated
                     and service_tier_mode() == "auto"
@@ -321,31 +459,76 @@ class BuiltinSource:
                     message.tool_calls, TOOL_CALL_REPAIRS[name]
                 )
 
-            usage = getattr(full_response, "usage", None)
+            # Not a turn the model took: retry it like a server error, or the
+            # loop would take it as the final answer and end the step.
+            if _is_only_control_tokens(message):
+                malformed_replies += 1
+                tokens = _describe_control_tokens(_reply_text(message))
+                # The provider billed the attempt, so it still counts.
+                if usage_event := self._usage_event(full_response, traffic_types):
+                    yield usage_event
+                if attempt < LLM_RETRY_MAX_ATTEMPTS:
+                    wait = _retry_wait(malformed_replies)
+                    logger.warning(
+                        "Model {model} replied with only control tokens ({tokens}); discarding the reply and retrying (attempt {next} of {max}) after {wait:.1f}s...",
+                        model=self.config.model,
+                        tokens=tokens,
+                        next=attempt + 1,
+                        max=LLM_RETRY_MAX_ATTEMPTS,
+                        wait=wait,
+                    )
+                    yield MessageChunkResetEvent()
+                    await asyncio.sleep(wait)
+                    continue
+                msg = (
+                    f"Model {self.config.model} replied with only control tokens "
+                    f"{malformed_replies} times; last reply: {tokens}"
+                )
+                raise MalformedReplyError(msg)
 
             # litellm normalizes a provider safety refusal (e.g. Claude's native
             # 'refusal' stop_reason) to the OpenAI 'content_filter' finish_reason.
+            # The provider's reason for the block is in its raw chunks.
             finish_reason = choice.finish_reason
+            raw = None
             if finish_reason == "content_filter":
+                if provider_chunks:
+                    raw = {"provider_chunks": list(provider_chunks)}
                 logger.warning(
-                    "Model {model} declined the request (finish_reason=content_filter).",
+                    "Model {model} declined the request (finish_reason=content_filter); provider's last chunks: {chunks}",
                     model=self.config.model,
+                    chunks=truncate_middle(
+                        json.dumps(list(provider_chunks), default=str),
+                        MAX_LOGGED_PROVIDER_CHUNKS_CHARS,
+                    )
+                    if provider_chunks
+                    else "none kept",
                 )
 
-            yield MessageAddedEvent(message=message, finish_reason=finish_reason)
+            yield MessageAddedEvent(
+                message=message, finish_reason=finish_reason, raw=raw
+            )
 
-            if usage:
-                cache_read_tokens, cache_write_tokens = cache_tokens(usage)
-                yield TokenUsageEvent(
-                    input_tokens=usage.prompt_tokens,
-                    output_tokens=usage.completion_tokens,
-                    cache_read_tokens=cache_read_tokens,
-                    cache_write_tokens=cache_write_tokens,
-                    service_tier=vertex_served_tier(traffic_types[-1])
-                    if traffic_types
-                    else self._service_tier,
-                )
+            if usage_event := self._usage_event(full_response, traffic_types):
+                yield usage_event
             return
+
+    def _usage_event(
+        self, response: ModelResponse, traffic_types: list[str]
+    ) -> TokenUsageEvent | None:
+        usage = getattr(response, "usage", None)
+        if not usage:
+            return None
+        cache_read_tokens, cache_write_tokens = cache_tokens(usage)
+        return TokenUsageEvent(
+            input_tokens=usage.prompt_tokens,
+            output_tokens=usage.completion_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+            service_tier=vertex_served_tier(traffic_types[-1])
+            if traffic_types
+            else self._service_tier,
+        )
 
     def get_completion_params(
         self,
@@ -355,11 +538,15 @@ class BuiltinSource:
         serialized_messages = self._serialize_messages(messages)
         spec = self._spec
         self._provider.adapt_messages(spec, serialized_messages)
+        if self._omit_images:
+            serialized_messages = [_without_images(m) for m in serialized_messages]
+        for message in serialized_messages[: self._reasoning_dropped_before]:
+            message["reasoning_content"] = None
 
         completion_params: dict[str, Any] = {
             "stream": True,
             "stream_options": {"include_usage": True},
-            "model": spec.litellm_model,
+            "model": self._provider.chat_model(spec),
             "messages": serialized_messages,
             "tools": tools,
             "tool_choice": "auto" if tools else None,
@@ -381,7 +568,7 @@ class BuiltinSource:
             self._provider.request_params(spec, _provider_auth(self.config))
         )
 
-        if api_base := proxy_api_base(self._provider):
+        if api_base := self._provider.api_base():
             completion_params["api_base"] = api_base
 
         self._provider.apply_prompt_caching(
@@ -402,13 +589,36 @@ class BuiltinSource:
 
     def _serialize_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Serializes transcript messages to dicts."""
-        return [
-            message.model_dump(
+        serialized = []
+        for message in messages:
+            data = message.model_dump(
                 exclude={
                     field
                     for field in ("thinking_blocks", "reasoning_items")
                     if getattr(message, field) is None
                 }
             )
-            for message in messages
-        ]
+            # litellm <1.109 turns "" into a "[System: ...]" line Claude can refuse.
+            content = data["content"]
+            if message.tool_calls and isinstance(content, str) and not content.strip():
+                data["content"] = None
+            serialized.append(data)
+        return serialized
+
+
+def _without_images(message: dict[str, Any]) -> dict[str, Any]:
+    """``message`` with each image part swapped for a text note."""
+    content = message.get("content")
+    if not isinstance(content, list) or not any(
+        isinstance(part, dict) and part.get("type") == "image_url" for part in content
+    ):
+        return message
+    return {
+        **message,
+        "content": [
+            {"type": "text", "text": IMAGE_OMITTED_TEXT}
+            if isinstance(part, dict) and part.get("type") == "image_url"
+            else part
+            for part in content
+        ],
+    }

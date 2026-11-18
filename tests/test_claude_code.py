@@ -15,6 +15,7 @@ from karotte.agents.cli_agent import AGENTS_BIN_DIR
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import (
+    ContextCompactedEvent,
     Event,
     MessageAddedEvent,
     TokenUsageEvent,
@@ -23,6 +24,8 @@ from karotte.schemas.transcript import (
 )
 
 _FIXTURES = Path(__file__).parent / "resources" / "claude_code"
+
+_SELF_HOSTED = "hosted_vllm/Qwen/Qwen3-8B"
 
 
 def _lines(name: str) -> list[str]:
@@ -116,6 +119,11 @@ class TestClaudeCodeAgent:
         assert env["DISABLE_AUTOUPDATER"] == "1"
         assert env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
 
+    def test_mcp_tools_are_listed_upfront(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://proxy:4000/")
+        env = _agent()._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["ENABLE_TOOL_SEARCH"] == "false"
+
     @pytest.mark.asyncio
     async def test_start_without_proxy_forwards_and_withholds_the_key(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -132,6 +140,86 @@ class TestClaudeCodeAgent:
             assert "sk-ant-real" not in env.values()
         finally:
             await agent.stop()
+
+    @pytest.mark.asyncio
+    async def test_a_self_hosted_model_reaches_its_server_through_the_forwarder(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
+        agent = _agent(model=_SELF_HOSTED, model_api_key="server-key")
+        await agent.start(MagicMock())
+        try:
+            forwarder = agent._forwarder  # pyright: ignore[reportPrivateUsage]
+            assert forwarder is not None
+            assert forwarder.upstream == "http://vllm:8000"
+            env = agent._env()  # pyright: ignore[reportPrivateUsage]
+            assert env["ANTHROPIC_BASE_URL"] == forwarder.url
+            assert env["ANTHROPIC_API_KEY"] == PROXY_PLACEHOLDER_KEY
+            argv = agent._argv("x", None)  # pyright: ignore[reportPrivateUsage]
+            assert _value(argv, "--model") == "Qwen/Qwen3-8B"
+        finally:
+            await agent.stop()
+
+    @pytest.mark.asyncio
+    async def test_a_self_hosted_model_without_a_proxy_is_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
+        agent = _agent(model=_SELF_HOSTED)
+        with pytest.raises(ValueError, match="KAROTTE_PROXY_URL"):
+            await agent.start(MagicMock())
+
+    def test_only_a_self_hosted_model_points_the_model_aliases_at_itself(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        monkeypatch.delenv("ANTHROPIC_DEFAULT_HAIKU_MODEL", raising=False)
+        hosted = _agent(model=_SELF_HOSTED)._env()  # pyright: ignore[reportPrivateUsage]
+        claude = _agent()._env()  # pyright: ignore[reportPrivateUsage]
+        assert hosted["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "Qwen/Qwen3-8B"
+        assert hosted["CLAUDE_CODE_SUBAGENT_MODEL"] == "Qwen/Qwen3-8B"
+        assert "ANTHROPIC_DEFAULT_HAIKU_MODEL" not in claude
+
+    def test_only_a_self_hosted_model_is_called_without_a_thinking_request(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        monkeypatch.delenv("MAX_THINKING_TOKENS", raising=False)
+        hosted = _agent(model=_SELF_HOSTED)._env()  # pyright: ignore[reportPrivateUsage]
+        claude = _agent()._env()  # pyright: ignore[reportPrivateUsage]
+        assert hosted["MAX_THINKING_TOKENS"] == "0"
+        assert "MAX_THINKING_TOKENS" not in claude
+
+    def test_only_a_self_hosted_model_is_called_without_an_effort(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        monkeypatch.delenv("CLAUDE_CODE_EFFORT_LEVEL", raising=False)
+        hosted = _agent(model=_SELF_HOSTED)
+        claude = _agent(reasoning_effort="max")
+        assert hosted._env()["CLAUDE_CODE_EFFORT_LEVEL"] == "unset"  # pyright: ignore[reportPrivateUsage]
+        assert "--effort" not in hosted._argv("x", None)  # pyright: ignore[reportPrivateUsage]
+        assert "CLAUDE_CODE_EFFORT_LEVEL" not in claude._env()  # pyright: ignore[reportPrivateUsage]
+
+    def test_reports_the_error_claude_ended_the_step_with(self):
+        agent = _agent()
+        parse = agent._line_parser("hi")  # pyright: ignore[reportPrivateUsage]
+        assert agent._reported_error() is None  # pyright: ignore[reportPrivateUsage]
+        result = {
+            "type": "result",
+            "subtype": "success",
+            "is_error": True,
+            "result": "API Error: 400 thinking is not supported",
+        }
+        _ = list(parse(json.dumps(result), 0))
+        assert (
+            agent._reported_error()  # pyright: ignore[reportPrivateUsage]
+            == "API Error: 400 thinking is not supported"
+        )
 
     def test_end_of_output_keeps_the_unfinished_response_and_its_results(self):
         agent = _agent()
@@ -237,6 +325,44 @@ class TestParseStream:
         part = tool_messages[1].message.content[0]  # pyright: ignore[reportOptionalSubscript]
         assert part["image_url"]["url"].startswith("data:image/png;base64,iVBOR")  # pyright: ignore[reportArgumentType]
 
+    def test_a_result_with_text_and_an_image_keeps_both(self):
+        record = {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_1",
+                        "content": [
+                            {"type": "text", "text": "caption"},
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": "QUJD",
+                                },
+                            },
+                        ],
+                    }
+                ],
+            },
+        }
+        events = list(parse_stream([json.dumps(record)]))
+        (completed,) = [e for e in events if isinstance(e, ToolCallCompletedEvent)]
+        assert [
+            b.model_dump(include={"type", "data"}) for b in completed.result.content
+        ] == [
+            {"type": "text"},
+            {"type": "image", "data": ""},
+        ]
+        (message,) = _messages(events, "tool")
+        assert message.message.content == [
+            {"type": "text", "text": "caption"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,QUJD"}},
+        ]
+
     def test_usage_is_reported_once_per_response_and_adds_up_to_claudes_total(
         self,
     ):
@@ -273,6 +399,73 @@ class TestParseStream:
         assert "7 × 11 × 13" in first.message.reasoning_content
         assert all(m.message.reasoning_content is None for m in rest)
 
+    def test_compaction_comes_before_the_summary(self):
+        lines = [
+            _COMPACTING,
+            _COMPACTED,
+            _COMPACT_BOUNDARY,
+            _SUMMARY,
+        ]
+
+        events = list(parse_stream(lines))
+
+        assert [type(e) for e in events] == [ContextCompactedEvent, MessageAddedEvent]
+        summary = events[1]
+        assert isinstance(summary, MessageAddedEvent)
+        assert summary.message.role == "user"
+        assert str(summary.message.content).startswith("This session is being")
+
+    def test_compaction_mid_response_follows_the_held_results(self):
+        lines = [
+            _stream_event({"type": "message_start", "message": {"usage": {}}}),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "toolu_1",
+                                "name": "Bash",
+                                "input": {"command": "ls"},
+                            }
+                        ]
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "toolu_1",
+                                "content": "a.txt",
+                            }
+                        ]
+                    },
+                }
+            ),
+            _COMPACTING,
+            _COMPACT_BOUNDARY,
+            _SUMMARY,
+            _stream_event({"type": "message_stop"}),
+        ]
+
+        events = list(parse_stream(lines))
+
+        assert [type(e) for e in events] == [
+            MessageAddedEvent,
+            TokenUsageEvent,
+            ToolCallStartedEvent,
+            ToolCallCompletedEvent,
+            MessageAddedEvent,
+            ContextCompactedEvent,
+            MessageAddedEvent,
+        ]
+        assert [e.message.role for e in _messages(events, "user")] == ["user"]
+
     def test_skips_subagent_and_malformed_lines(self):
         subagent = json.dumps(
             {
@@ -282,3 +475,62 @@ class TestParseStream:
             }
         )
         assert list(parse_stream(["not json", "[1]", subagent, ""])) == []
+
+
+_COMPACTING = json.dumps(
+    {"type": "system", "subtype": "status", "status": "compacting", "session_id": "s"}
+)
+_COMPACTED = json.dumps(
+    {
+        "type": "system",
+        "subtype": "status",
+        "status": None,
+        "compact_result": "success",
+        "session_id": "s",
+    }
+)
+_COMPACT_BOUNDARY = json.dumps(
+    {
+        "type": "system",
+        "subtype": "compact_boundary",
+        "uuid": "1f6a",
+        "compact_metadata": {
+            "trigger": "auto",
+            "pre_tokens": 168412,
+            "post_tokens": 11898,
+            "cumulative_dropped_tokens": 156514,
+            "duration_ms": 312006,
+            "preserved_segment": {
+                "head_uuid": "7eb1",
+                "anchor_uuid": "2754",
+                "tail_uuid": "e4bb",
+            },
+            "preserved_messages": {
+                "anchor_uuid": "2754",
+                "uuids": ["7eb1", "e4bb"],
+                "all_uuids": ["7eb1", "e4bb"],
+            },
+        },
+        "logical_parent_uuid": "e4bb",
+        "session_id": "s",
+    }
+)
+_SUMMARY = json.dumps(
+    {
+        "type": "user",
+        "isSynthetic": True,
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "This session is being continued. Summary: ...",
+                }
+            ],
+        },
+    }
+)
+
+
+def _stream_event(event: dict[str, object]) -> str:
+    return json.dumps({"type": "stream_event", "event": event})

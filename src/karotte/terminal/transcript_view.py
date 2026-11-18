@@ -8,6 +8,7 @@ from textual.widgets import RichLog, Static, TextArea
 
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
+    ContextCompactedEvent,
     ErrorEvent,
     Event,
     MessageAddedEvent,
@@ -22,6 +23,7 @@ from karotte.schemas.transcript import (
     TokenUsageEvent,
     ToolCallCompletedEvent,
     ToolCallStartedEvent,
+    UnknownEvent,
 )
 from karotte.transcript_markdown import (
     convert_error_event_to_markdown,
@@ -463,6 +465,8 @@ class TranscriptView(VerticalScroll):
                 markdown = convert_scoring_event_to_markdown(event)
             case ErrorEvent():
                 markdown = convert_error_event_to_markdown(event)
+            case ContextCompactedEvent():
+                markdown = "🗜️ **Context compacted**"
             case (
                 TaskCompletedEvent()
                 | MessageChunkEvent()
@@ -472,6 +476,7 @@ class TranscriptView(VerticalScroll):
                 | StepStartedEvent()
                 | AnswersSubmittedEvent()
                 | TokenUsageEvent()
+                | UnknownEvent()
             ):
                 return ""  # Skip these events
 

@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
-from pydantic import BaseModel, Field, SerializeAsAny
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializationInfo,
+    SerializeAsAny,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from . import RunStatus
 from ._import_mcp_types import get_mcp_type
 from .chat import ChatCompletionMessageToolCall, Delta, Message
+from .evaluation_run_config import AgentConfig
 from .scoring import Scoring
 
 if TYPE_CHECKING:
@@ -27,6 +37,13 @@ class MetadataEvent(BaseEvent):
 
     metadata: dict[str, Any]
 
+    @model_validator(mode="before")
+    @classmethod
+    def _untyped_only(cls, data: Any) -> Any:
+        if cls is MetadataEvent and isinstance(data, dict) and "type" in data:
+            raise ValueError("a typed event is not a bare MetadataEvent")
+        return data
+
 
 class TaskStartedEvent(BaseEvent):
     type: Literal["task_started"] = "task_started"
@@ -39,6 +56,7 @@ class TaskStartedEvent(BaseEvent):
     temperature: float | None = None
     # The agent harness that drove the model, e.g. ``builtin``.
     agent: str | None = None
+    agent_config: AgentConfig | None = None
     use_hints: bool | None = None
 
 
@@ -76,7 +94,9 @@ class MessageAddedEvent(BaseEvent):
     raw: dict[str, Any] | None = None
     """Fields of the agent-native record this message was derived from that
     have no place in `message` (e.g. reasoning state, sub-agent markers).
-    Set by transcript adapters; the full native log is saved as an artifact."""
+    Set by transcript adapters; the full native log is saved as an artifact.
+    For a blocked turn, `provider_chunks` holds the provider's last raw stream
+    chunks."""
 
 
 class ToolCallStartedEvent(BaseEvent):
@@ -110,6 +130,27 @@ class ToolCallCompletedEvent(BaseEvent):
     type: Literal["tool_call_completed"] = "tool_call_completed"
     tool_call_id: str
     result: CallToolResult
+
+    @field_validator("result")
+    @classmethod
+    def _drop_server_info_stamp(cls, result: CallToolResult) -> CallToolResult:
+        """The MCP client stamps every result with the server's name and version; transcripts don't keep it."""
+        key = get_mcp_type("SERVER_INFO_META_KEY")
+        if not result.meta or key not in result.meta:
+            return result
+        meta = {k: v for k, v in result.meta.items() if k != key}
+        return result.model_copy(update={"meta": meta or None})
+
+    @field_serializer("result")
+    def _wire_keys(self, result: CallToolResult, info: SerializationInfo) -> Any:
+        return result.model_dump(
+            mode=info.mode,
+            by_alias=True,
+            exclude_unset=info.exclude_unset,
+            exclude_defaults=info.exclude_defaults,
+            exclude_none=info.exclude_none,
+            round_trip=info.round_trip,
+        )
 
 
 class AnswersSubmittedEvent(BaseEvent):
@@ -155,6 +196,27 @@ class TokenUsageEvent(BaseEvent):
     ``trafficType``), else the tier asked for; None is the provider's default tier."""
 
 
+class ContextCompactedEvent(BaseEvent):
+    """The agent compacted its context, replacing earlier messages with a summary."""
+
+    type: Literal["context_compacted"] = "context_compacted"
+
+
+class UnknownEvent(BaseEvent):
+    """An event type this version doesn't know, kept as-is so newer transcripts still load."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow")
+
+    type: str
+
+    @field_validator("type")
+    @classmethod
+    def _not_a_known_type(cls, value: str) -> str:
+        if value in _KNOWN_EVENT_TYPES:
+            raise ValueError(f"{value!r} is a known event type")
+        return value
+
+
 Event = (
     TaskStartedEvent
     | StepStartedEvent
@@ -168,9 +230,18 @@ Event = (
     | AnswersSubmittedEvent
     | ScoringEvent
     | ErrorEvent
+    | TaskPreHookCompletedEvent
     | MetadataEvent
     | TokenUsageEvent
+    | ContextCompactedEvent
+    | UnknownEvent
 )
+
+_KNOWN_EVENT_TYPES = {
+    event.model_fields["type"].default
+    for event in get_args(Event)
+    if "type" in event.model_fields and event is not UnknownEvent
+}
 
 
 class Transcript(BaseModel):

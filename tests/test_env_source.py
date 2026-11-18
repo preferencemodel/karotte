@@ -60,6 +60,16 @@ def repo(tmp_path: Path) -> Path:
     return path
 
 
+@pytest.fixture
+def upload_pack(tmp_path: Path) -> tuple[str, Path]:
+    """A git option that runs a program, and the file that program creates."""
+    marker = tmp_path / "upload-pack-ran"
+    program = tmp_path / "upload-pack"
+    program.write_text(f'#!/bin/sh\ntouch {marker}\nexec git-upload-pack "$@"\n')
+    program.chmod(0o755)
+    return f"--upload-pack={program}", marker
+
+
 class TestParseSource:
     def test_an_existing_folder(self, tmp_path: Path):
         assert parse_source(str(tmp_path)) == tmp_path
@@ -126,6 +136,15 @@ class TestParseSource:
     )
     def test_a_pip_style_git_url(self, source: str, expected: GitSource):
         assert parse_source(source) == expected
+
+    @pytest.mark.parametrize(
+        "source",
+        ["git+--upload-pack=x", "git+file:///srv/repo@--upload-pack=x"],
+        ids=["url", "ref"],
+    )
+    def test_a_url_or_ref_that_looks_like_a_git_option(self, source: str):
+        with pytest.raises(SourceError, match="cannot start with '-'"):
+            parse_source(source)
 
 
 class TestSplitTreePath:
@@ -201,6 +220,24 @@ class TestFetch:
     def test_a_missing_ref(self, repo: Path, tmp_path: Path):
         with pytest.raises(SourceError, match="nope"):
             fetch(f"file://{repo}", "nope", "", tmp_path / "cache")
+
+    def test_a_ref_that_looks_like_a_git_option_runs_nothing(
+        self, repo: Path, tmp_path: Path, upload_pack: tuple[str, Path]
+    ):
+        option, ran = upload_pack
+        with pytest.raises(SourceError):
+            fetch(f"file://{repo}", option, "", tmp_path / "cache")
+
+        assert not ran.exists()
+
+    def test_a_url_that_looks_like_a_git_option_runs_nothing(
+        self, tmp_path: Path, upload_pack: tuple[str, Path]
+    ):
+        option, ran = upload_pack
+        with pytest.raises(SourceError):
+            fetch(option, None, "", tmp_path / "cache")
+
+        assert not ran.exists()
 
     def test_leaves_no_partial_checkouts(self, repo: Path, tmp_path: Path):
         cache = tmp_path / "cache"
@@ -357,6 +394,22 @@ class TestReachableRemote:
 
         assert url == f"file://{repo}"
         assert refs == {"main", "feat/x", "v1"}
+
+    def test_a_url_that_looks_like_a_git_option_runs_nothing(
+        self,
+        repo: Path,
+        tmp_path: Path,
+        upload_pack: tuple[str, Path],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        # Inside a clone, a bare `git ls-remote` lists the clone's origin.
+        _git(tmp_path, "clone", "-q", str(repo), "clone")
+        monkeypatch.chdir(tmp_path / "clone")
+        option, ran = upload_pack
+        with pytest.raises(SourceError):
+            reachable_remote(option)
+
+        assert not ran.exists()
 
     def test_github_falls_back_to_ssh(self):
         def refs(url: str) -> set[str]:

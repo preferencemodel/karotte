@@ -18,9 +18,14 @@ class MyStep(Step):
         save_artifact(self.config, Path("/some/path/report.md"))
 ```
 
-A directory is copied with everything in it.
+A directory is copied with everything in it, except symlinks and special files.
 A path that doesn't exist is skipped with a warning.
 With `save_artifacts: false` in the run config, `save_artifact()` does nothing.
+
+Since the student may have written the path, `save_artifact()` never follows a symlink anywhere in it or inside it.
+That includes the folders above it, so pass a resolved path: on macOS, `/tmp` and `/var` are symlinks.
+It skips files over 1 GB and stops an artifact at 4 GB or 10,000 entries.
+Problems like these are logged as warnings and never fail the run.
 
 `post_hook` runs after the step is scored.
 If your `pre_scoring_hook` or judge deletes student files, save them before that.
@@ -28,8 +33,8 @@ The `default` template's `collect_submission()` already saves the submissions it
 
 !!! warning
 
-    `save_artifact` doesn't validate what it copies.
-    Only call it on files you have "taken into custody" via something like `collect_submission()`.
+    `save_artifact` doesn't stop the student's processes, so a file can still change while it's copied.
+    To save exactly what you grade, call it on the copies `collect_submission()` returns.
     See [Scoring](scoring.md).
 
 ### Where artifacts go

@@ -121,7 +121,7 @@ class TestCheckWithEnvironmentTools:
         (env_tools_dir / "needy.py").write_text('''
 from typing import final
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from karotte import ToolBase
 from pydantic import BaseModel, Field
 

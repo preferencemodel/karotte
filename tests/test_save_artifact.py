@@ -1,4 +1,5 @@
 import gzip
+import json
 import os
 import sys
 from pathlib import Path
@@ -447,9 +448,8 @@ class TestSaveArtifacts:
         assert artifact_dir.exists()
         # Directory is saved as subdirectory
         subdir = artifact_dir / "dir_with_symlink"
-        # shutil.copytree copies symlinks as symlinks by default
         assert (subdir / "real_file.txt").read_text() == "real content"
-        assert (subdir / "link_file.txt").exists()
+        assert not os.path.lexists(subdir / "link_file.txt")
 
     def test_handles_binary_files(
         self,
@@ -1015,3 +1015,261 @@ class TestArtifactUpload:
             "nested/file1.txt",
             "nested/subdir/file2.txt",
         }
+
+
+def _local_artifacts(tmp_path: Path, config: EvaluationRunConfig) -> Path:
+    return tmp_path / "out" / f"{config.run_id}_artifacts"
+
+
+class TestUntrustedArtifacts:
+    @pytest.fixture(autouse=True)
+    def _chdir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.chdir(tmp_path)
+
+    @pytest.fixture
+    def upload_config(
+        self,
+        sample_config: EvaluationRunConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> EvaluationRunConfig:
+        token_file = tmp_path / "service-account-token"
+        token_file.write_text("fake-token")
+        monkeypatch.setenv("KAROTTE_BACKEND_TOKEN_PATH", str(token_file))
+        return sample_config.model_copy(update={"backend_uri": "http://localhost:8000"})
+
+    def test_does_not_follow_a_symlinked_file(
+        self, sample_config: EvaluationRunConfig, tmp_path: Path
+    ):
+        secret = tmp_path / "secret"
+        secret.write_text("root only")
+        link = tmp_path / "approach.md"
+        link.symlink_to(secret)
+
+        save_artifact(sample_config, link)
+
+        assert not (_local_artifacts(tmp_path, sample_config) / "approach.md").exists()
+
+    def test_does_not_follow_a_symlinked_directory(
+        self, sample_config: EvaluationRunConfig, tmp_path: Path
+    ):
+        real = tmp_path / "real"
+        real.mkdir()
+        (real / "secret").write_text("root only")
+        link = tmp_path / "data"
+        link.symlink_to(real)
+
+        save_artifact(sample_config, link)
+
+        assert not (_local_artifacts(tmp_path, sample_config) / "data").exists()
+
+    def test_does_not_read_a_fifo(
+        self, sample_config: EvaluationRunConfig, tmp_path: Path
+    ):
+        fifo = tmp_path / "approach.md"
+        os.mkfifo(fifo)
+
+        save_artifact(sample_config, fifo)
+
+        assert not (_local_artifacts(tmp_path, sample_config) / "approach.md").exists()
+
+    def test_skips_symlinks_and_special_files_inside_a_directory(
+        self, sample_config: EvaluationRunConfig, tmp_path: Path
+    ):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret").write_text("root only")
+        src = tmp_path / "logs"
+        src.mkdir()
+        (src / "ok.txt").write_text("ok")
+        (src / "file_link").symlink_to(outside / "secret")
+        (src / "dir_link").symlink_to(outside)
+        os.mkfifo(src / "pipe")
+
+        save_artifact(sample_config, src)
+
+        saved = _local_artifacts(tmp_path, sample_config) / "logs"
+        assert sorted(p.name for p in saved.iterdir()) == ["ok.txt"]
+
+    def test_skips_a_file_over_the_size_limit(
+        self,
+        sample_config: EvaluationRunConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(save_artifacts_module, "_MAX_FILE_BYTES", 10)
+        src = tmp_path / "logs"
+        src.mkdir()
+        (src / "small.txt").write_text("small")
+        (src / "big.txt").write_text("x" * 11)
+
+        save_artifact(sample_config, src)
+
+        saved = _local_artifacts(tmp_path, sample_config) / "logs"
+        assert sorted(p.name for p in saved.iterdir()) == ["small.txt"]
+
+    def test_stops_at_the_total_size_limit(
+        self,
+        sample_config: EvaluationRunConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(save_artifacts_module, "_MAX_TOTAL_BYTES", 10)
+        src = tmp_path / "logs"
+        src.mkdir()
+        for name in ("a", "b", "c"):
+            (src / name).write_text("x" * 4)
+
+        save_artifact(sample_config, src)
+
+        saved = _local_artifacts(tmp_path, sample_config) / "logs"
+        assert sum(p.stat().st_size for p in saved.iterdir()) <= 10
+
+    def test_refuses_a_directory_with_too_many_entries(
+        self,
+        sample_config: EvaluationRunConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(save_artifacts_module, "_MAX_ENTRIES", 2)
+        src = tmp_path / "logs"
+        src.mkdir()
+        for name in ("a", "b", "c"):
+            (src / name).write_text("x")
+
+        save_artifact(sample_config, src)
+
+        assert not (_local_artifacts(tmp_path, sample_config) / "logs").exists()
+
+    def test_drops_setuid_and_setgid_bits(
+        self, sample_config: EvaluationRunConfig, tmp_path: Path
+    ):
+        src = tmp_path / "tool"
+        src.write_text("#!/bin/sh\n")
+        src.chmod(0o6755)
+
+        save_artifact(sample_config, src)
+
+        saved = _local_artifacts(tmp_path, sample_config) / "tool"
+        assert saved.stat().st_mode & 0o7777 == 0o755
+
+    def test_saving_again_overwrites_the_earlier_copy(
+        self, sample_config: EvaluationRunConfig, tmp_path: Path
+    ):
+        src = tmp_path / "approach.md"
+        src.write_text("step 1, a longer text")
+        save_artifact(sample_config, src)
+        src.write_text("step 2")
+
+        save_artifact(sample_config, src)
+
+        saved = _local_artifacts(tmp_path, sample_config) / "approach.md"
+        assert saved.read_text() == "step 2"
+
+    def test_a_destination_error_does_not_raise(
+        self,
+        sample_config: EvaluationRunConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        not_a_dir = tmp_path / "not_a_dir"
+        not_a_dir.write_text("")
+        monkeypatch.setenv("KAROTTE_ARTIFACT_DIR", str(not_a_dir))
+        src = tmp_path / "approach.md"
+        src.write_text("content")
+
+        save_artifact(sample_config, src)
+
+    def test_upload_does_not_follow_a_symlinked_file(
+        self,
+        upload_config: EvaluationRunConfig,
+        tmp_path: Path,
+        httpx_mock: HTTPXMock,
+    ):
+        secret = tmp_path / "secret"
+        secret.write_text("root only")
+        link = tmp_path / "approach.md"
+        link.symlink_to(secret)
+
+        save_artifact(upload_config, link)
+
+        assert httpx_mock.get_requests() == []
+
+    def test_upload_skips_symlinks_and_special_files_inside_a_directory(
+        self,
+        upload_config: EvaluationRunConfig,
+        tmp_path: Path,
+        httpx_mock: HTTPXMock,
+    ):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret").write_text("root only")
+        src = tmp_path / "logs"
+        src.mkdir()
+        (src / "ok.txt").write_text("ok")
+        (src / "file_link").symlink_to(outside / "secret")
+        (src / "dir_link").symlink_to(outside)
+        os.mkfifo(src / "pipe")
+        httpx_mock.add_response(
+            method="POST",
+            url="http://localhost:8000/api/artifacts/presign",
+            json={"presigned_urls": {"logs/ok.txt": "https://storage.example/ok"}},
+        )
+        httpx_mock.add_response(method="PUT", url="https://storage.example/ok")
+
+        save_artifact(upload_config, src)
+
+        presign, put = httpx_mock.get_requests()
+        assert json.loads(presign.content)["artifact_paths"] == ["logs/ok.txt"]
+        assert gzip.decompress(put.content) == b"ok"
+
+    def test_upload_skips_a_file_over_the_size_limit(
+        self,
+        upload_config: EvaluationRunConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        httpx_mock: HTTPXMock,
+    ):
+        monkeypatch.setattr(save_artifacts_module, "_MAX_FILE_BYTES", 10)
+        src = tmp_path / "big.txt"
+        src.write_text("x" * 11)
+
+        save_artifact(upload_config, src)
+
+        assert httpx_mock.get_requests() == []
+
+    @pytest.mark.parametrize("is_dir", [False, True])
+    def test_does_not_follow_a_symlinked_parent_directory(
+        self, sample_config: EvaluationRunConfig, tmp_path: Path, is_dir: bool
+    ):
+        secret_dir = tmp_path / "secret_dir"
+        secret_dir.mkdir()
+        if is_dir:
+            (secret_dir / "report").mkdir()
+            (secret_dir / "report" / "secret").write_text("root only")
+        else:
+            (secret_dir / "report").write_text("root only")
+        work = tmp_path / "work"
+        work.mkdir()
+        (work / "output").symlink_to(secret_dir)
+
+        save_artifact(sample_config, work / "output" / "report")
+
+        assert not (_local_artifacts(tmp_path, sample_config) / "report").exists()
+
+    def test_upload_does_not_follow_a_symlinked_parent_directory(
+        self,
+        upload_config: EvaluationRunConfig,
+        tmp_path: Path,
+        httpx_mock: HTTPXMock,
+    ):
+        secret_dir = tmp_path / "secret_dir"
+        secret_dir.mkdir()
+        (secret_dir / "report").write_text("root only")
+        work = tmp_path / "work"
+        work.mkdir()
+        (work / "output").symlink_to(secret_dir)
+
+        save_artifact(upload_config, work / "output" / "report")
+
+        assert httpx_mock.get_requests() == []

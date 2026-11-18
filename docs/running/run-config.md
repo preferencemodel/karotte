@@ -24,13 +24,15 @@ The run gets a random `run_id`, and `transcript_file` defaults to `out/transcrip
 | -------------------- | ------------------ |
 | `--task`             | `task_id`          |
 | `--agent`            | `agent`            |
+| `--agent-env`        | `agent_config.env` |
 | `--model`            | `model`            |
 | `--model-api-key`    | `model_api_key`    |
 | `--reasoning-effort` | `reasoning_effort` |
 | `--temperature`      | `temperature`      |
 | `--transcript-file`  | `transcript_file`  |
 
-With `--config`, the flags override the config's fields, so one config can be run against several models:
+With `--config`, the flags override the config's fields, so one config can be run against several models.
+`--agent-env NAME=VALUE` is the exception: it's repeatable, and each one adds a variable to the config's `agent_config.env`, replacing one of the same name.
 
 ```sh
 uv run karotte run --config run_config.json --model openai/gpt-5.5
@@ -147,6 +149,17 @@ Providers don't agree on what the levels are called or how many there are, so Ka
 The run config is rejected if it's set for the `external` agent, for a CLI agent that can't send one, or for a model that takes no temperature, such as Claude Opus 5.
 Unset, Karotte sends none and the agent or provider picks.
 
+## Reasoning history
+
+A self-hosted model (`hosted_vllm/...`) is sent the reasoning of its earlier turns, as Claude, OpenAI and xAI models are sent theirs.
+Whether the model sees it is up to its chat template.
+litellm's `hosted_vllm` route removes the reasoning from every assistant message, so the builtin agent calls the same server through litellm's generic OpenAI-compatible route instead.
+The run needs `--proxy` pointing at the server, or litellm's `HOSTED_VLLM_API_BASE`.
+
+The reasoning fills the context window faster.
+When the server refuses a request because the window is full, Karotte leaves out the reasoning of every turn so far, retries, and goes on sending the reasoning of later turns.
+If the request still doesn't fit, the run fails.
+
 ## Limits
 
 Use these fields to limit how much work the student can do:
@@ -180,13 +193,13 @@ A counter has no effect unless its limit is set.
 
 Agents that run a step in their own process can only enforce the limits their CLI supports.
 
-| Limit                              | `builtin`                          | `external` | CLI agents                                                                                    |
-| ---------------------------------- | ---------------------------------- | ---------- | --------------------------------------------------------------------------------------------- |
-| `turn_limit`                       | Yes                                | Yes        | Per step, through the CLI's `--max-turns`; `codex` and `agy` have none, so Karotte rejects it |
-| `step_time_limit_seconds`          | Yes                                | Yes        | Yes, by killing the CLI's processes                                                           |
-| `inject_time_remaining_counter`    | Yes                                | Yes        | No                                                                                            |
-| `step_context_window_limit`        | Yes, if the provider reports usage | No         | No                                                                                            |
-| `inject_context_remaining_counter` | Yes, if the provider reports usage | No[^ext]   | No                                                                                            |
+| Limit                              | `builtin`                          | `external` | CLI agents                                                                                                 |
+| ---------------------------------- | ---------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
+| `turn_limit`                       | Yes                                | Yes        | Per step, through the CLI's `--max-turns`; `codex`, `agy` and `muse-code` have none, so Karotte rejects it |
+| `step_time_limit_seconds`          | Yes                                | Yes        | Yes, by killing the CLI's processes                                                                        |
+| `inject_time_remaining_counter`    | Yes                                | Yes        | No                                                                                                         |
+| `step_context_window_limit`        | Yes, if the provider reports usage | No         | No                                                                                                         |
+| `inject_context_remaining_counter` | Yes, if the provider reports usage | No[^ext]   | No                                                                                                         |
 
 [^ext]: The external agent doesn't report token usage, so its context counter, if on, always shows the full limit.
 
@@ -196,11 +209,11 @@ The agent produces the student's messages and tool calls for each step.
 Don't confuse it with the model: `model` picks which LLM answers, `agent` picks the harness that calls it.
 Whichever agent you use, Karotte still runs the task's hooks, judges and artifacts.
 
-| Agent      | What it does                                                                                                                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                                                     |
-| `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).                                    |
-| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe`, `grok-build`, `claude-code`, `codex` or `agy`. |
+| Agent      | What it does                                                                                                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `builtin`  | The default. Karotte calls the model through litellm, streams its responses, retries failed calls and runs the tool calls.                                                                  |
+| `external` | A backend sends each of the model's messages, and Karotte runs the tool calls. Needs `backend_uri`; see [Backend](../extending/backend.md).                                                 |
+| CLI agents | A coding agent's own CLI, installed in the image, works on each step as the student and calls the tools itself: `mistral-vibe`, `grok-build`, `claude-code`, `codex`, `agy` or `muse-code`. |
 
 Set `agent` in the run config:
 
@@ -245,20 +258,43 @@ CLI agents differ from `builtin` in a few ways:
 - They run as the student and call the tool server directly.
   If they bring their own tools, those replace the task's tools that do the same job; their shell replaces `bash`, for example.
 - They send their own system prompt instead of the task's.
-- `reasoning_effort` isn't applied, except by `grok-build`, `claude-code`, `codex` and `agy`.
+- `reasoning_effort` isn't applied, except by `grok-build`, `claude-code`, `codex`, `agy` and `muse-code`.
 - The student's firewall only lets them reach localhost and the model proxy.
   Without a proxy (no `--proxy` and no plugin default), Karotte listens on a local port and forwards the agent's model calls from there to the provider, adding the API key itself.
   The agent gets a placeholder key, so the real one never reaches the student.
 - `mistral-vibe` sends its calls to `<proxy>/v1` as an OpenAI-compatible endpoint, or through that forwarder to Mistral's API when there's no proxy.
   `grok-build` does the same with the proxy, or goes through the forwarder to xAI's API without one.
   `claude-code` sends Anthropic-style calls to `<proxy>/v1/messages`, or through the forwarder to Anthropic's API.
+  When the run has an API key, `claude-code` reaches the proxy through the forwarder too, so the key still never reaches the student.
   `codex` sends OpenAI Responses calls to `<proxy>/v1/responses`, or through the forwarder to OpenAI's API.
   `agy` sends Gemini API calls to `<proxy>/v1beta/models/<model>`.
   Without a proxy, `gemini/` models go through the forwarder to Google's Gemini API, and `vertex_ai/` models go through it to Vertex AI.
+  `muse-code` always goes through the forwarder, to `<proxy>/v1/responses` or to Meta's API.
+
+`agent_config.env` sets environment variables for the CLI agent's process:
+
+```json
+{
+    "agent": "claude-code",
+    "agent_config": {
+        "env": {
+            "BASH_DEFAULT_TIMEOUT_MS": "3600000"
+        }
+    }
+}
+```
+
+- Values must be strings.
+- A variable Karotte sets itself, such as `HOME`, `PATH`, the API key or `ANTHROPIC_BASE_URL` for `claude-code`, can't be set; the run fails before it starts, with an error naming it.
+- The student can read these variables, so don't put secrets in them.
+  The transcript records them too, in its `task_started` event.
+- `builtin` and `external` run no process of their own, so a run config that sets `env` for them is rejected.
+  A `use_fake_model` run is the exception: it accepts `env` and ignores it.
 
 `grok-build` specifics:
 
 - All steps of a run share one Grok session, so later steps see the earlier conversation.
+- A step ends when the model's turn ends. Grok runs with `--no-wait-for-background`, so background jobs still running then don't wake the model for more turns.
 - Grok doesn't list MCP tools to the model directly. The model finds the task's tools with `search_tool` and calls them through `use_tool` (as `karotte__<tool>`), and the transcript records those calls as `use_tool`.
 - Grok's web search, image editing, feedback and ask-the-user tools are turned off, along with its telemetry and update checks.
 - It sends `temperature` and `reasoning_effort` when the run config sets them.
@@ -266,11 +302,19 @@ CLI agents differ from `builtin` in a few ways:
 `claude-code` specifics:
 
 - All steps of a run share one Claude Code session, so later steps see the earlier conversation.
+- It runs Anthropic models, and models on a server you run that serves Anthropic's `/v1/messages` API, as vLLM and SGLang do.
+  Name such a model `hosted_vllm/<the server's name for it>` and point `--proxy` at the server.
+  (`hosted_vllm` is litellm's prefix for any self-hosted OpenAI-compatible server, not only vLLM.)
+- On a `hosted_vllm` model, Claude Code's model aliases (`haiku`, `sonnet`, `opus`, `fable`) and the models it picks for background calls and subagents all name that model, since the server has no Claude models.
 - The model sees the task's tools as `mcp__karotte__<tool>`, and the transcript records them under that name.
 - Claude Code's web search, web fetch and ask-the-user tools are turned off, along with its telemetry, error reporting and update checks.
 - It sends `reasoning_effort` when the run config sets it.
   It can't send `temperature`, so a run config that sets it is rejected.
-- The transcript's reasoning is Anthropic's summary of the model's thinking; the raw thinking isn't available.
+- On an Anthropic model, the transcript's reasoning is Anthropic's summary of the model's thinking; the raw thinking isn't available.
+- On a `hosted_vllm` model, Claude Code doesn't ask for thinking, since SGLang refuses that request from a server without a reasoning parser.
+  Whether the model thinks is up to its chat template; a Qwen3.5+ model thinks by default.
+- On a `hosted_vllm` model, Claude Code doesn't send a reasoning effort either.
+  SGLang hands it to the model's chat template, and some templates refuse efforts they don't define (Qwen3.8 takes only `xhigh`, `medium` and `low`), so the template's own default applies.
 
 `codex` specifics:
 
@@ -306,6 +350,23 @@ CLI agents differ from `builtin` in a few ways:
   It can't send `temperature` or stop at `turn_limit`, so a run config that sets either is rejected.
 - The transcript has no reasoning, because agy doesn't output it.
   Each model response's token usage counts thinking tokens as output.
+
+`muse-code` specifics:
+
+- All steps of a run share one Muse Code session, so later steps see the earlier conversation.
+- It runs Meta's models, such as `meta/muse-spark-1.3`.
+- Muse Code asks for its list of models before its first call, and only Meta's API serves that list.
+  The forwarder answers it with the run's model, so Muse Code works through a proxy too.
+- Its `exec --json` output leaves out tool arguments and per-call token usage, so Karotte reads Muse Code's session log instead.
+- Its shell and file tools replace `bash`, `view_lines_in_file`, `view_image_file` and `replace_in_file`.
+  The transcript records them under Muse Code's names, such as `bash`, `read_file` and `write_file`, and the task's tools as `mcp__karotte__<tool>`.
+- Muse Code's subagents, reminder agents and web tools stay on.
+  Its own command sandbox is off, since it needs bubblewrap; the student's sandbox still applies.
+  Its telemetry is turned off.
+- The token usage includes the calls of Muse Code's reminder agents and of its context compaction.
+- It sends `reasoning_effort` when the run config sets it.
+  It can't send `temperature` or stop at `turn_limit`, so a run config that sets either is rejected.
+- The transcript has no reasoning, because Meta returns it to Muse Code only encrypted.
 
 ## Fake model
 

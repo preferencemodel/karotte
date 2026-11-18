@@ -12,7 +12,7 @@ from pathlib import Path
 
 import karotte.tool_base
 import pytest
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 from karotte.tool_base import ToolConfigWriter
 from mcp.types import TextContent
 

@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  # Catches new upstream releases that break karotte while no PR is open.
+  schedule:
+    - cron: "0 4 * * *"
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +16,7 @@ concurrency:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Check out code
@@ -25,12 +28,18 @@ jobs:
       - name: Lint
         run: just lint
 
+  # Installs ignore uv.lock, so also test the newest versions a fresh install
+  # resolves and the lowest versions pyproject.toml allows.
   core-tests:
-    name: Core Tests
+    name: Core Tests (${{ matrix.deps }} deps)
     runs-on: karotte-ci
     timeout-minutes: 20
     env:
       UV_COMPILE_BYTECODE: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        deps: [locked, latest, lowest]
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,13 +47,19 @@ jobs:
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - name: Resolve the latest dependencies
+        if: matrix.deps == 'latest'
+        run: uv lock --upgrade
+      - name: Resolve the lowest direct dependencies
+        if: matrix.deps == 'lowest'
+        run: uv lock --resolution lowest-direct
       # More workers than CPUs: many tests wait on subprocesses and timeouts.
       - name: Run tests
         run: just test --numprocesses=12
 
   root-tests:
     name: Root Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - name: Check out code
@@ -92,7 +107,7 @@ jobs:
   # GitHub's hosted Ubuntu runners provide.
   firecracker-template:
     name: Firecracker Template Test (${{ matrix.mode }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -124,7 +139,7 @@ jobs:
         with:
           path: ~/.cache/karotte/firecracker
           key: firecracker-${{ runner.arch }}-${{ hashFiles('src/karotte/firecracker/artifacts.py') }}
-      # Ubuntu 24.04 confines unprivileged user namespaces with AppArmor, and
+      # Ubuntu confines unprivileged user namespaces with AppArmor, and
       # its passt package has no profile that lets pasta create one. The
       # jailed run needs no user namespace.
       - name: Let pasta create user namespaces
@@ -150,11 +165,25 @@ jobs:
             .venv/bin/karotte run --config run_config.json --no-ui --no-proxy --runtime firecracker
           uv run python "$GITHUB_WORKSPACE/tests/check_transcript.py" out/transcript.json
 
+  all-tests-pass:
+    name: All tests pass
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    needs: [lint, core-tests, root-tests, default-template, firecracker-template]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi
+
   build:
     name: Build
     needs: [lint, core-tests, root-tests, default-template, firecracker-template]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -185,7 +214,7 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     environment:
       name: pypi

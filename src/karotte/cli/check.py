@@ -17,7 +17,7 @@ app = typer.Typer(
 
 
 @app.callback()
-def _default(ctx: typer.Context) -> None:  # pyright: ignore[reportUnusedFunction]
+def _default(ctx: typer.Context) -> None:
     """Check that the environment is properly set up."""
     if ctx.invoked_subcommand is None:
         check()

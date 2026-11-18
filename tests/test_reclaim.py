@@ -1,25 +1,30 @@
 """Tests for :mod:`karotte.reclaim`."""
 
+import contextlib
 import ctypes
 import errno
 import os
 import tracemalloc
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from loguru import logger
 
 from karotte import reclaim
+from karotte.confinement import STUDENT_FILE_COUNT_LIMIT
 from karotte.file_quota import QUOTA_DIR
 from karotte.reclaim import (
     DEFAULT_EXCLUDE,
+    SWEEP_ENTRY_BUDGET,
     ReclaimError,
     _allocation_ceiling,  # pyright: ignore[reportPrivateUsage]
     _child_path,  # pyright: ignore[reportPrivateUsage]
     _remove_sysv_segments,  # pyright: ignore[reportPrivateUsage]
     delete_files,
+    shared_sweep_budget,
 )
 from karotte.student_misbehavior import StudentMisbehaviorError
 
@@ -62,6 +67,23 @@ def _grow_past_path_max(base: Path) -> tuple[int, int]:
         length += 1 + len(name)
         count += 1
     return fd, count
+
+
+def _chain(base: Path, depth: int, name: str = "d" * 255) -> int:
+    """Nest ``depth`` directories under ``base``; returns an fd on the deepest."""
+    fd = _open_dir(base)
+    try:
+        for _ in range(depth):
+            os.mkdir(name, dir_fd=fd)
+            nfd = _open_dir(name, fd)
+            os.close(fd)
+            fd = nfd
+    except OSError as e:
+        os.close(fd)
+        if e.errno != errno.ENAMETOOLONG:
+            raise
+        pytest.skip(f"filesystem caps path length (overlayfs?): {e}")
+    return fd
 
 
 @pytest.fixture(autouse=True)
@@ -239,6 +261,68 @@ class TestDeletingFiles:
         assert removed == depth
         assert peak < 4 * 2**20
 
+    def test_a_deep_tree_hands_no_long_path_to_the_lexical_checks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A path built and compared per level makes the sweep quadratic in depth."""
+        os.close(_chain(tmp_path, 300))
+        longest = 0
+
+        def spy(owner: object, name: str) -> None:
+            real = getattr(owner, name)
+
+            def wrapper(*args: object) -> object:
+                nonlocal longest
+                longest = max(longest, *(len(a) for a in args if isinstance(a, str)), 0)
+                return real(*args)
+
+            monkeypatch.setattr(owner, name, wrapper)
+
+        spy(reclaim, "_child_path")
+        spy(reclaim, "_is_excluded")
+        for method in ("point", "at", "under"):
+            spy(reclaim._Mounts, method)  # pyright: ignore[reportPrivateUsage]
+
+        assert delete_files(os.getuid(), (tmp_path,)) == 300
+        assert longest < 4096
+
+    @not_root
+    def test_a_failure_deep_down_is_named_without_its_full_path(
+        self, tmp_path: Path
+    ) -> None:
+        fd = _chain(tmp_path, 300)
+        os.mkdir("sealed", dir_fd=fd)
+        os.chmod("sealed", 0o000, dir_fd=fd)
+
+        try:
+            with pytest.raises(ReclaimError) as caught:
+                delete_files(os.getuid(), (tmp_path,))
+        finally:
+            os.chmod("sealed", 0o700, dir_fd=fd)
+            os.close(fd)
+
+        message = str(caught.value)
+        assert f"{tmp_path}/…(+300 levels)/sealed" in message
+        assert len(message) < 4096
+
+    @not_root
+    def test_it_counts_every_failure_but_names_only_some(self, tmp_path: Path) -> None:
+        sealed = [tmp_path / f"sealed{i}" for i in range(25)]
+        for path in sealed:
+            path.mkdir()
+            path.chmod(0o000)
+
+        try:
+            with pytest.raises(ReclaimError) as caught:
+                delete_files(os.getuid(), (tmp_path,))
+        finally:
+            for path in sealed:
+                path.chmod(0o700)
+
+        message = str(caught.value)
+        assert "Could not delete 25 path(s)" in message
+        assert message.endswith(", and 15 more")
+
     def test_an_unstattable_entry_fails_the_reclaim(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -373,6 +457,18 @@ class TestExcludingPaths:
         assert delete_files(os.getuid(), (tmp_path,)) == 3
         assert list(tmp_path.iterdir()) == []
 
+    def test_an_exclude_deep_in_a_tree_still_survives(self, tmp_path: Path) -> None:
+        fd = _chain(tmp_path, 3)
+        _create_file("keep", fd)
+        _create_file("junk", fd)
+        os.close(fd)
+        keep = tmp_path.joinpath(*["d" * 255] * 3, "keep")
+
+        _ = delete_files(os.getuid(), (tmp_path,), extend_exclude=(keep,))
+
+        assert os.path.exists(keep)
+        assert os.listdir(keep.parent) == ["keep"]
+
     def test_a_missing_exclude_changes_nothing(self, tmp_path: Path) -> None:
         (tmp_path / "junk").write_text("x")
 
@@ -386,6 +482,28 @@ class TestExcludingPaths:
 
         assert delete_files(os.getuid(), (tmp_path,), exclude=(tmp_path,)) == 0
         assert (tmp_path / "junk").exists()
+
+    @pytest.mark.parametrize("exclude_parent", [False, True])
+    def test_excluded_roots_do_not_spend_the_sweep_budget(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exclude_parent: bool
+    ) -> None:
+        monkeypatch.setattr(reclaim, "SWEEP_ENTRY_BUDGET", 2)
+        keep, sweep = tmp_path / "keep", tmp_path / "sweep"
+        keep.mkdir()
+        sweep.mkdir()
+        spared = [keep / f"f{i}" for i in range(3)]
+        for path in spared:
+            path.touch()
+        for i in range(2):
+            (sweep / f"f{i}").touch()
+        excluded = tmp_path if exclude_parent else keep
+
+        with shared_sweep_budget():
+            assert delete_files(os.getuid(), (keep,), exclude=(excluded,)) == 0
+            assert delete_files(os.getuid(), (sweep,)) == 2
+
+        assert all(path.exists() for path in spared)
+        assert list(sweep.iterdir()) == []
 
     def test_an_unnormalized_exclude_still_matches(self, tmp_path: Path) -> None:
         submission = tmp_path / "submission"
@@ -526,6 +644,17 @@ class TestMountSkips:
 
         assert delete_files(os.getuid(), (swept,)) == 1
         assert shm.is_dir()
+
+    def test_a_mount_deep_in_a_tree_is_still_spared(
+        self, tmp_path: Path, swept: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        os.close(_chain(swept, 3))
+        data = swept.joinpath(*["d" * 255] * 3)
+        (data / "file").write_text("x")
+        self.mounts(monkeypatch, tmp_path, f"squash {data} squashfs ro 0 0\n")
+
+        assert delete_files(os.getuid(), (swept,)) == 0
+        assert (data / "file").exists()
 
     @not_root
     def test_an_unopenable_dir_on_an_unsweepable_mount_is_not_missed(
@@ -682,6 +811,178 @@ class TestSweepDeadline:
 
     def test_the_default_gives_a_real_sweep_room(self) -> None:
         assert reclaim.SWEEP_TIMEOUT_SECONDS == 600.0
+
+
+def _link_bomb(base: Path, links: int) -> None:
+    """One inode behind ``links`` directory entries, as hardlinks get past a file count quota."""
+    target = base / "target"
+    target.write_text("x")
+    for i in range(links):
+        os.link(target, base / f"link{i}")
+
+
+class TestSweepEntryBudget:
+    """Hardlinks give a uid far more directory entries than its file quota allows."""
+
+    @pytest.fixture(autouse=True)
+    def small_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(reclaim, "SWEEP_ENTRY_BUDGET", 50)
+
+    def stats(self, monkeypatch: pytest.MonkeyPatch) -> list[int]:
+        """How many entries the sweep stats, which is what its cost follows."""
+        count = [0]
+        real = os.stat
+
+        def counting(*args: Any, **kwargs: Any) -> os.stat_result:
+            if "dir_fd" in kwargs:
+                count[0] += 1
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(os, "stat", counting)
+        return count
+
+    def test_a_link_bomb_is_given_up_on(self, tmp_path: Path) -> None:
+        _link_bomb(tmp_path, 100)
+
+        with pytest.raises(ReclaimError, match="read more than 50 directory entries"):
+            _ = delete_files(os.getuid(), (tmp_path,))
+
+    def test_giving_up_scores_the_run_as_misbehavior(self, tmp_path: Path) -> None:
+        _link_bomb(tmp_path, 100)
+
+        with pytest.raises(StudentMisbehaviorError):
+            _ = delete_files(os.getuid(), (tmp_path,))
+
+    def test_the_cost_does_not_follow_the_entry_count(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        small, big = tmp_path / "small", tmp_path / "big"
+        small.mkdir()
+        big.mkdir()
+        _link_bomb(small, 100)
+        _link_bomb(big, 400)
+        stats = self.stats(monkeypatch)
+
+        with pytest.raises(ReclaimError):
+            _ = delete_files(os.getuid(), (small,))
+        small_cost, stats[0] = stats[0], 0
+        with pytest.raises(ReclaimError):
+            _ = delete_files(os.getuid(), (big,))
+
+        assert stats[0] == small_cost <= 50
+
+    def test_one_huge_directory_is_read_no_further_than_the_budget(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _link_bomb(tmp_path, 400)
+        pulled = [0]
+        real = os.scandir
+
+        @contextlib.contextmanager
+        def counting(fd: int) -> Generator[Iterator[os.DirEntry[str]]]:
+            def entries(it: Iterator[os.DirEntry[str]]) -> Iterator[os.DirEntry[str]]:
+                for entry in it:
+                    pulled[0] += 1
+                    yield entry
+
+            with real(fd) as it:
+                yield entries(it)
+
+        monkeypatch.setattr(os, "scandir", counting)
+
+        with pytest.raises(ReclaimError):
+            _ = delete_files(os.getuid(), (tmp_path,))
+
+        assert pulled[0] <= 51
+
+    def test_a_sweep_inside_the_budget_is_left_alone(self, tmp_path: Path) -> None:
+        _link_bomb(tmp_path, 40)
+
+        assert delete_files(os.getuid(), (tmp_path,)) == 41
+
+    def test_every_sweep_outside_a_scoring_gets_its_own_budget(
+        self, tmp_path: Path
+    ) -> None:
+        for _ in range(3):
+            _link_bomb(tmp_path, 40)
+            assert delete_files(os.getuid(), (tmp_path,)) == 41
+
+    def test_the_default_has_room_for_a_full_file_quota_and_the_image_twice(
+        self,
+    ) -> None:
+        """An honest scoring sweeps twice; only the first finds the uid's files."""
+        assert SWEEP_ENTRY_BUDGET >= 2 * STUDENT_FILE_COUNT_LIMIT
+
+
+class TestSharedSweepBudget:
+    """A scoring that sweeps twice must not get two full allowances."""
+
+    def trees(self, base: Path, count: int) -> tuple[Path, Path]:
+        first, second = base / "a", base / "b"
+        for tree in (first, second):
+            tree.mkdir()
+            for i in range(count):
+                (tree / f"f{i}").write_text("x")
+        return first, second
+
+    def test_the_sweeps_of_one_scoring_share_one_entry_allowance(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(reclaim, "SWEEP_ENTRY_BUDGET", 30)
+        first, second = self.trees(tmp_path, 20)
+
+        with shared_sweep_budget():
+            assert delete_files(os.getuid(), (first,)) == 20
+            with pytest.raises(ReclaimError, match="directory entries"):
+                _ = delete_files(os.getuid(), (second,))
+
+    def test_the_allowance_clears_between_scorings(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One step's bomb must not fail the next step's honest sweep."""
+        monkeypatch.setattr(reclaim, "SWEEP_ENTRY_BUDGET", 30)
+        first, second = self.trees(tmp_path, 20)
+
+        with shared_sweep_budget():
+            assert delete_files(os.getuid(), (first,)) == 20
+        with shared_sweep_budget():
+            assert delete_files(os.getuid(), (second,)) == 20
+
+    def test_the_sweeps_of_one_scoring_share_one_time_allowance(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(reclaim, "SWEEP_TIMEOUT_SECONDS", 15.0)
+        first, second = self.trees(tmp_path, 8)
+        TestSweepDeadline().clock(monkeypatch)
+
+        with shared_sweep_budget():
+            assert delete_files(os.getuid(), (first,), timeout=None) == 8
+            with pytest.raises(ReclaimError, match="took longer than 15s"):
+                _ = delete_files(os.getuid(), (second,), timeout=None)
+
+    def test_time_between_the_sweeps_does_not_count(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Saving the submission or running the judge is not the uid's sweep."""
+        first, second = self.trees(tmp_path, 8)
+        now = [0.0]
+        monkeypatch.setattr(reclaim, "time", SimpleNamespace(monotonic=lambda: now[0]))
+
+        with shared_sweep_budget():
+            now[0] += 10_000
+            assert delete_files(os.getuid(), (first,)) == 8
+            now[0] += 10_000
+            assert delete_files(os.getuid(), (second,)) == 8
+
+    def test_a_calls_own_timeout_still_applies_inside_a_scoring(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        first, _ = self.trees(tmp_path, 20)
+        TestSweepDeadline().clock(monkeypatch)
+
+        with shared_sweep_budget():
+            with pytest.raises(ReclaimError, match="took longer than 5s"):
+                _ = delete_files(os.getuid(), (first,), timeout=5)
 
 
 class TestRemovingSysVSegments:

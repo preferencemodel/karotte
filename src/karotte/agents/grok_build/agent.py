@@ -33,8 +33,8 @@ _RELEASE_URL = "https://x.ai/cli/grok-{version}-linux-{arch}.gz"
 
 # SHA-256 of the decompressed linux binary, per `uname -m` spelling xAI uses.
 _SHA256: dict[str, str] = {
-    "x86_64": "41626a53292324140b92556b9d42ff5542e3dcd04aff85eafb8689dd4adb44fc",
-    "aarch64": "45b0943e736f00a249b9cf02af2be9e0749d97c09a6f55cfcf3029a1a836f23e",
+    "x86_64": "b702950aa5827d855e493278ab6215a4e0f5bceb5bba6c6243a9f55cdd143b0a",
+    "aarch64": "b30eee14a656124ef3c9da8577b5e783ef2cffabeb2b679c5c49633e77eed574",
 }
 
 # Grok tools that need xAI's backend or a human, which a task run has neither of.
@@ -45,7 +45,7 @@ _DISALLOWED_TOOLS = ("send_feedback", "image_edit", "ask_user_question")
 @register_cli_agent
 class GrokBuildAgent(CliAgent):
     name: ClassVar[str] = "grok-build"
-    version: ClassVar[str] = "1.0.46"
+    version: ClassVar[str] = "1.0.77"
     provider_url: ClassVar[str] = "https://api.x.ai"
     providers: ClassVar[tuple[str, ...]] = ("xai",)
     binary: ClassVar[str] = _GROK_BIN
@@ -80,7 +80,10 @@ class GrokBuildAgent(CliAgent):
         """Grok's config: model endpoint, MCP server, features.
 
         Model traffic goes through the proxy's OpenAI-compatible route when
-        ``KAROTTE_PROXY_URL`` is set, else through the forwarder to xAI.
+        ``KAROTTE_PROXY_URL`` is set, else through the forwarder to xAI. It
+        uses the Responses API: xAI carries reasoning over to the next turn
+        only there (as encrypted content), and on Chat Completions it drops the
+        reasoning the CLI sends back, so every turn starts without it.
         Features that call xAI's backend on their own (telemetry, remote model
         catalog, backend web search, media generation) are turned off, and
         session titles use the run's model rather than Grok's default."""
@@ -109,7 +112,7 @@ class GrokBuildAgent(CliAgent):
             f"model = {model}\n"
             f"base_url = {toml_string(f'{self.model_url}/v1')}\n"
             f"env_key = {toml_string(_KEY_ENV)}\n"
-            'api_backend = "chat_completions"\n'
+            'api_backend = "responses"\n'
             f"{self._sampling_config()}\n"
             "[mcp_servers.karotte]\n"
             f"url = {toml_string(self.mcp_url)}\n"
@@ -167,6 +170,10 @@ class GrokBuildAgent(CliAgent):
             "--disable-web-search",
             "--disallowed-tools",
             ",".join(_DISALLOWED_TOOLS),
+            # Exit when the model's turn ends. Otherwise Grok waits for its
+            # background jobs and wakes the model for another turn as each one
+            # finishes, giving it work time past its final answer.
+            "--no-wait-for-background",
         ]
         if self._config.turn_limit is not None:
             argv += ["--max-turns", str(self._config.turn_limit)]

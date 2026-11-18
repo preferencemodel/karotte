@@ -217,8 +217,8 @@ class TestParseStream:
         started = [e.tool_call for e in events if isinstance(e, ToolCallStartedEvent)]
         completed = [e for e in events if isinstance(e, ToolCallCompletedEvent)]
         assert "rg --files" in json.loads(started[0].function.arguments)["command"]
-        assert completed[0].result.isError
-        assert not completed[3].result.isError
+        assert completed[0].result.is_error
+        assert not completed[3].result.is_error
         assert "result.txt" in completed[3].result.content[0].text  # pyright: ignore[reportAttributeAccessIssue]
 
     def test_mcp_and_file_change_calls(self):
@@ -230,7 +230,37 @@ class TestParseStream:
         assert json.loads(started[2].function.arguments) == {
             "changes": [{"path": "/workdir/result.txt", "kind": "add"}]
         }
-        assert not completed[2].result.isError
+        assert not completed[2].result.is_error
+
+    def test_an_mcp_result_with_text_and_an_image_keeps_both(self):
+        call = {
+            "id": "item_1",
+            "type": "mcp_tool_call",
+            "server": "karotte",
+            "tool": "screenshot",
+            "arguments": {},
+            "result": {
+                "content": [
+                    {"type": "text", "text": "caption"},
+                    {"type": "image", "data": "QUJD", "mimeType": "image/png"},
+                ]
+            },
+            "error": None,
+            "status": "completed",
+        }
+        events = list(parse_stream([_started(call), _completed(call)]))
+        (completed,) = [e for e in events if isinstance(e, ToolCallCompletedEvent)]
+        assert [
+            b.model_dump(include={"type", "data"}) for b in completed.result.content
+        ] == [
+            {"type": "text"},
+            {"type": "image", "data": ""},
+        ]
+        (message,) = _messages(events, "tool")
+        assert message.message.content == [
+            {"type": "text", "text": "caption"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,QUJD"}},
+        ]
 
     def test_usage_is_per_step_although_codex_reports_session_totals(self):
         session = Session()

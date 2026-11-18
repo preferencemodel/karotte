@@ -1,5 +1,5 @@
 import inspect
-from typing import Final
+from typing import Any, Final
 
 from fastmcp import FastMCP
 from karotte.mcp_servers.discover_tools import discover_tools
@@ -45,7 +45,8 @@ class McpServer:
             if inspect.isclass(candidate):
                 # Only instance methods can be registered as tools
                 # https://gofastmcp.com/patterns/decorating-methods
-                candidate = candidate().__call__
+                instance: Any = candidate()
+                candidate = instance.__call__
 
             self.server.tool(candidate, name=name_overrides.get(tool_name, tool_name))
             self.registered_tools.add(tool_name)

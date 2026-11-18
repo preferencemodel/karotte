@@ -16,6 +16,7 @@ from karotte.model_forwarder import GeminiForwarder
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import (
+    ContextCompactedEvent,
     Event,
     MessageAddedEvent,
     TokenUsageEvent,
@@ -55,9 +56,13 @@ class TestAgyAgent:
 
     def test_install_pins_version_and_checksums_per_architecture(self):
         script = " ".join(AgyAgent.install())
-        assert f"/{AgyAgent.version}-{AgyAgent.build}/" in script
-        assert "/linux-x64/cli_linux_x64.tar.gz" in script
-        assert "/linux-arm/cli_linux_arm64.tar.gz" in script
+        release = (
+            "https://github.com/google-antigravity/antigravity-cli/releases/download/"
+            f"{AgyAgent.version}"
+        )
+        assert f"{release}/agy_cli_linux_$arch.tar.gz" in script
+        assert "x86_64) arch=x64;" in script
+        assert "aarch64) arch=arm64;" in script
         assert f"{AGENTS_BIN_DIR}/agy" in script
         assert script.count("sha256sum -c") == 1
 
@@ -250,7 +255,7 @@ class TestParseStream:
         assert json.loads(started[2].function.arguments) == {"a": 17, "b": 25}
         assert completed[2].result.content[0].text == "42"  # pyright: ignore[reportAttributeAccessIssue]
         assert not completed[3].result.content
-        assert not any(c.result.isError for c in completed)
+        assert not any(c.result.is_error for c in completed)
 
     def test_usage_is_per_model_response(self):
         events = list(parse_stream(_lines("step_0.ndjson")))
@@ -281,7 +286,7 @@ class TestParseStream:
             ),
         ]
         (completed,) = _completed(list(parse_stream(lines)))
-        assert completed.result.isError
+        assert completed.result.is_error
         assert completed.result.content[0].text == "invalid arguments"  # pyright: ignore[reportAttributeAccessIssue]
 
     def test_tool_call_ids_differ_between_steps(self):
@@ -299,11 +304,52 @@ class TestParseStream:
                 "step_update": {
                     "step_index": 0,
                     "state": "DONE",
-                    "step_type": "checkpoint",
+                    "step_type": "system_message",
                 },
             }
         )
         assert list(parse_stream(["not json", "[1]", other, ""])) == []
+
+    def test_checkpoint_marks_a_compaction_before_the_next_response(self):
+        lines = [
+            _step(11, "user_input"),
+            _step(12, "system_message", duration_seconds=0.000248),
+            _CHECKPOINT,
+            _step(
+                14, "agent_response", text_delta="OK\n", usage={"input_tokens": 10948}
+            ),
+        ]
+
+        events = list(parse_stream(lines))
+
+        assert [type(e) for e in events] == [
+            ContextCompactedEvent,
+            MessageAddedEvent,
+            TokenUsageEvent,
+        ]
+
+    def test_checkpoint_mid_tool_loop_follows_the_results(self):
+        lines = [
+            _step(
+                1, "agent_response", text_delta="Listing.", usage={"input_tokens": 5}
+            ),
+            _tool(2, "DONE", {"output": "a.txt"}),
+            _CHECKPOINT,
+            _step(14, "agent_response", text_delta="Done.", usage={"input_tokens": 7}),
+        ]
+
+        events = list(parse_stream(lines))
+
+        assert [type(e) for e in events] == [
+            MessageAddedEvent,
+            TokenUsageEvent,
+            ToolCallStartedEvent,
+            ToolCallCompletedEvent,
+            MessageAddedEvent,
+            ContextCompactedEvent,
+            MessageAddedEvent,
+            TokenUsageEvent,
+        ]
 
     def test_flush_keeps_what_a_killed_step_left_unsent(self):
         parse = StreamParser(Session(), 0)
@@ -335,3 +381,31 @@ def _tool(index: int, state: str, info: dict[str, Any]) -> str:
             },
         }
     )
+
+
+def _step(index: int, step_type: str, **fields: Any) -> str:
+    return json.dumps(
+        {
+            "event": "step_update",
+            "step_update": {
+                "step_index": index,
+                "state": "DONE",
+                "step_type": step_type,
+                **fields,
+            },
+        }
+    )
+
+
+_CHECKPOINT = _step(
+    13,
+    "checkpoint",
+    duration_seconds=12.153453,
+    usage={
+        "input_tokens": 55810,
+        "output_tokens": 1160,
+        "thinking_tokens": 486,
+        "cache_read_tokens": 227007,
+        "total_tokens": 56970,
+    },
+)

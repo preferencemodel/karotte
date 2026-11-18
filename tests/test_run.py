@@ -29,7 +29,7 @@ from tests.conftest import register_hardware_plugins
 
 
 @pytest.fixture(autouse=True)
-def _stub_process_hardening():  # pyright: ignore[reportUnusedFunction]
+def _stub_process_hardening():
     """run() calls sanitize_paths_and_reexec(), which sanitizes process-global env
     vars in place and re-execs. pytest can't revert either, so a real call would
     strip non-root PATH entries (e.g. nix-store paths holding `uv`) or replace the
@@ -48,7 +48,7 @@ def _stub_process_hardening():  # pyright: ignore[reportUnusedFunction]
 
 
 @pytest.fixture(autouse=True)
-def _docker_by_default(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+def _docker_by_default(monkeypatch: pytest.MonkeyPatch):
     """The real default depends on the OS running the tests and its VM setup."""
     # The package re-exports the `run` function under the module's name.
     monkeypatch.setattr(
@@ -126,7 +126,7 @@ def test_raises_error_if_trying_to_prepare_only_with_parallel_runs(
 
 
 @pytest.fixture(autouse=True)
-def _restore_proxy_env(monkeypatch: pytest.MonkeyPatch):  # pyright: ignore[reportUnusedFunction]
+def _restore_proxy_env(monkeypatch: pytest.MonkeyPatch):
     """Uncontainerized runs with a proxy export it into os.environ."""
     for var in ("KAROTTE_PROXY_URL", "ANTHROPIC_BASE_URL"):
         monkeypatch.setenv(var, "")
@@ -600,6 +600,53 @@ class TestConfigFromFlags:
 
         assert run_config.temperature == 0.3
 
+    def test_the_agent_env_flag_is_applied(self):
+        run_config = self._run(
+            task="example-task",
+            model="openai/gpt-5.5",
+            agent="codex",
+            agent_env=["A=1", "B=x=y", "C="],
+        )
+
+        assert run_config.agent_config.env == {"A": "1", "B": "x=y", "C": ""}
+
+    def test_the_agent_env_flag_adds_to_the_configs(self):
+        run_config = self._run(
+            config=self._config(
+                agent="codex", agent_config={"env": {"A": "0", "C": "c"}}
+            ),
+            agent_env=["A=1"],
+        )
+
+        assert run_config.agent_config.env == {"A": "1", "C": "c"}
+
+    @pytest.mark.parametrize("agent_config", ["x", {"env": ["A"]}])
+    def test_the_agent_env_flag_on_a_malformed_agent_config_aborts(
+        self, capsys: pytest.CaptureFixture[str], agent_config: object
+    ):
+        config = json.dumps(
+            {
+                "run_id": "r",
+                "task_id": "t",
+                "model": "openai/gpt-5.5",
+                "agent": "codex",
+                "agent_config": agent_config,
+            }
+        )
+        with pytest.raises(typer.Abort):
+            self._run(config=config, agent_env=["A=1"])
+
+        assert "agent_config" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("pair", ["A", "=1"])
+    def test_an_agent_env_flag_without_a_name_aborts(
+        self, capsys: pytest.CaptureFixture[str], pair: str
+    ):
+        with pytest.raises(typer.Abort):
+            self._run(task="example-task", model="openai/gpt-5.5", agent_env=[pair])
+
+        assert "--agent-env" in capsys.readouterr().err
+
     def test_the_agent_flag_is_applied(self):
         run_config = self._run(
             config=self._config(agent="builtin"), agent="claude-code"
@@ -864,11 +911,19 @@ def test_websocket_port_sets_the_first_runs_port():
 
 @pytest.mark.parametrize("runtime", ["docker", "firecracker", "modal"])
 def test_a_taken_port_stops_the_run_before_the_build(
-    runtime: Runtime, capsys: pytest.CaptureFixture[str]
+    runtime: Runtime,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """Separate `karotte run` commands all start at the default port."""
+    import importlib
     import socket
 
+    from karotte.run_helpers import ports_in_use
+
+    monkeypatch.setattr(
+        importlib.import_module("karotte.cli.run"), "ports_in_use", ports_in_use
+    )
     with socket.socket() as taken:
         taken.bind(("127.0.0.1", 0))
         taken.listen()
@@ -1624,6 +1679,12 @@ class TestRunFromSource:
         result = self._run(env, task="t", agent="codex")
 
         assert result.config["agent"] == "codex"
+        assert result.flags == []
+
+    def test_the_agent_env_is_passed_on_in_the_config(self, env: Path):
+        result = self._run(env, task="t", agent_env=["A=1"])
+
+        assert result.config["agent_config"] == {"env": {"A": "1"}}
         assert result.flags == []
 
     def test_a_config_file_is_read_from_the_working_directory(

@@ -57,7 +57,7 @@ async def test_mcp_server_register_function_tool(tmp_path: Path):
         result = await client.call_tool_mcp(
             "replace_in_file", {"file": 12, "old": "world", "new": "universe"}
         )
-        assert result.isError is True
+        assert result.is_error is True
 
 
 @pytest.mark.asyncio
@@ -96,7 +96,7 @@ async def test_register_custom_environment_tool(
     (env_tools_dir / "__init__.py").write_text("")
 
     tool_code = '''\
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def custom_tool(param: str) -> ToolResult:
     """A custom tool from environment.tools."""
@@ -171,7 +171,6 @@ def test_subprocess_command_line_carries_no_task_id():
 def test_run_server_yields_as_soon_as_the_server_answers_http():
     import http.server
     import threading
-    import time
 
     class _Reject(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -188,16 +187,19 @@ def test_run_server_yields_as_soon_as_the_server_answers_http():
     process = MagicMock(poll=MagicMock(return_value=None))
 
     try:
-        start = time.perf_counter()
-        with patch(
-            "karotte.mcp_servers.http_mcp_server.subprocess.Popen", return_value=process
+        with (
+            patch(
+                "karotte.mcp_servers.http_mcp_server.subprocess.Popen",
+                return_value=process,
+            ),
+            patch("karotte.mcp_servers.http_mcp_server.time.sleep") as sleep,
         ):
             with run_server(config):
-                elapsed = time.perf_counter() - start
+                pass
     finally:
         httpd.shutdown()
 
-    assert elapsed < 0.3
+    sleep.assert_not_called()
 
 
 def test_http_server_runs_without_banner_or_info_logs():

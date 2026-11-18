@@ -38,7 +38,7 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(autouse=True)
-def _restore_signal_state() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction]
+def _restore_signal_state() -> Iterator[None]:
     """The shim installs signal handlers and manipulates the signal mask
     in the calling process; restore pytest's state afterwards so leakage can't
     poison other tests (a blocked SIGTERM is inherited by forked children)."""

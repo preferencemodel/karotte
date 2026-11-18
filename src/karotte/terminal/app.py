@@ -295,7 +295,7 @@ class KarotteApp(App[None]):
                     self.call_later(self.start_websocket_listeners)
 
                 # Run in thread pool since it uses subprocess
-                await anyio.to_thread.run_sync(  # pyright: ignore[reportAttributeAccessIssue]
+                await anyio.to_thread.run_sync(
                     partial(
                         self._run_containerized_builds_and_runs,
                         self.runtime,

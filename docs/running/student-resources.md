@@ -170,8 +170,10 @@ Other files next to it are still deleted.
 Read-only and virtual filesystems are skipped, and so are the paths in `KAROTTE_RECLAIM_EXCLUDE` (separated by `:`).
 Outside a Karotte container, `delete_files` refuses to search the whole filesystem, because the uid might belong to a real user of the machine.
 
-`delete_files` raises `ReclaimError` if it can't guarantee that it deleted everything the uid owned, or if it ran past `timeout`.
-The timeout exists because a student can leave behind more files than Karotte can go through in a reasonable time.
+`delete_files` raises `ReclaimError` if it can't guarantee that it deleted everything the uid owned, or if it runs past its limits.
+The limits exist because a student can leave behind more files than Karotte can go through in a reasonable time, for example with hardlinks, which don't count against the file quota.
+Each call stops after `timeout` seconds or 2,000,000 directory entries.
+During scoring, in `pre_scoring_hook` and the judge, all calls also share 600 seconds of sweeping and 2,000,000 entries, so sweeping twice doesn't give the student twice the time.
 `ReclaimError` is also a `StudentMisbehaviorError`, so in `pre_scoring_hook` either case scores the step 0.
 
 A common use of `extend_exclude` is freeing up disk space before copying a large submission; see [Scoring](../tasks/scoring.md).

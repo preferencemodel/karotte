@@ -1,10 +1,20 @@
+import pytest
+from mcp.types import CallToolResult, ImageContent, TextContent
+from pydantic import TypeAdapter, ValidationError
+
 from karotte.schemas.chat import Message
 from karotte.schemas.transcript import (
     AnswersSubmittedEvent,
+    ContextCompactedEvent,
     ErrorEvent,
+    Event,
     MessageAddedEvent,
+    MetadataEvent,
+    TaskPreHookCompletedEvent,
     TokenUsageEvent,
+    ToolCallCompletedEvent,
     Transcript,
+    UnknownEvent,
 )
 
 
@@ -82,3 +92,116 @@ def test_token_usage_event_without_cache():
     assert event.output_tokens == 50
     assert event.cache_read_tokens is None
     assert event.cache_write_tokens is None
+
+
+def test_pre_hook_event_round_trips_through_a_transcript():
+    transcript = Transcript(
+        run_id="r", events=[TaskPreHookCompletedEvent(metadata={"a": 1})]
+    )
+
+    [event] = Transcript.model_validate_json(transcript.model_dump_json()).events
+
+    assert isinstance(event, TaskPreHookCompletedEvent)
+    assert event.metadata == {"a": 1}
+
+
+def test_untyped_metadata_event_still_parses():
+    [event] = Transcript.model_validate(
+        {"run_id": "r", "events": [{"metadata": {"a": 1}}]}
+    ).events
+
+    assert isinstance(event, MetadataEvent)
+    assert event.metadata == {"a": 1}
+
+
+def test_unknown_event_with_metadata_keeps_its_type():
+    [event] = Transcript.model_validate(
+        {"run_id": "r", "events": [{"type": "from_the_future", "metadata": {}}]}
+    ).events
+
+    assert isinstance(event, UnknownEvent)
+    assert event.type == "from_the_future"
+
+
+def test_unknown_event_type_is_kept_as_is():
+    raw = {
+        "timestamp": "2026-01-01T00:00:00Z",
+        "type": "from_the_future",
+        "detail": {"n": 1},
+    }
+
+    transcript = Transcript.model_validate({"run_id": "r", "events": [raw]})
+
+    [event] = transcript.events
+    assert isinstance(event, UnknownEvent)
+    assert transcript.model_dump(mode="json")["events"] == [raw]
+
+
+def test_context_compacted_event_round_trips_through_a_transcript():
+    stored = Transcript(run_id="r", events=[ContextCompactedEvent()]).model_dump(
+        mode="json"
+    )
+
+    assert stored["events"][0]["type"] == "context_compacted"
+    [event] = Transcript.model_validate(stored).events
+    assert isinstance(event, ContextCompactedEvent)
+
+
+def test_malformed_known_event_is_not_swallowed():
+    with pytest.raises(ValidationError):
+        TypeAdapter(Event).validate_python({"type": "message_added"})
+
+
+def test_tool_call_result_is_stored_with_mcp_wire_keys():
+    event = ToolCallCompletedEvent(
+        tool_call_id="call_1",
+        result=CallToolResult(
+            content=[ImageContent(type="image", data="", mime_type="image/png")],
+            structured_content={"a": 1},
+            is_error=True,
+        ),
+    )
+
+    stored = Transcript(run_id="r", events=[event]).model_dump(mode="json")
+    result = stored["events"][0]["result"]
+
+    assert result["isError"] is True
+    assert result["structuredContent"] == {"a": 1}
+    assert result["content"][0]["mimeType"] == "image/png"
+    assert TypeAdapter(Event).validate_python(stored["events"][0]) == event
+
+
+def test_tool_call_result_respects_dump_options():
+    event = ToolCallCompletedEvent(
+        tool_call_id="call_1",
+        result=CallToolResult(content=[TextContent(type="text", text="x")]),
+    )
+
+    result = event.model_dump(mode="json", exclude_none=True)["result"]
+
+    assert result == {
+        "content": [{"type": "text", "text": "x"}],
+        "isError": False,
+        "resultType": "complete",
+    }
+
+
+def test_tool_call_result_written_before_mcp_2_loads():
+    stored = {
+        "type": "tool_call_completed",
+        "tool_call_id": "call_1",
+        "result": {
+            "meta": {"b": 2},
+            "content": [{"type": "text", "text": "x", "meta": {"a": 1}}],
+            "structuredContent": {"k": "v"},
+            "isError": True,
+        },
+    }
+
+    event = TypeAdapter(Event).validate_python(stored)
+
+    assert isinstance(event, ToolCallCompletedEvent)
+    assert event.result.meta == {"b": 2}
+    assert event.result.content[0].meta == {"a": 1}
+    assert event.result.structured_content == {"k": "v"}
+    assert event.result.is_error is True

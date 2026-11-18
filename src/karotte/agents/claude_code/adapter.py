@@ -22,6 +22,7 @@ from karotte.agents.tool_results import tool_result_events
 from karotte.agents.usage import messages_usage_event
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
+    ContextCompactedEvent,
     Event,
     MessageAddedEvent,
     ToolCallStartedEvent,
@@ -43,6 +44,8 @@ class StreamParser:
         self._usage: dict[str, Any] = {}
         self._in_response: bool = False
         self._held_results: list[Event] = []
+        self.error: str | None = None
+        """What Claude Code's ``result`` line reported, if the run ended in an error."""
 
     def __call__(self, line: str, i: int) -> Iterator[Event]:
         record = parse_json_line(line, i, "claude")
@@ -56,15 +59,22 @@ class StreamParser:
                 if isinstance(content, list):
                     self._blocks.extend(b for b in content if isinstance(b, dict))
             case "user":
-                events = _user_events(_message(record).get("content"))
-                if self._in_response:
-                    self._held_results.extend(events)
-                else:
-                    yield from events
+                yield from self._after_response(
+                    _user_events(_message(record).get("content"))
+                )
+            case "system" if record.get("subtype") == "compact_boundary":
+                yield from self._after_response([ContextCompactedEvent()])
             case "result" if record.get("is_error"):
-                logger.warning("claude reported an error: {}", record.get("result"))
+                self.error = str(record.get("result"))
+                logger.warning("claude reported an error: {}", self.error)
             case _:
                 pass
+
+    def _after_response(self, events: Iterable[Event]) -> Iterator[Event]:
+        if self._in_response:
+            self._held_results.extend(events)
+        else:
+            yield from events
 
     def _stream_event(self, event: Any) -> Iterator[Event]:
         if not isinstance(event, dict):
@@ -148,7 +158,7 @@ def _user_events(content: Any) -> Iterator[Event]:
         elif block.get("type") == "tool_result":
             result = CallToolResult(
                 content=_result_content(block.get("content")),
-                isError=bool(block.get("is_error")),
+                is_error=bool(block.get("is_error")),
             )
             yield from tool_result_events(str(block.get("tool_use_id") or ""), result)
     if texts:
@@ -173,7 +183,7 @@ def _result_content(content: Any) -> list[ContentBlock]:
                     ImageContent(
                         type="image",
                         data=str(source.get("data") or ""),
-                        mimeType=str(source.get("media_type") or ""),
+                        mime_type=str(source.get("media_type") or ""),
                     )
                 )
     return blocks

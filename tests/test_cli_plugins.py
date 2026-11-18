@@ -14,11 +14,11 @@ def _plugin(message: str) -> typer.Typer:
     plugin = typer.Typer()
 
     @plugin.command()
-    def hello() -> None:  # pyright: ignore[reportUnusedFunction]
+    def hello() -> None:
         print(message)
 
     @plugin.command()
-    def other() -> None:  # pyright: ignore[reportUnusedFunction]
+    def other() -> None:
         pass
 
     return plugin
@@ -28,11 +28,11 @@ def _app_with_builtin() -> typer.Typer:
     app = typer.Typer()
 
     @app.command()
-    def run() -> None:  # pyright: ignore[reportUnusedFunction]
+    def run() -> None:
         print("builtin run")
 
     @app.command()
-    def check() -> None:  # pyright: ignore[reportUnusedFunction]
+    def check() -> None:
         pass
 
     return app

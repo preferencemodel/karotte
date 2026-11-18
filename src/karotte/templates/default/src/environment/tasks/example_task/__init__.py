@@ -71,7 +71,7 @@ class GetPythonVersionStep(Step):
         prompt = dedent(f"""
             Use the `bash` tool to determine the version of Python you are using.
 
-            Write your answer to {self.submission_paths[0]}
+            Write only the version number, for example 3.11.4, to {self.submission_paths[0]}
             """)
 
         if self.config.use_hints:

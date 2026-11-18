@@ -7,6 +7,7 @@ manifest. Steps share one session, created on the first step and resumed after.
 """
 
 import json
+import os
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -20,6 +21,8 @@ from karotte.agents.cli_agent import (
     register_cli_agent,
 )
 from karotte.agents.models import resolve_model
+from karotte.model_forwarder import ModelForwarder
+from karotte.model_spec import spec_for
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event
 
@@ -30,8 +33,8 @@ _RELEASE_URL = (
 
 # From the release's manifest.json, per platform name in its URL.
 _SHA256: dict[str, str] = {
-    "x64": "a967e7b1d8b4e47ee421d5433027880347952b0c0857abf880e2c942a4ec93b3",
-    "arm64": "24caa9e6ff13bf227049a2626f1c816fc895023050f0ec3b12dbf14d897367e0",
+    "x64": "86dc1fcc69498159eaf15f446613e847010f9036bfbbdffd4c49350be8489ada",
+    "arm64": "2e2496c9a8065df93acb0fca2d341f59a6b8777649b2e025ab8c9bcd5eef61f3",
 }
 
 # Claude Code tools that need Anthropic's backend or a human, which a task run
@@ -40,14 +43,29 @@ _DISALLOWED_TOOLS = ("WebSearch", "WebFetch", "AskUserQuestion")
 
 _MCP_CONFIG = "mcp.json"
 
+# The env vars behind Claude Code's model aliases (`haiku`, `sonnet`, ...) and
+# the models it picks for background calls and subagents.
+_MODEL_ALIAS_ENVS = (
+    "ANTHROPIC_DEFAULT_FABLE_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_SMALL_FAST_MODEL",
+    "CLAUDE_CODE_SUBAGENT_MODEL",
+)
+
 
 @final
 @register_cli_agent
 class ClaudeCodeAgent(CliAgent):
     name: ClassVar[str] = "claude-code"
-    version: ClassVar[str] = "2.1.292"
+    version: ClassVar[str] = "2.1.311"
     provider_url: ClassVar[str] = "https://api.anthropic.com"
-    providers: ClassVar[tuple[str, ...]] = ("anthropic",)
+    # Claude Code only speaks Anthropic's Messages API (`/v1/messages`), so each
+    # provider here must serve it. `hosted_vllm` is litellm's prefix for a
+    # self-hosted server (vLLM, SGLang, ...), reached through KAROTTE_PROXY_URL.
+    providers: ClassVar[tuple[str, ...]] = ("anthropic", "hosted_vllm")
+    proxy_via_forwarder: ClassVar[bool] = True
     binary: ClassVar[str] = _CLAUDE_BIN
     home_dir: ClassVar[str] = ".claude_home"
     home_env: ClassVar[str | None] = "CLAUDE_CONFIG_DIR"
@@ -70,8 +88,20 @@ class ClaudeCodeAgent(CliAgent):
 
     def __init__(self, config: EvaluationRunConfig) -> None:
         super().__init__(config)
+        self._on_anthropic: bool = spec_for(config.model).provider == "anthropic"
         self._session_id: str = str(uuid.uuid4())
         self._parser: StreamParser | None = None
+
+    def _make_forwarder(self) -> ModelForwarder | None:
+        # Anthropic is the only provider with a fixed address; without a proxy,
+        # any other model's key would be forwarded to Anthropic.
+        if not self._on_anthropic and not os.environ.get("KAROTTE_PROXY_URL"):
+            msg = (
+                f"claude-code reaches {self._config.model} only through a proxy: "
+                "set KAROTTE_PROXY_URL (`karotte run --proxy`) to its server"
+            )
+            raise ValueError(msg)
+        return super()._make_forwarder()
 
     def _config_files(self) -> dict[str, str]:
         server = {"type": "http", "url": self.mcp_url}
@@ -81,11 +111,30 @@ class ClaudeCodeAgent(CliAgent):
         return "ANTHROPIC_API_KEY"
 
     def _extra_env(self) -> dict[str, str]:
-        return {
+        env = {
             "ANTHROPIC_BASE_URL": self.model_url,
             "DISABLE_AUTOUPDATER": "1",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+            # Otherwise the task's MCP tools sit behind a ToolSearch call.
+            "ENABLE_TOOL_SEARCH": "false",
         }
+        if not self._on_anthropic:
+            # The aliases name Claude models, which only Anthropic serves.
+            model = resolve_model(self._config.model, None).model
+            env |= dict.fromkeys(_MODEL_ALIAS_ENVS, model)
+            # Claude Code asks for `thinking: {"type": "adaptive"}` on every
+            # call, which SGLang refuses unless the server runs a reasoning
+            # parser. With 0 it leaves `thinking` out, and the model's chat
+            # template decides whether it thinks.
+            env["MAX_THINKING_TOKENS"] = "0"
+            if self._config.applied_reasoning_effort is None:
+                # Likewise `output_config: {"effort": "high"}`, which SGLang
+                # passes to the chat template, and Qwen3.8's refuses anything
+                # but xhigh, medium or low. `unset` leaves it out, so the
+                # template's default applies. It overrides `--effort`, so only
+                # when the run config sets no effort.
+                env["CLAUDE_CODE_EFFORT_LEVEL"] = "unset"
+        return env
 
     def _argv(self, instructions: str, prompt_file: Path | None) -> list[str]:
         session = (
@@ -126,3 +175,8 @@ class ClaudeCodeAgent(CliAgent):
 
     def _output_ended(self) -> Iterable[Event]:
         return () if self._parser is None else self._parser.flush()
+
+    def _reported_error(self) -> str | None:
+        # Claude Code's stderr can end in a warning such as
+        # `[claude-code:unrecognized_model]`, printed for any non-Claude model.
+        return None if self._parser is None else self._parser.error

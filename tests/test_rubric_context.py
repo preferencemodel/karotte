@@ -142,7 +142,7 @@ class TestTranscriptContext:
                 tool_call_id=tool_call_id,
                 result=CallToolResult(
                     content=[TextContent(type="text", text=result_text)],
-                    isError=False,
+                    is_error=False,
                 ),
             )
         )

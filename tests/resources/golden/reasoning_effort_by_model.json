@@ -34,6 +34,41 @@
       }
     }
   },
+  "claude-fable-5-2": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        }
+      }
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        },
+        "output_config": {
+          "effort": "low"
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "thinking": {
+          "type": "adaptive",
+          "display": "summarized"
+        },
+        "output_config": {
+          "effort": "max"
+        }
+      }
+    }
+  },
   "claude-fable-5-1": {
     "None": {
       "sent_by_karotte": null,
@@ -426,6 +461,24 @@
       "mapped_by_litellm": {}
     }
   },
+  "together_ai/moonshotai/Kimi-K3.1-Pro": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "max"
+      }
+    }
+  },
   "together_ai/moonshotai/Kimi-K3": {
     "None": {
       "sent_by_karotte": null,
@@ -481,6 +534,42 @@
       "sent_by_karotte": "high",
       "mapped_by_litellm": {
         "reasoning_effort": "high"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "max"
+      }
+    }
+  },
+  "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "high"
+      }
+    }
+  },
+  "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
       }
     },
     "max": {
@@ -568,7 +657,7 @@
       "mapped_by_litellm": {}
     }
   },
-  "together_ai/Qwen/Qwen3.8-2.4T-A95B": {
+  "fireworks_ai/accounts/fireworks/models/qwen3p8-max": {
     "None": {
       "sent_by_karotte": null,
       "mapped_by_litellm": {}
@@ -802,6 +891,42 @@
       }
     }
   },
+  "openai/gpt-6.2-astra": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "max"
+      }
+    }
+  },
+  "openai/gpt-6.2-sol": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "max",
+      "mapped_by_litellm": {
+        "reasoning_effort": "max"
+      }
+    }
+  },
   "openai/gpt-5.6": {
     "None": {
       "sent_by_karotte": null,
@@ -902,6 +1027,54 @@
       "mapped_by_litellm": {}
     }
   },
+  "vertex_ai/gemini-4-hydrogen": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "high",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "high",
+          "includeThoughts": true
+        }
+      }
+    }
+  },
+  "vertex_ai/gemini-4-carbon": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "high",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "high",
+          "includeThoughts": true
+        }
+      }
+    }
+  },
   "vertex_ai/gemini-4-argon": {
     "None": {
       "sent_by_karotte": null,
@@ -977,6 +1150,54 @@
     }
   },
   "vertex_ai/gemini-3.7-flash": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "high",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "high",
+          "includeThoughts": true
+        }
+      }
+    }
+  },
+  "gemini/gemini-4-hydrogen": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "low",
+          "includeThoughts": true
+        }
+      }
+    },
+    "max": {
+      "sent_by_karotte": "high",
+      "mapped_by_litellm": {
+        "thinkingConfig": {
+          "thinkingLevel": "high",
+          "includeThoughts": true
+        }
+      }
+    }
+  },
+  "gemini/gemini-4-carbon": {
     "None": {
       "sent_by_karotte": null,
       "mapped_by_litellm": {}

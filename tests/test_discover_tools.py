@@ -5,7 +5,7 @@ from types import ModuleType
 from typing import Annotated
 
 import pytest
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 from karotte.mcp_servers.discover_tools import (
     InvalidToolError,
@@ -259,7 +259,7 @@ class TestEnvironmentToolsDiscovery:
 
         # Create a valid tool module
         tool_code = '''
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def custom_tool(param: str) -> ToolResult:
     """A custom tool from environment.tools."""
@@ -284,6 +284,32 @@ def custom_tool(param: str) -> ToolResult:
         assert "custom_tool" in tools
         assert "bash" in tools  # From karotte.tools
 
+    def test_discovers_tool_that_imports_from_fastmcp_3_module(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        env_tools_dir = tmp_path / "environment" / "tools"
+        env_tools_dir.mkdir(parents=True)
+        (tmp_path / "environment" / "__init__.py").write_text("")
+        (env_tools_dir / "__init__.py").write_text("")
+        (env_tools_dir / "old_tool.py").write_text(
+            """
+from fastmcp.tools.tool import ToolResult
+
+def old_tool(param: str) -> ToolResult:
+    \"\"\"A tool written for fastmcp 3.\"\"\"
+    return ToolResult(content=[{"type": "text", "text": param}])
+"""
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        for name in [k for k in sys.modules if k.startswith("environment")]:
+            monkeypatch.delitem(sys.modules, name)
+        monkeypatch.delitem(sys.modules, "fastmcp.tools.tool", raising=False)
+
+        tools = discover_tools(tool_names=["old_tool"])
+
+        assert "old_tool" in tools
+        assert sys.modules["fastmcp.tools.tool"].ToolResult is ToolResult
+
     def test_imports_environment_tools_with_correct_prefix(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ):
@@ -300,7 +326,7 @@ def custom_tool(param: str) -> ToolResult:
         (env_tools_dir / "__init__.py").write_text("")
 
         tool_code = '''
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def env_specific_tool(x: int) -> ToolResult:
     """Environment specific tool."""
@@ -357,7 +383,7 @@ def env_specific_tool(x: int) -> ToolResult:
 
         # Create a tool with the same name as an existing karotte tool
         tool_code = '''
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def bash(command: str) -> ToolResult:
     """Custom bash tool from environment."""
@@ -485,7 +511,7 @@ class TestFutureAnnotationsCompatibility:
         tool_code = '''\
 from __future__ import annotations
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 def future_tool(x: int, y: str) -> ToolResult:
     """A tool that uses future annotations."""
@@ -505,7 +531,7 @@ def future_tool(x: int, y: str) -> ToolResult:
         tool_code = '''\
 from __future__ import annotations
 
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 class class_tool:
     def __call__(self, x: int) -> ToolResult:

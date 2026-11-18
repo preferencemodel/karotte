@@ -10,6 +10,7 @@ messages.
 
 from karotte.agents.agent import (
     Agent,
+    BlockedTurnLimitReachedError,
     CliAgentExitedError,
     EmptyTurnLimitReachedError,
     RunContext,
@@ -33,12 +34,14 @@ from karotte.agents.grok_build import GrokBuildAgent
 from karotte.agents.message_loop import MessageLoopAgent
 from karotte.agents.message_source import MessageSource
 from karotte.agents.mistral_vibe import MistralVibeAgent
+from karotte.agents.muse_code import MuseCodeAgent
 
 __all__ = [
     "AgyAgent",
     "EXTERNAL_MESSAGE_TIMEOUT_S",
     "Agent",
     "BackendSource",
+    "BlockedTurnLimitReachedError",
     "BuiltinAgent",
     "BuiltinSource",
     "ClaudeCodeAgent",
@@ -52,6 +55,7 @@ __all__ = [
     "MessageLoopAgent",
     "MessageSource",
     "MistralVibeAgent",
+    "MuseCodeAgent",
     "RunContext",
     "TurnLimitReachedError",
     "cli_agent_types",

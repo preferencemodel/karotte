@@ -62,17 +62,23 @@ def build(
     ] = ".",
     cache_from: Annotated[
         list[str] | None,
-        typer.Option(help="Cache source passed to the container runtime."),
+        typer.Option(
+            metavar="CACHE", help="Cache source passed to the container runtime."
+        ),
     ] = None,
     cache_to: Annotated[
         list[str] | None,
-        typer.Option(help="Cache destination passed to the container runtime."),
+        typer.Option(
+            metavar="CACHE",
+            help="Cache destination passed to the container runtime.",
+        ),
     ] = None,
     build_secret: Annotated[
         list[str] | None,
         typer.Option(
+            metavar="SECRET",
             help="name=path of a file the Containerfile can mount as a build secret "
-            + "with type=secret and id=<name>. Repeatable."
+            + "with type=secret and id=<name>. Repeatable.",
         ),
     ] = None,
 ) -> None:

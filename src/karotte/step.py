@@ -7,6 +7,7 @@ from typing import Any, Final, final
 from loguru import logger
 
 from karotte.judges import Judge
+from karotte.reclaim import shared_sweep_budget
 from karotte.schemas import EvaluationRunConfig
 from karotte.schemas.scoring import Scoring
 from karotte.schemas.transcript import Transcript
@@ -81,10 +82,12 @@ class Step(ABC):
 
     @final
     def score(self, transcript: Transcript, step_index: int) -> Scoring:
-        """Run the pre-scoring hook and judge, scoring misbehavior as 0."""
+        """Run the pre-scoring hook and judge, scoring misbehavior as 0. Their
+        reclaim sweeps share one budget, so sweeping twice buys the uid nothing."""
         try:
-            self.pre_scoring_hook()
-            return self.judge.evaluate(transcript)
+            with shared_sweep_budget():
+                self.pre_scoring_hook()
+                return self.judge.evaluate(transcript)
         except StudentMisbehaviorError as e:
             logger.warning(
                 "Student misbehavior, scoring step {} as 0: {}", step_index, e
