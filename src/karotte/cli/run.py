@@ -208,8 +208,8 @@ def run(
         list[str] | None,
         typer.Option(
             "--agent-env",
-            metavar="NAME=VALUE",
-            help="Environment variable for a CLI agent's process. Repeatable. "
+            metavar="VAR",
+            help="NAME=VALUE environment variable for a CLI agent's process. Repeatable. "
             + "Added to the config's agent_config.env, replacing a variable of the same name.",
         ),
     ] = None,
