@@ -185,6 +185,7 @@ _REASONING_EFFORT_MODELS: dict[str, tuple[str, ...]] = {
     "Kimi-K3": ("low", "high", "max"),
     # Qwen3.8's chat template takes only these three.
     "qwen3p8-max": ("low", "medium", "xhigh"),
+    "Qwen3.8-Flash": ("low", "medium", "xhigh"),
 }
 
 # litellm validates effort against its cost map, which lacks the bridge name
@@ -211,6 +212,7 @@ _EXTRA_ALLOWED_OPENAI_PARAMS: dict[str, tuple[str, ...]] = dict.fromkeys(
         "glm-5p3",
         "glm-5p3-flash",
         "qwen3p8-max",
+        "Qwen3.8-Flash",
         "Kimi-K3.1-Pro",
         "Kimi-K3",
     ),

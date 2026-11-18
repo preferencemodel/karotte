@@ -133,6 +133,7 @@ class TestExtraAllowedOpenAIParams:
                 "fireworks_ai/accounts/fireworks/models/qwen3p8-max",
                 ("reasoning_effort",),
             ),
+            ("together_ai/Qwen/Qwen3.8-Flash", ("reasoning_effort",)),
             ("together_ai/moonshotai/Kimi-K3", ("reasoning_effort",)),
             ("together_ai/moonshotai/Kimi-K3.1-Pro", ("reasoning_effort",)),
             ("together_ai/zai-org/GLM-5.2", ()),
@@ -166,6 +167,8 @@ class TestMaxOutputTokens:
             ("gemini/gemini-4-argon", 1048576),
             ("gemini/gemini-3.8-flash", 64000),
             ("fireworks_ai/accounts/fireworks/models/qwen3p8-max", 128000),
+            # Together documents no output ceiling for it, so it keeps the default.
+            ("together_ai/Qwen/Qwen3.8-Flash", 64000),
             ("together_ai/zai-org/GLM-5.3", 64000),
             ("together_ai/moonshotai/Kimi-K3.1-Pro", 64000),
             # Fireworks documents no output ceiling for it, so it keeps the default.
@@ -281,6 +284,7 @@ class TestReasoningEffort:
             ("fireworks_ai/accounts/fireworks/models/glm-5p3", ("low", "max")),
             ("fireworks_ai/accounts/fireworks/models/glm-5p3-flash", ("low", "max")),
             ("fireworks_ai/accounts/fireworks/models/qwen3p8-max", ("low", "xhigh")),
+            ("together_ai/Qwen/Qwen3.8-Flash", ("low", "xhigh")),
             # Kimi K3 takes low, high and max; K2.x answers 400 to the parameter.
             ("together_ai/moonshotai/Kimi-K3", ("low", "max")),
             ("together_ai/moonshotai/Kimi-K3.1-Pro", ("low", "max")),
@@ -367,6 +371,7 @@ class TestReasoningEffort:
                 "fireworks_ai/accounts/fireworks/models/qwen3p8-max",
                 ("low", "medium", "xhigh"),
             ),
+            ("together_ai/Qwen/Qwen3.8-Flash", ("low", "medium", "xhigh")),
             ("together_ai/moonshotai/Kimi-K3", ("low", "high", "max")),
             ("together_ai/moonshotai/Kimi-K3.1-Pro", ("low", "medium", "high", "max")),
             ("together_ai/moonshotai/Kimi-K2.6", ()),
@@ -400,6 +405,7 @@ class TestReasoningEffort:
             ("together_ai/deepseek-ai/DeepSeek-V4-Pro-0813", "min", "high"),
             ("together_ai/zai-org/GLM-5.3", "max", "max"),
             ("fireworks_ai/accounts/fireworks/models/qwen3p8-max", "max", "xhigh"),
+            ("together_ai/Qwen/Qwen3.8-Flash", "min", "low"),
             ("together_ai/moonshotai/Kimi-K3", "min", "low"),
             ("together_ai/moonshotai/Kimi-K3", "max", "max"),
             # A provider's own level name passes through untouched.
@@ -575,6 +581,7 @@ class TestDisplayNames:
                 "DeepSeek V4.1 Flash 1017",
             ),
             ("fireworks_ai/accounts/fireworks/models/qwen3p8-max", "Qwen3.8 Max"),
+            ("together_ai/Qwen/Qwen3.8-Flash", "Qwen3.8 Flash"),
             ("minimax/MiniMax-M2.5", "MiniMax M2.5"),
             ("vertex_ai/gemini-4-hydrogen", "Gemini 4 Hydrogen"),
             ("vertex_ai/gemini-4-carbon", "Gemini 4 Carbon"),

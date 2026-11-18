@@ -631,6 +631,28 @@
       ]
     },
     {
+      "model": "together_ai/Qwen/Qwen3.8-Flash",
+      "model_display_name": "Qwen3.8 Flash",
+      "provider": "together_ai",
+      "provider_display_name": "Together AI",
+      "litellm_model": "together_ai/Qwen/Qwen3.8-Flash",
+      "max_output_tokens": 64000,
+      "min_reasoning_effort": "low",
+      "max_reasoning_effort": "xhigh",
+      "reasoning_effort_levels": [
+        "low",
+        "medium",
+        "xhigh"
+      ],
+      "reasoning_request": {},
+      "supports_sampling_params": true,
+      "tool_call_repairs": [],
+      "requires_api_key": true,
+      "extra_allowed_openai_params": [
+        "reasoning_effort"
+      ]
+    },
+    {
       "model": "openai/o1",
       "model_display_name": "O1",
       "provider": "openai",

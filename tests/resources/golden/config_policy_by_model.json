@@ -139,6 +139,11 @@
     "is_special_training_model": false,
     "api_key_required": true
   },
+  "together_ai/Qwen/Qwen3.8-Flash": {
+    "resolved_agent": "builtin",
+    "is_special_training_model": false,
+    "api_key_required": true
+  },
   "openai/o1": {
     "resolved_agent": "builtin",
     "is_special_training_model": false,

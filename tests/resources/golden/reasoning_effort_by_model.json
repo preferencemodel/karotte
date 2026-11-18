@@ -675,6 +675,24 @@
       }
     }
   },
+  "together_ai/Qwen/Qwen3.8-Flash": {
+    "None": {
+      "sent_by_karotte": null,
+      "mapped_by_litellm": {}
+    },
+    "min": {
+      "sent_by_karotte": "low",
+      "mapped_by_litellm": {
+        "reasoning_effort": "low"
+      }
+    },
+    "max": {
+      "sent_by_karotte": "xhigh",
+      "mapped_by_litellm": {
+        "reasoning_effort": "xhigh"
+      }
+    }
+  },
   "openai/o1": {
     "None": {
       "sent_by_karotte": null,

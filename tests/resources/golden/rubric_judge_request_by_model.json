@@ -251,6 +251,15 @@
       "the criterion is met"
     ]
   },
+  "together_ai/Qwen/Qwen3.8-Flash": {
+    "model": "together_ai/Qwen/Qwen3.8-Flash",
+    "max_tokens": 32000,
+    "temperature": 0.3,
+    "parsed": [
+      true,
+      "the criterion is met"
+    ]
+  },
   "openai/o1": {
     "model": "openai/o1",
     "max_tokens": 32000,

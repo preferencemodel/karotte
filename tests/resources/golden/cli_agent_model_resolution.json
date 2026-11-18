@@ -167,6 +167,12 @@
     "env": {},
     "key_env": null
   },
+  "together_ai/Qwen/Qwen3.8-Flash": {
+    "provider": "together_ai",
+    "model": "Qwen/Qwen3.8-Flash",
+    "env": {},
+    "key_env": null
+  },
   "openai/o1": {
     "provider": "openai",
     "model": "o1",
