@@ -84,6 +84,7 @@ class _Logging:
     """Stub for what litellm's Vertex iterator reads from its logging object."""
 
     optional_params: dict[str, Any] = {}
+    litellm_params: dict[str, Any] = {}
     model_call_details: dict[str, Any] = {}
 
 

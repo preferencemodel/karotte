@@ -238,6 +238,7 @@ def run(
         list[str] | None,
         typer.Option(
             "--mount",
+            metavar="SPEC",
             help="Bind-mount a host path into the container. "
             + "Format: source:target[:ro]. "
             + "Bind mounts are read-write by default; append :ro for read-only. "
@@ -266,17 +267,23 @@ def run(
     ] = False,
     cache_from: Annotated[
         list[str] | None,
-        typer.Option(help="Cache source passed to the container runtime."),
+        typer.Option(
+            metavar="CACHE", help="Cache source passed to the container runtime."
+        ),
     ] = None,
     cache_to: Annotated[
         list[str] | None,
-        typer.Option(help="Cache destination passed to the container runtime."),
+        typer.Option(
+            metavar="CACHE",
+            help="Cache destination passed to the container runtime.",
+        ),
     ] = None,
     build_secret: Annotated[
         list[str] | None,
         typer.Option(
+            metavar="SECRET",
             help="name=path of a file the Containerfile can mount as a build secret "
-            + "with type=secret and id=<name>. Repeatable."
+            + "with type=secret and id=<name>. Repeatable.",
         ),
     ] = None,
     proxy: Annotated[
