@@ -27,6 +27,13 @@ _FIXTURES = Path(__file__).parent / "resources" / "claude_code"
 
 _SELF_HOSTED = "hosted_vllm/Qwen/Qwen3-8B"
 
+_WINDOW_ENV = (
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
+    "CLAUDE_STREAM_IDLE_TIMEOUT_MS",
+)
+
 
 def _lines(name: str) -> list[str]:
     return (_FIXTURES / name).read_text().splitlines()
@@ -204,6 +211,90 @@ class TestClaudeCodeAgent:
         assert hosted._env()["CLAUDE_CODE_EFFORT_LEVEL"] == "unset"  # pyright: ignore[reportPrivateUsage]
         assert "--effort" not in hosted._argv("x", None)  # pyright: ignore[reportPrivateUsage]
         assert "CLAUDE_CODE_EFFORT_LEVEL" not in claude._env()  # pyright: ignore[reportPrivateUsage]
+
+    def test_without_options_claude_code_sizes_the_window_itself(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        for name in _WINDOW_ENV:
+            monkeypatch.delenv(name, raising=False)
+        env = _agent(model=_SELF_HOSTED)._env()  # pyright: ignore[reportPrivateUsage]
+        assert {name: env.get(name) for name in _WINDOW_ENV} == dict.fromkeys(
+            _WINDOW_ENV
+        )
+
+    def test_a_context_window_moves_compaction_up_to_a_whole_reply_from_its_end(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        agent = _agent(
+            model=_SELF_HOSTED,
+            extra_config={"context_window": 262144, "max_output_tokens": 65536},
+        )
+        env = agent._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] == "65536"
+        assert env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "262144"
+        # Compacts at 213,224 - 20,000 - 13,000 = 262,144 - 65,536 - 16,384.
+        assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "213224"
+
+    def test_a_context_window_alone_keeps_claude_codes_own_reply(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_PROXY_URL", "http://vllm:8000")
+        agent = _agent(model=_SELF_HOSTED, extra_config={"context_window": 262144})
+        env = agent._env()  # pyright: ignore[reportPrivateUsage]
+        assert env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] == "32000"
+        # Compacts at 246,760 - 20,000 - 13,000 = 262,144 - 32,000 - 16,384.
+        assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "246760"
+
+    def test_max_output_tokens_alone_sets_only_the_reply(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        for name in _WINDOW_ENV:
+            monkeypatch.delenv(name, raising=False)
+        env = _agent(extra_config={"max_output_tokens": 64000})._env()  # pyright: ignore[reportPrivateUsage]
+        assert {name: env.get(name) for name in _WINDOW_ENV} == {
+            **dict.fromkeys(_WINDOW_ENV),
+            "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000",
+        }
+
+    def test_a_context_window_is_refused_on_a_claude_model(self):
+        with pytest.raises(ValueError, match="context_window"):
+            _ = _agent(extra_config={"context_window": 262144})
+
+    def test_the_largest_reply_with_a_compaction_point_is_taken(self):
+        # Compacts at 262,144 - 178,760 - 16,384 = 67,000: an auto-compact window
+        # of exactly Claude Code's 100,000 floor.
+        agent = _agent(
+            model=_SELF_HOSTED,
+            extra_config={"context_window": 262144, "max_output_tokens": 178760},
+        )
+        assert agent._env()["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "100000"  # pyright: ignore[reportPrivateUsage]
+
+    def test_a_reply_that_leaves_no_compaction_point_is_refused(self):
+        with pytest.raises(ValueError, match="no compaction point"):
+            _ = _agent(
+                model=_SELF_HOSTED,
+                extra_config={"context_window": 262144, "max_output_tokens": 178761},
+            )
+
+    @pytest.mark.parametrize(
+        "key", ["max_output_tokens", "context_window", "stream_idle_timeout_seconds"]
+    )
+    @pytest.mark.parametrize("value", [0, "65536", True, 1.5])
+    def test_an_option_that_is_not_a_positive_integer_is_refused(
+        self, key: str, value: object
+    ):
+        with pytest.raises(ValueError, match=key):
+            _ = _agent(model=_SELF_HOSTED, extra_config={key: value})
+
+    def test_a_stream_idle_timeout_is_given_in_milliseconds(self):
+        agent = _agent(extra_config={"stream_idle_timeout_seconds": 900})
+        assert agent._env()["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] == "900000"  # pyright: ignore[reportPrivateUsage]
+
+    def test_a_stream_idle_timeout_claude_code_would_raise_is_refused(self):
+        with pytest.raises(ValueError, match="stream_idle_timeout_seconds"):
+            _ = _agent(extra_config={"stream_idle_timeout_seconds": 299})
 
     def test_reports_the_error_claude_ended_the_step_with(self):
         agent = _agent()

@@ -1,3 +1,7 @@
-from karotte.agents.claude_code.agent import ClaudeCodeAgent
+from karotte.agents.claude_code.agent import (
+    COMPACTION_SLACK_TOKENS,
+    ClaudeCodeAgent,
+    window_env,
+)
 
-__all__ = ["ClaudeCodeAgent"]
+__all__ = ["COMPACTION_SLACK_TOKENS", "ClaudeCodeAgent", "window_env"]

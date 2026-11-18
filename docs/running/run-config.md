@@ -86,6 +86,7 @@ These keys have a built-in meaning:
 
 The first two are read by the `default` template's `get_system_prompt()`, so they only work in tasks that use it.
 Karotte itself applies the latter three.
+The `claude-code` agent also reads `max_output_tokens`, `context_window` and `stream_idle_timeout_seconds`; see [its specifics](#cli-agents).
 
 ## Models
 
@@ -293,6 +294,17 @@ CLI agents differ from `builtin` in a few ways:
   Whether the model thinks is up to its chat template; a Qwen3.5+ model thinks by default.
 - On a `hosted_vllm` model, Claude Code doesn't send a reasoning effort either.
   SGLang hands it to the model's chat template, and some templates refuse efforts they don't define (Qwen3.8 takes only `xhigh`, `medium` and `low`), so the template's own default applies.
+- Claude Code doesn't know a `hosted_vllm` model's limits.
+  It assumes a 200,000-token context window, asks for 32,000 output tokens per call, and compacts the conversation once it reaches 167,000 tokens.
+  These `extra_config` keys change that:
+
+  | Key                           | Value                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+  | ----------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `max_output_tokens`           | integer              | The output tokens Claude Code asks for per call, on any model.                                                                                                                                                                                                                                                                                                                                                                                                                            |
+  | `context_window`              | integer              | The model's context window. Claude Code then compacts at `context_window - max_output_tokens - 16384` (`max_output_tokens` is 32,000 when unset). That is late enough to use the window and early enough that the compaction call, which carries the whole conversation and asks for a whole reply, still fits: a self-hosted server refuses a request whose prompt and `max_tokens` exceed its context, which ends the step. Rejected on a Claude model, whose window Claude Code knows. |
+  | `stream_idle_timeout_seconds` | integer, 300 or more | How long Claude Code waits on a streamed reply that has stopped producing output before it gives up on the call. A long prompt on a busy self-hosted server can need more than the default.                                                                                                                                                                                                                                                                                               |
+
+  A value that isn't a positive integer, or a `max_output_tokens` that leaves no room to compact in `context_window`, is rejected when the run starts.
 
 `codex` specifics:
 
