@@ -16,6 +16,7 @@ def create_env(
     template: Annotated[
         list[str] | None,
         typer.Option(
+            metavar="NAME",
             help="""Templates to use for environment creation.
             Can specify multiple templates to be stacked on top of each other.
             For example, `--template default --template custom` overlay the
@@ -28,6 +29,7 @@ def create_env(
     agent: Annotated[
         list[str] | None,
         typer.Option(
+            metavar="NAME",
             help="""CLI agent(s) to bake into the image (e.g. `--agent mistral-vibe`).
             Repeatable. Recorded in the manifest; the installed karotte pins each
             agent's version. Defaults to none (builtin/external only).
