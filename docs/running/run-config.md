@@ -127,6 +127,10 @@ If that key is missing, the run still starts.
 
 A model passed to `RubricJudge(model=...)` in the task overrides both.
 
+A decision model such as `gemini/gemini-decision-1` can grade here, and only here: it answers yes/no questions with probabilities and writes no text, so it can't be the run's `model`.
+Its key comes from `GEMINI_API_KEY`, like any `gemini/` model.
+See [RubricJudge](../tasks/scoring.md#rubricjudge) for how it grades.
+
 The fake model and `pt/` models can't grade.
 For those runs, set `rubric_judge_model` or pass a model to `RubricJudge` in the task.
 

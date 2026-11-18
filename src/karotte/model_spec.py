@@ -104,6 +104,18 @@ class ModelSpec(BaseModel, frozen=True):
         return level
 
 
+_DECISION_MODEL_NAMES = frozenset({"gemini-decision-1"})
+"""Decision models by bare name; only the ``gemini`` provider serves them."""
+
+
+def is_decision_model(model: str) -> bool:
+    """Whether ``model`` is a decision model: one that answers typed questions with
+    calibrated probabilities and writes no text. It can grade (see
+    ``RubricJudge``) but can't take a turn, so it is not in the model catalog."""
+    provider, separator, name = model.partition("/")
+    return bool(separator) and provider == "gemini" and name in _DECISION_MODEL_NAMES
+
+
 def is_special_training_model(model: str) -> bool:
     """Whether a run on this model gets its messages from the training backend
     rather than calling an inference provider."""

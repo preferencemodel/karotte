@@ -98,6 +98,18 @@ RubricJudge(
 Each criterion is one LLM call that answers YES or NO with a short reason.
 The reasons go into the metadata.
 
+#### Grading with a decision model
+
+A decision model answers typed questions about an input with calibrated probabilities and writes no text.
+Set `model="gemini/gemini-decision-1"` (or `rubric_judge_model` in the run config) and `RubricJudge` sends the whole rubric in one request, with the content to judge billed once.
+It reads the key from `GEMINI_API_KEY`, or from `api_key` / `rubric_judge_api_key`.
+
+- A criterion is met when its probability of yes reaches `decision_threshold`, which defaults to 0.5 and must lie in 0.01 to 0.99, the range the model answers in.
+  The probabilities are calibrated, but the cutoff that suits a rubric isn't always 0.5: tune it on examples you have graded yourself.
+- The metadata shows each criterion's probability and the model's confidence in it, plus `decision_min_confidence`, the least confident answer, so a borderline grade can be told from a clear one.
+- Questions are answered independently of each other, so write each criterion as one self-contained check; it can't refer to another.
+- A decision model can grade but can't drive a run: it can't be the run's `model`.
+
 The `context` providers decide what the LLM sees.
 Their output is joined with blank lines:
 

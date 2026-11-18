@@ -6,6 +6,7 @@ from karotte.model_spec import (
     SPECIAL_TRAINING_MODEL_NAME,
     SPECIAL_TRAINING_MODEL_PREFIX,
     ReasoningEffort,
+    is_decision_model,
     is_special_training_model,
     spec_for,
 )
@@ -228,6 +229,18 @@ class EvaluationRunConfig(BaseModel):
         if self.use_fake_model or self.resolved_agent == "external":
             return None
         return spec_for(self.model).reasoning_effort_value(self.reasoning_effort)
+
+    @model_validator(mode="after")
+    def validate_model_can_act(self) -> Self:
+        """A decision model answers typed questions with probabilities and writes
+        no text, so it can grade but can't take a turn."""
+        if self.use_fake_model or not is_decision_model(self.model):
+            return self
+        msg = (
+            f"{self.model} is a decision model: it can grade, not drive a run. "
+            "Set it as rubric_judge_model and pick a model that can act as model."
+        )
+        raise ValueError(msg)
 
     @model_validator(mode="after")
     def validate_temperature(self) -> Self:
