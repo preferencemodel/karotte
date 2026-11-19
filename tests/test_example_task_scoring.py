@@ -1,4 +1,3 @@
-import ast
 import json
 import re
 import subprocess
@@ -7,13 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from karotte.judges.regex_judge import RegexJudge
-from karotte.schemas.chat import Message
-from karotte.schemas.transcript import MessageAddedEvent, Transcript
 from karotte.templates import TEMPLATES_DIR
 
 EXAMPLE_TASK = TEMPLATES_DIR / "default/src/environment/tasks/example_task"
 SCORING_SCRIPT = EXAMPLE_TASK / "scoring_script.py"
+PYTHON_PATH = r"path: /workdir/\.venv/bin/python[\d.]*\s*\Z"
 
 
 def _score(tmp_path: Path, answer: str) -> float:
@@ -63,70 +60,39 @@ def test_docs_show_the_scoring_script():
     )
 
 
-# The first step is scored by a RegexJudge. Its module imports the template's
-# `environment` package, so read the step's instructions and pattern from the
-# source instead of importing it.
-
-
-def _get_python_path_step_argument(function: str) -> str:
-    """The string literal that `GetPythonPathStep` passes to `function`."""
-    tree = ast.parse((EXAMPLE_TASK / "__init__.py").read_text(encoding="utf-8"))
-    [step] = [
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "GetPythonPathStep"
-    ]
-    [call] = [
-        node
-        for node in ast.walk(step)
-        if isinstance(node, ast.Call) and ast.unparse(node.func) == function
-    ]
-    [argument] = call.args
-    return ast.literal_eval(argument)
-
-
-def _path_score(*replies: str) -> float:
-    judge = RegexJudge([re.compile(_get_python_path_step_argument("re.compile"))])
-    transcript = Transcript(run_id="run_id")
-    transcript.events.extend(
-        MessageAddedEvent(message=Message(content=reply)) for reply in replies
-    )
-    return judge.evaluate(transcript).score
-
-
-def test_path_step_asks_to_end_with_the_answer():
-    assert "End your final message with your answer" in (
-        _get_python_path_step_argument("dedent")
-    )
-
-
 @pytest.mark.parametrize(
-    "replies",
+    "reply",
     [
-        ["path: /workdir/.venv/bin/python"],
-        ["path: /workdir/.venv/bin/python3.12\n"],
-        ["`which python3` prints it.\n\npath: /workdir/.venv/bin/python3."],
-        ["Let me check.", "path: /workdir/.venv/bin/python"],
+        "path: /workdir/.venv/bin/python",
+        "path: /workdir/.venv/bin/python3.12\n",
+        "`which python3` prints it.\n\npath: /workdir/.venv/bin/python3.",
     ],
 )
-def test_path_step_scores_a_final_message_ending_with_the_path(replies: list[str]):
-    assert _path_score(*replies) == 1.0
+def test_python_path_pattern_matches_a_reply_ending_with_the_path(reply: str):
+    assert re.search(PYTHON_PATH, reply)
 
 
 @pytest.mark.parametrize(
-    "replies",
+    "reply",
     [
-        pytest.param(["path: /a /b /workdir/.venv/bin/python"], id="spaces"),
+        pytest.param("path: /a /b /workdir/.venv/bin/python", id="spaces"),
+        pytest.param("path: /usr/bin/python3,/workdir/.venv/bin/python", id="commas"),
         pytest.param(
-            ["path: /workdir/.venv/bin/python\npath: /usr/bin/python3"],
-            id="several-lines",
+            "path: /workdir/.venv/bin/python\npath: /usr/bin/python3", id="lines"
         ),
         pytest.param(
-            ["path: /workdir/.venv/bin/python", "Actually, path: /usr/bin/python3"],
+            "path: /workdir/.venv/bin/python\n\nActually, path: /usr/bin/python3",
             id="changed",
         ),
-        pytest.param(["path: /usr/bin/python3"], id="wrong"),
+        pytest.param("path: /workdir/.venv/bin/python-is-not/perl", id="suffix"),
+        pytest.param("path: /usr/bin/python3", id="wrong"),
     ],
 )
-def test_path_step_does_not_score_several_paths(replies: list[str]):
-    assert _path_score(*replies) == 0.0
+def test_python_path_pattern_does_not_match_several_or_wrong_paths(reply: str):
+    assert not re.search(PYTHON_PATH, reply)
+
+
+def test_example_task_uses_the_python_path_pattern():
+    assert f'r"{PYTHON_PATH}"' in (EXAMPLE_TASK / "__init__.py").read_text(
+        encoding="utf-8"
+    )

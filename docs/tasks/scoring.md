@@ -129,11 +129,9 @@ Every pattern must match for a score of 1 and `continue_task=True`; otherwise th
 score is 0 and the metadata lists the patterns that did not match.
 Matching includes assistant text from earlier steps in the same task.
 
-The `\Z` anchors the pattern to the end of the assistant text, so the reply has to
-end with the answer; `\.?\s*` allows a final period and trailing whitespace.
-Say so in the instructions, for example "End your reply with `answer: <number>`."
-Without the anchor, `answer: 42` also matches a reply that lists many answers, or
-one that gives `answer: 42` and then changes it.
+`\Z` anchors the pattern to the end of the assistant text, so only a reply that ends with the answer matches; `\.?\s*` allows a final period and trailing whitespace.
+Tell the student to end its reply with the answer, for example "End your reply with `answer: <number>`."
+Without the anchor, `answer: 42` also matches a reply that lists many answers or changes its answer later.
 
 ### AlwaysPassJudge
 

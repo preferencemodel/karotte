@@ -28,9 +28,7 @@ for task_id, (question, answer) in QUESTIONS.items():
         steps=[
             StepConfig(
                 instructions=f"{question} End your reply with `answer: <number>`.",
-                judge=RegexJudge(
-                    [re.compile(rf"answer: {re.escape(answer)}\.?\s*\Z")]
-                ),
+                judge=RegexJudge([re.compile(rf"answer: {re.escape(answer)}\.?\s*\Z")]),
             )
         ],
     )

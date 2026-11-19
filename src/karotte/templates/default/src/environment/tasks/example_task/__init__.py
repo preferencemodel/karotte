@@ -53,7 +53,7 @@ class GetPythonPathStep(Step):
 
     @property
     def judge(self):
-        return RegexJudge([re.compile(r"path: \S*/workdir/\.venv/bin/python\S*\s*\Z")])
+        return RegexJudge([re.compile(r"path: /workdir/\.venv/bin/python[\d.]*\s*\Z")])
 
     def pre_scoring_hook(self):
         kill_processes(STUDENT_UID)

@@ -36,7 +36,7 @@ class FindPythonStep(Step):
 
     @property
     def judge(self):
-        return RegexJudge([re.compile(r"path: \S*/python3?\.?\s*\Z")])
+        return RegexJudge([re.compile(r"path: \S*/python[\d.]*\s*\Z")])
 ```
 
 The student gets the system prompt and the step's instructions, works on them with the `bash` tool, and the judge checks its final answer.
