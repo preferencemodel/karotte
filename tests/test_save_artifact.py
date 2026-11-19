@@ -1153,6 +1153,24 @@ class TestUntrustedArtifacts:
         saved = _local_artifacts(tmp_path, sample_config) / "tool"
         assert saved.stat().st_mode & 0o7777 == 0o755
 
+    def test_the_artifact_directory_is_private_to_its_owner(
+        self, sample_config: EvaluationRunConfig, tmp_path: Path
+    ):
+        (tmp_path / "approach.md").write_text("content")
+        (tmp_path / "logs").mkdir()
+        (tmp_path / "logs" / "a.txt").write_text("a")
+        old_umask = os.umask(0o022)
+        try:
+            save_artifact(sample_config, tmp_path / "approach.md")
+            save_artifact(sample_config, tmp_path / "logs")
+        finally:
+            os.umask(old_umask)
+
+        saved = _local_artifacts(tmp_path, sample_config)
+        assert (saved / "approach.md").exists()
+        assert (saved / "logs" / "a.txt").exists()
+        assert saved.stat().st_mode & 0o7777 == 0o700
+
     def test_saving_again_overwrites_the_earlier_copy(
         self, sample_config: EvaluationRunConfig, tmp_path: Path
     ):

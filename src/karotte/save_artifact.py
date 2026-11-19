@@ -246,7 +246,8 @@ def _maybe_create_target_dir(config: EvaluationRunConfig) -> Path:
             target_dir = target_dir.with_name(f"{base_name}_{suffix}")
             suffix += 1
 
-        target_dir.mkdir(parents=True, exist_ok=True)
+        target_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        target_dir.chmod(0o700)
 
         logger.info("Created artifact directory at {}", target_dir)
 
