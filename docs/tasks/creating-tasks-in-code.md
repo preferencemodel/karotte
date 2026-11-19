@@ -27,8 +27,8 @@ for task_id, (question, answer) in QUESTIONS.items():
         system_prompt="You are working in a Linux shell.",
         steps=[
             StepConfig(
-                instructions=f"{question} Answer with `answer: <number>`.",
-                judge=RegexJudge([re.compile(rf"answer: {answer}\b")]),
+                instructions=f"{question} End your reply with `answer: <number>`.",
+                judge=RegexJudge([re.compile(rf"answer: {re.escape(answer)}\.?\s*\Z")]),
             )
         ],
     )

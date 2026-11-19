@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 import pytest
 
@@ -9,6 +10,10 @@ from karotte.schemas.transcript import (
     StepStartedEvent,
     Transcript,
 )
+
+DOCS = Path(__file__).parent.parent / "docs/tasks"
+FINAL_ANSWER = r"answer: 42\.?\s*\Z"
+FINAL_PATH = r"path: \S*/python[\d.]*\s*\Z"
 
 
 def test_general_value_match(transcript: Transcript):
@@ -166,3 +171,65 @@ def test_general_value_match_multiline(transcript: Transcript):
     assert scoring.score == 1
     assert scoring.metadata == {}
     assert scoring.continue_task is True
+
+
+def _score(pattern: str, transcript: Transcript, replies: list[str]) -> float:
+    transcript.events.extend(
+        MessageAddedEvent(message=Message(content=reply)) for reply in replies
+    )
+    return RegexJudge([re.compile(pattern)]).evaluate(transcript).score
+
+
+@pytest.mark.parametrize(
+    "replies",
+    [
+        ["answer: 42"],
+        ["answer: 42."],
+        ["answer: 42\n"],
+        ["6 * 7 is 42.\n\nanswer: 42"],
+        ["Let me multiply them.", "answer: 42"],
+    ],
+)
+def test_end_anchored_pattern_matches_a_reply_ending_with_the_answer(
+    transcript: Transcript, replies: list[str]
+):
+    assert _score(FINAL_ANSWER, transcript, replies) == 1
+
+
+@pytest.mark.parametrize(
+    "replies",
+    [
+        pytest.param(["answer: 42, 43, 44"], id="list"),
+        pytest.param(["answer: 42 or 44"], id="or"),
+        pytest.param(["answer: 42-44"], id="range"),
+        pytest.param(["answer: 42", "Actually, answer: 44"], id="changed"),
+        pytest.param(["answer: 42.5"], id="decimal"),
+        pytest.param(["answer: 420"], id="longer"),
+        pytest.param(["\n".join(f"answer: {n}" for n in range(100))], id="guesses"),
+    ],
+)
+def test_end_anchored_pattern_does_not_match_several_answers(
+    transcript: Transcript, replies: list[str]
+):
+    assert _score(FINAL_ANSWER, transcript, replies) == 0
+
+
+@pytest.mark.parametrize(
+    ("reply", "score"),
+    [
+        ("path: /usr/bin/python3", 1),
+        ("`which python3` prints it.\n\npath: /usr/local/bin/python3.12.", 1),
+        ("path: /usr/bin/perl /usr/bin/python3", 0),
+        ("path: /usr/bin/python3\npath: /usr/bin/perl", 0),
+    ],
+)
+def test_end_anchored_path_pattern(transcript: Transcript, reply: str, score: float):
+    assert _score(FINAL_PATH, transcript, [reply]) == score
+
+
+@pytest.mark.parametrize(
+    ("page", "pattern"),
+    [("scoring.md", FINAL_ANSWER), ("tasks-and-steps.md", FINAL_PATH)],
+)
+def test_docs_show_the_end_anchored_patterns(page: str, pattern: str):
+    assert f'r"{pattern}"' in (DOCS / page).read_text(encoding="utf-8")

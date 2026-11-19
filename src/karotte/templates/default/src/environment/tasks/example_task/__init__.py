@@ -42,7 +42,7 @@ class GetPythonPathStep(Step):
         prompt = dedent("""
             Use the `bash` tool to determine the path to your Python executable.
 
-            State your answer in your final message in the following format:
+            End your final message with your answer in the following format:
             path: /path/to/python3
             """)
 
@@ -53,7 +53,7 @@ class GetPythonPathStep(Step):
 
     @property
     def judge(self):
-        return RegexJudge([re.compile(r"path: .*/workdir/\.venv/bin/python.*")])
+        return RegexJudge([re.compile(r"path: /workdir/\.venv/bin/python[\d.]*\s*\Z")])
 
     def pre_scoring_hook(self):
         kill_processes(STUDENT_UID)

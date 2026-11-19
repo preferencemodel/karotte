@@ -15,7 +15,7 @@ No external data.
 
 ## Scoring
 
-Step 1: Regex match on `/workdir/.venv/bin/python`.
+Step 1: Regex match on `path: /workdir/.venv/bin/python` at the end of the final message.
 Step 2: Scoring script to ensure that the student has written the Python version to the specified file.
 
 ### Hints

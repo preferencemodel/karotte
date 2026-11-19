@@ -122,12 +122,16 @@ import re
 
 from karotte.judges import RegexJudge
 
-RegexJudge([re.compile(r"answer: 42")])
+RegexJudge([re.compile(r"answer: 42\.?\s*\Z")])
 ```
 
 Every pattern must match for a score of 1 and `continue_task=True`; otherwise the
 score is 0 and the metadata lists the patterns that did not match.
 Matching includes assistant text from earlier steps in the same task.
+
+`\Z` anchors the pattern to the end of the assistant text, so only a reply that ends with the answer matches; `\.?\s*` allows a final period and trailing whitespace.
+Tell the student to end its reply with the answer, for example "End your reply with `answer: <number>`."
+Without the anchor, `answer: 42` also matches a reply that lists many answers or changes its answer later.
 
 ### AlwaysPassJudge
 
@@ -145,7 +149,7 @@ They behave like Python's `and` and `or`, judging pass or fail by `continue_task
   It returns that `Scoring`, or the last one if all fail.
 
 ```python
-RegexJudge([re.compile(r"answer: 42")]) & ExecutableJudge([...])
+RegexJudge([re.compile(r"answer: 42\.?\s*\Z")]) & ExecutableJudge([...])
 ```
 
 The combined `Scoring` keeps the score and `continue_task` of the judge it returns.
