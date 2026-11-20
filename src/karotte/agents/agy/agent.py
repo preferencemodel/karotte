@@ -25,8 +25,8 @@ _RELEASE_URL = (
 )
 
 _SHA256: dict[str, str] = {
-    "x64": "da696a8dc6122a63d5ffbdd21b02c8a62d5361fba0ed7d3bc2d2619889e62711",
-    "arm64": "cd155ecd9bc962037423e6826ed0b61d3b16d84d350cdc9a8c14478f24f5f235",
+    "x64": "905d4accfbd61bc00bee84bfaf24c59b85d334cabd786cf99237b66cfe06ab98",
+    "arm64": "0ca407357661aa244fbc3b0e79a1d1d2623b2ca1515d2e2f77a801c3676bd562",
 }
 
 
@@ -39,7 +39,7 @@ _VERTEX_SEARCH_MODEL = "gemini-3.1-flash-lite"
 @register_cli_agent
 class AgyAgent(CliAgent):
     name: ClassVar[str] = "agy"
-    version: ClassVar[str] = "1.5.2"
+    version: ClassVar[str] = "1.5.8"
     provider_url: ClassVar[str] = "https://generativelanguage.googleapis.com"
     providers: ClassVar[tuple[str, ...]] = ("gemini", "vertex_ai")
     binary: ClassVar[str] = _AGY_BIN
