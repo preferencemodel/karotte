@@ -150,7 +150,7 @@ def run(
     source: Annotated[
         str | None,
         typer.Argument(
-            metavar="[SOURCE]",
+            metavar="SOURCE",
             help="Environment to run, instead of the current one: a folder, a GitHub URL "
             + "(also of a folder: .../tree/<ref>/<path>), or "
             + "git+<url>@<ref>#subdirectory=<path> (ref and subdirectory optional). "

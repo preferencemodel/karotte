@@ -94,7 +94,8 @@ def test_openai_client_shape_is_unreachable():
 
     request = httpx.Request("POST", "https://nonexistent.invalid/v1/chat/completions")
     error = _litellm_wrapped(
-        openai.APIConnectionError(request=request),
+        # Typed as httpx2, but litellm's httpx client puts an httpx.Request here.
+        openai.APIConnectionError(request=request),  # pyright: ignore[reportArgumentType]
         httpx.ConnectError("dns", request=request),
         socket.gaierror(socket.EAI_NONAME, "Name or service not known"),
     )
