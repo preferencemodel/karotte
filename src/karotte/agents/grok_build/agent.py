@@ -33,8 +33,8 @@ _RELEASE_URL = "https://x.ai/cli/grok-{version}-linux-{arch}.gz"
 
 # SHA-256 of the decompressed linux binary, per `uname -m` spelling xAI uses.
 _SHA256: dict[str, str] = {
-    "x86_64": "b702950aa5827d855e493278ab6215a4e0f5bceb5bba6c6243a9f55cdd143b0a",
-    "aarch64": "b30eee14a656124ef3c9da8577b5e783ef2cffabeb2b679c5c49633e77eed574",
+    "x86_64": "a8302a0651289f8b6e6cd519977c8cf7941ba2ad7dce6c674cd2a7b34cb4eb66",
+    "aarch64": "855d55aa740d8f89ddc3d3783161da34cfabded7679e8b3906d57b0d5435a00a",
 }
 
 # Grok tools that need xAI's backend or a human, which a task run has neither of.
@@ -45,7 +45,7 @@ _DISALLOWED_TOOLS = ("send_feedback", "image_edit", "ask_user_question")
 @register_cli_agent
 class GrokBuildAgent(CliAgent):
     name: ClassVar[str] = "grok-build"
-    version: ClassVar[str] = "1.0.77"
+    version: ClassVar[str] = "1.0.85"
     provider_url: ClassVar[str] = "https://api.x.ai"
     providers: ClassVar[tuple[str, ...]] = ("xai",)
     binary: ClassVar[str] = _GROK_BIN
