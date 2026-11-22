@@ -30,6 +30,7 @@ from karotte.apple_container import (
 from karotte.build import get_container_build_command
 from karotte.confinement import GIB, SANDBOX_MEMORY_ENV_VAR
 from karotte.hardware import HardwareLimits
+from karotte.plugin_path import PLUGIN_MOUNT_ROOT, PLUGIN_PATH_ENV
 from karotte.run_helpers import copy_hint, get_container_run_command
 from karotte.save_artifact import (
     ARTIFACT_DIR_ENV_VAR,
@@ -357,6 +358,19 @@ class TestRunCommand:
                 "writable": False,
             },
         ]
+
+    def test_plugin_mounts_are_bound_in_place(
+        self, config: EvaluationRunConfig, tmp_path: Path
+    ):
+        target = f"{PLUGIN_MOUNT_ROOT}/0"
+
+        command = run_command(config, mounts=[f"{tmp_path}:{target}:ro"])
+
+        assert f"type=bind,source={tmp_path},target={target},readonly" in (
+            flag_values(command, "--mount")
+        )
+        assert env_value(command, STAGED_MOUNTS_ENV_VAR) is None
+        assert env_value(command, PLUGIN_PATH_ENV) == target
 
     def test_no_staged_mounts_without_user_mounts(self, config: EvaluationRunConfig):
         assert env_value(run_command(config), STAGED_MOUNTS_ENV_VAR) is None

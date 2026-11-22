@@ -17,6 +17,7 @@ from karotte.tools.replace_in_file import (
     replace_in_file,
 )
 from karotte.truncation import json_encoded_len
+from tests.conftest import assert_harness_env_withheld
 
 
 class _FakeRegularStat:
@@ -680,3 +681,16 @@ async def test_missing_tee_leaves_the_file_intact(
     with pytest.raises(OSError, match="is not available"):
         await replace_in_file(file_path, "old", "new")
     assert file_path.read_text() == "old"
+
+
+@pytest.mark.asyncio
+async def test_helpers_withhold_the_harness_env(
+    tmp_path: Path, demoted_envs: list[dict[str, str] | None]
+):
+    file_path = tmp_path / "test_file.txt"
+    file_path.write_text("old old old")
+
+    await replace_in_file(file_path, "old", "new")
+
+    assert file_path.read_text() == "new old old"
+    assert_harness_env_withheld(demoted_envs)

@@ -1,5 +1,12 @@
 """karotte: A library for creating and running AI agent evaluation environments."""
 
+# ruff: noqa: E402
+
+from karotte.plugin_path import apply_plugin_path
+
+# Before anything reads Karotte's entry points.
+apply_plugin_path()
+
 from karotte.confinement import Contract as Contract
 from karotte.confinement import FileLimit as FileLimit
 from karotte.confinement import ResourceLimits as ResourceLimits

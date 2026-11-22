@@ -114,7 +114,7 @@ Karotte refuses a proxy on localhost or a private address.
 
 Modal doesn't filter the network around the sandbox the way `firecracker` does on the host, so only the student firewall inside the sandbox applies.
 
-The `modal` runtime doesn't support `--mount`, `--dev`, `--keep-containers` or `--prepare-only` yet.
+The `modal` runtime doesn't support `--mount`, `--plugin-path`, `--dev`, `--keep-containers` or `--prepare-only` yet.
 It can't run hardware a plugin marks `passthrough`, such as a GPU, because Modal's VM runtime has no GPUs.
 
 ### docker, podman, nerdctl

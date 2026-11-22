@@ -2,8 +2,10 @@
 settings: one place, so a new runtime can't leave any of it out."""
 
 import os
+from collections.abc import Iterable
 
 from karotte.confinement import STUDENT_NETWORK_ENV_VAR
+from karotte.plugin_path import plugin_path_env
 from karotte.providers import SERVICE_TIER_ENV
 
 EXIT_ON_RUN_ERROR_ENV_VAR = "KAROTTE_EXIT_ON_RUN_ERROR"
@@ -18,7 +20,11 @@ def forwarded_env() -> dict[str, str]:
     return {var: value for var in FORWARDED_ENV_VARS if (value := os.environ.get(var))}
 
 
-def sandbox_env() -> dict[str, str]:
+def sandbox_env(mount_targets: Iterable[str] = ()) -> dict[str, str]:
     """The environment every launcher gives the in-sandbox run: exit non-zero
-    on a run error, and the forwarded host settings."""
-    return {EXIT_ON_RUN_ERROR_ENV_VAR: "1", **forwarded_env()}
+    on a run error, the forwarded host settings, and where plugins are mounted."""
+    return {
+        EXIT_ON_RUN_ERROR_ENV_VAR: "1",
+        **forwarded_env(),
+        **plugin_path_env(mount_targets),
+    }

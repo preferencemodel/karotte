@@ -209,6 +209,7 @@ def modal_problems(
     *,
     required_hardware: str | None,
     mounts: Sequence[str] | None,
+    plugin_paths: bool,
     dev: bool,
     keep_containers: bool,
     prepare_only: bool,
@@ -224,6 +225,7 @@ def modal_problems(
         problems.append(str(e))
     for flag, used in (
         ("--mount", bool(mounts)),
+        ("--plugin-path", plugin_paths),
         ("--dev", dev),
         ("--keep-containers", keep_containers),
         ("--prepare-only", prepare_only),

@@ -163,6 +163,7 @@ class TestProblems:
         args: dict[str, Any] = {
             "required_hardware": None,
             "mounts": None,
+            "plugin_paths": False,
             "dev": False,
             "keep_containers": False,
             "prepare_only": False,
@@ -179,6 +180,7 @@ class TestProblems:
         [
             ({"required_hardware": "gpu"}, "gpu"),
             ({"mounts": ["a:/b"]}, "--mount"),
+            ({"plugin_paths": True}, "--plugin-path"),
             ({"dev": True}, "--dev"),
             ({"keep_containers": True}, "--keep-containers"),
             ({"prepare_only": True}, "--prepare-only"),

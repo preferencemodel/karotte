@@ -45,6 +45,7 @@ from karotte.firecracker.vm import (
 )
 from karotte.forwarded_env import FORWARDED_ENV_VARS
 from karotte.hardware import HardwareLimits, VmSize
+from karotte.plugin_path import PLUGIN_MOUNT_ROOT, PLUGIN_PATH_ENV
 from karotte.runtime import get_engine
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from tests.conftest import register_hardware_plugins
@@ -298,6 +299,16 @@ class TestGuestInputs:
         env = guest_env([], disk_budget_bytes=1, sandbox_memory_bytes=1, proxy_url=None)
         assert "KAROTTE_STUDENT_NETWORK=internal" in env
 
+    def test_env_points_at_the_plugin_mounts(self):
+        env = guest_env(
+            [],
+            disk_budget_bytes=1,
+            sandbox_memory_bytes=1,
+            proxy_url=None,
+            mount_targets=["/data", f"{PLUGIN_MOUNT_ROOT}/0"],
+        )
+        assert f"{PLUGIN_PATH_ENV}={PLUGIN_MOUNT_ROOT}/0" in env
+
     def test_mounts(self, tmp_path: Path):
         mounts = parse_mounts(
             [f"{tmp_path}:/data:ro"], dev=True, build_context=str(tmp_path)
@@ -479,6 +490,19 @@ class TestRootfs:
             ["bash", "-n", str(init)], capture_output=True, text=True
         )
         assert result.returncode == 0, result.stderr
+
+    def test_guest_init_keeps_its_mounts_from_the_student(self):
+        lines = (GUEST_DIR / "init").read_text().splitlines()
+        locked = lines.index("mkdir -p -m 0700 $K")
+        first_mount = next(
+            i
+            for i, line in enumerate(lines)
+            if line.startswith("mkdir -p -m 0700 $K/io")
+        )
+        mount_loop = next(
+            i for i, line in enumerate(lines) if line.startswith("  m=$K/mnt/")
+        )
+        assert locked < first_mount < mount_loop
 
 
 class TestAgent:

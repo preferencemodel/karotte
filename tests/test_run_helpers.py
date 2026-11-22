@@ -16,6 +16,7 @@ from karotte.cli.run import (
     _validate_mount_specs,  # pyright: ignore[reportPrivateUsage]
 )
 from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
+from karotte.plugin_path import PLUGIN_MOUNT_ROOT, PLUGIN_PATH_ENV
 from karotte.providers import SERVICE_TIER_ENV
 from karotte.run_helpers import (
     _maybe_block_internet,  # pyright: ignore[reportPrivateUsage]
@@ -713,6 +714,33 @@ class TestGetContainerRunCommand:
             == "type=bind,source=/data/models,target=/models,readonly"
         )
         assert bind_mount_args[1] == "type=bind,source=/tmp/results,target=/results"
+
+    def test_plugin_mounts_set_the_plugin_path(
+        self, sample_config: EvaluationRunConfig
+    ):
+        command, _ = get_container_run_command(
+            sample_config,
+            "podman",
+            dev=False,
+            keep_container=False,
+            mounts=["/data:/data:ro", f"/plugins:{PLUGIN_MOUNT_ROOT}/0:ro"],
+        )
+
+        envs = [command[i + 1] for i, arg in enumerate(command) if arg == "--env"]
+        assert f"{PLUGIN_PATH_ENV}={PLUGIN_MOUNT_ROOT}/0" in envs
+
+    def test_no_plugin_path_without_plugin_mounts(
+        self, sample_config: EvaluationRunConfig
+    ):
+        command, _ = get_container_run_command(
+            sample_config,
+            "podman",
+            dev=False,
+            keep_container=False,
+            mounts=["/data:/data:ro"],
+        )
+
+        assert not any(arg.startswith(f"{PLUGIN_PATH_ENV}=") for arg in command)
 
     def test_no_user_bind_mounts_by_default(self, sample_config: EvaluationRunConfig):
         command, _ = get_container_run_command(

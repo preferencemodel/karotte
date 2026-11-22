@@ -180,6 +180,7 @@ def guest_env(
     disk_budget_bytes: int,
     sandbox_memory_bytes: int,
     proxy_url: str | None,
+    mount_targets: Sequence[str] = (),
 ) -> list[str]:
     env: dict[str, str] = {}
     for entry in image_env:
@@ -196,7 +197,7 @@ def guest_env(
     if proxy_url:
         env["ANTHROPIC_BASE_URL"] = proxy_url
         env["KAROTTE_PROXY_URL"] = proxy_url
-    env.update(sandbox_env())
+    env.update(sandbox_env(mount_targets))
     return [f"{k}={v}" for k, v in env.items()]
 
 
@@ -641,6 +642,7 @@ def run_firecracker(
                 disk_budget_bytes=budget,
                 sandbox_memory_bytes=size.sandbox_memory_bytes,
                 proxy_url=proxy_url,
+                mount_targets=[g.target for g in guest_mounts],
             ),
             workdir=image_config.working_dir,
             relay_port=None if prepare_only else run_config.websocket_config.port,

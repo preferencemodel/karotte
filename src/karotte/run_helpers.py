@@ -408,7 +408,7 @@ def get_container_run_command(
         # Anthropic-specific base URL the builtin loop uses.
         command.extend(["--env", f"KAROTTE_PROXY_URL={proxy_url}"])
 
-    for var, value in sandbox_env().items():
+    for var, value in sandbox_env(m.split(":")[1] for m in mounts or []).items():
         command.extend(["--env", f"{var}={value}"])
 
     command.append(f"localhost/{image_name()}" if engine == "podman" else image_name())

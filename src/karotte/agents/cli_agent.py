@@ -28,6 +28,7 @@ from karotte.agents.agent import (
     StepTimeLimitReachedError,
 )
 from karotte.model_forwarder import ModelForwarder
+from karotte.plugin_path import from_plugin_path
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.save_artifact import save_artifact
 from karotte.schemas.chat import Message
@@ -593,20 +594,22 @@ _plugins_loaded = False
 
 
 def register_cli_agent[C: CliAgent](cls: type[C]) -> type[C]:
-    _CLI_AGENTS[cls.name] = cls
+    """Register ``cls`` unless another agent already has its name."""
+    _ = _CLI_AGENTS.setdefault(cls.name, cls)
     return cls
 
 
 def _load_plugin_agents() -> None:
-    """Register the CLI agents of installed packages, once. A plugin can't
-    replace one of karotte's own agents."""
+    """Register the CLI agents of installed packages, once, loading those on
+    the plugin path first. A plugin can't replace one of karotte's own agents."""
     global _plugins_loaded
     if _plugins_loaded:
         return
     _plugins_loaded = True
     builtin = set(_CLI_AGENTS)
     for ep in sorted(
-        entry_points(group=CLI_AGENTS_ENTRY_POINT_GROUP), key=lambda ep: ep.name
+        entry_points(group=CLI_AGENTS_ENTRY_POINT_GROUP),
+        key=lambda ep: (not from_plugin_path(ep), ep.name),
     ):
         try:
             cls = ep.load()
@@ -615,6 +618,8 @@ def _load_plugin_agents() -> None:
             continue
         if not (isinstance(cls, type) and issubclass(cls, CliAgent)):
             logger.warning("Ignoring CLI agent {!r}: not a CliAgent subclass", ep.name)
+        elif _CLI_AGENTS.get(cls.name) is cls:
+            pass
         elif cls.name in builtin:
             logger.warning(
                 "Ignoring CLI agent {!r}: {!r} is built in", ep.name, cls.name

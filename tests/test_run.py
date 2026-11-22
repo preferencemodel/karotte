@@ -20,6 +20,7 @@ from karotte.cli.run import (
 )
 from karotte.env_source import SourceError, image_name_for
 from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
+from karotte.plugin_path import PLUGIN_MOUNT_ROOT
 from karotte.run_helpers import build_configs, sanitize_paths
 from karotte.runtime import Runtime
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -885,8 +886,17 @@ def test_the_judges_default_model_comes_from_the_config(
     assert RubricJudge.default_model == expected
 
 
+_PARSED = EvaluationRunConfig(run_id="r", task_id="t", model="m", model_api_key="k")
+
+
 def _run_on(runtime: Runtime, **kwargs: Any) -> list[EvaluationRunConfig]:
-    parsed = EvaluationRunConfig(run_id="r", task_id="t", model="m", model_api_key="k")
+    return _launch_on(runtime, **kwargs).call_args.args[0]
+
+
+def _launch_on(runtime: Runtime, agent: str | None = None, **kwargs: Any) -> MagicMock:
+    parsed = EvaluationRunConfig(
+        run_id="r", task_id="t", model="m", model_api_key="k", agent=agent
+    )
     with (
         patch("karotte.firecracker.preflight.validate_firecracker_runtime"),
         patch("karotte.cli.run.require_environment"),
@@ -899,7 +909,130 @@ def _run_on(runtime: Runtime, **kwargs: Any) -> list[EvaluationRunConfig]:
         patch("karotte.cli.run._run_without_ui") as run_without_ui,
     ):
         run(config="{}", runtime=runtime, no_ui=True, **kwargs)
-    return run_without_ui.call_args.args[0]
+    return run_without_ui
+
+
+class TestPluginPath:
+    @pytest.fixture(autouse=True)
+    def _free_ports(self):
+        with patch("karotte.cli.run.ports_in_use", return_value=[]):
+            yield
+
+    def test_each_folder_is_mounted_read_only_under_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        launch = _launch_on("docker", plugin_path=[str(tmp_path / "a"), "b"])
+
+        assert launch.call_args.kwargs["mounts"] == [
+            f"{tmp_path / 'a'}:{PLUGIN_MOUNT_ROOT}/0:ro",
+            f"{tmp_path / 'b'}:{PLUGIN_MOUNT_ROOT}/1:ro",
+        ]
+
+    def test_comes_after_the_user_mounts(self, tmp_path: Path):
+        (tmp_path / "data").mkdir()
+        (tmp_path / "plugin").mkdir()
+
+        launch = _launch_on(
+            "docker",
+            mount=[f"{tmp_path / 'data'}:/data:ro"],
+            plugin_path=[str(tmp_path / "plugin")],
+        )
+
+        assert launch.call_args.kwargs["mounts"] == [
+            f"{tmp_path / 'data'}:/data:ro",
+            f"{tmp_path / 'plugin'}:{PLUGIN_MOUNT_ROOT}/0:ro",
+        ]
+
+    def test_a_folder_with_a_colon_aborts(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        folder = tmp_path / "a:b"
+        folder.mkdir()
+
+        with pytest.raises(typer.Abort):
+            _ = _launch_on("docker", plugin_path=[str(folder)])
+
+        assert f"--plugin-path {folder} can't contain ':'." in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "target", [f"{PLUGIN_MOUNT_ROOT}/0", "/root/x/../.karotte-plugins/0"]
+    )
+    def test_a_mount_into_the_plugin_folders_aborts(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], target: str
+    ):
+        with pytest.raises(typer.Abort):
+            _ = _launch_on("docker", mount=[f"{tmp_path}:{target}:ro"])
+
+        assert f"{PLUGIN_MOUNT_ROOT} is reserved for --plugin-path" in (
+            capsys.readouterr().err
+        )
+
+    def test_a_builtin_agent_must_still_be_in_the_image(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(typer.Abort):
+            _ = _launch_on("docker", agent="codex", plugin_path=[str(tmp_path)])
+
+        assert "The image isn't built with the codex agent." in capsys.readouterr().err
+
+    def test_modal_is_told_about_the_plugin_path(self, tmp_path: Path):
+        with (
+            patch("karotte.cli.run.require_environment"),
+            patch("karotte.cli.run.require_runtime"),
+            patch("karotte.cli.run.require_builder"),
+            patch("karotte.cli.run.parse_config", return_value=_PARSED),
+            patch("karotte.cli.run.load_task", return_value=MagicMock()),
+            patch("karotte.cli.run.container_run_args", return_value=[]),
+            patch(
+                "karotte.modal_runtime.modal_problems", return_value=["nope"]
+            ) as problems,
+            pytest.raises(typer.Abort),
+        ):
+            run(config="{}", runtime="modal", no_ui=True, plugin_path=[str(tmp_path)])
+
+        assert problems.call_args.kwargs["mounts"] is None
+        assert problems.call_args.kwargs["plugin_paths"] is True
+
+    def test_lets_the_run_use_an_agent_the_image_lacks(self, tmp_path: Path):
+        launch = _launch_on("docker", agent="plugin-agent", plugin_path=[str(tmp_path)])
+
+        launch.assert_called_once()
+
+    def test_without_it_an_unknown_agent_aborts(
+        self, capsys: pytest.CaptureFixture[str]
+    ):
+        with pytest.raises(typer.Abort):
+            _ = _launch_on("docker", agent="plugin-agent")
+
+        assert "Unknown agent 'plugin-agent'" in capsys.readouterr().err
+
+    def test_needs_containerization(self, capsys: pytest.CaptureFixture[str]):
+        with pytest.raises(typer.Abort):
+            run(config="", containerized=False, plugin_path=["plugins"])
+
+        assert (
+            "Cannot use the `--plugin-path` option without containerization."
+            in capsys.readouterr().err
+        )
+
+    def test_a_missing_folder_aborts(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        with pytest.raises(typer.Abort):
+            _ = _launch_on("docker", plugin_path=[str(tmp_path / "missing")])
+
+        assert f"--plugin-path {tmp_path / 'missing'} isn't a folder." in (
+            capsys.readouterr().err
+        )
 
 
 def test_websocket_port_sets_the_first_runs_port():
@@ -1776,6 +1909,7 @@ class TestRunFromSource:
             websocket_port=8100,
             dev=True,
             mount=["data:/a", "@mounts.txt"],
+            plugin_path=["plugins"],
             no_ui=True,
             keep_containers=True,
             cache_from=["type=local,src=c"],
@@ -1802,6 +1936,8 @@ class TestRunFromSource:
             f"{cwd / 'data'}:/a",
             "--mount",
             f"{cwd / 'data'}:/b:ro",
+            "--plugin-path",
+            str(cwd / "plugins"),
             "--no-ui",
             "--keep-containers",
             "--cache-from",

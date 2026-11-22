@@ -46,6 +46,38 @@ Install the package into the same environment as Karotte.
 For an environment's venv, add it as a dependency.
 For a tool install, use `uv tool install karotte --with my-plugin` or `uvx --with my-plugin karotte ...`.
 
+## Loading plugins from a folder
+
+`karotte run --plugin-path <folder>` loads plugins from a folder on the host, so you can change a plugin without rebuilding the image.
+The folder holds the plugin's packages and their `.dist-info` folders, which is what `--target` installs:
+
+```sh
+uv pip install --no-deps --target build/plugins ./my-plugin
+uv run karotte run --config run_config.json --plugin-path build/plugins
+```
+
+`--no-deps` keeps the plugin's dependencies out of the folder.
+The plugin can only use packages that are already in the image.
+
+Karotte mounts each folder read-only under `/root/.karotte-plugins` and lists the folders in `KAROTTE_PLUGIN_PATH`.
+When Karotte starts in the sandbox, it puts them first on `sys.path`.
+A package in a folder wins over an installed package of the same name, and its CLI agents win over installed plugins' agents with the same `name`.
+Karotte's own agents still win over both.
+The student's processes never get `KAROTTE_PLUGIN_PATH`.
+
+Karotte refuses to start when:
+
+- a folder doesn't exist, or its path isn't absolute.
+- the student can reach a folder. Only root may be able to open it.
+- a plugin's `Requires-Dist` on `karotte` doesn't match the installed Karotte.
+
+You can pass `--plugin-path` more than once.
+It needs a container, and the `modal` runtime doesn't support it yet.
+The image must already have the CLI that a plugin's agent runs.
+For an agent that only the folder provides, `karotte run` can't check this before the run starts.
+
+If you launch Karotte in the sandbox yourself, set `KAROTTE_PLUGIN_PATH` to the absolute folders, separated by `:`.
+
 ## Order and merging
 
 If only one value can win, Karotte sorts the entry points by name and takes the first one that loads.
@@ -191,7 +223,7 @@ def container_run_args(task, runtime: str) -> list[str]:
 The attribute is a subclass of [`CliAgent`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/agents/cli_agent.py).
 It becomes available as `karotte run --agent <name>`, where `<name>` is the class's `name`, and in `karotte agents list`.
 If its `name` is one of Karotte's own agents, Karotte ignores it with a warning.
-The package must be installed in the environment's image, since the agent runs there.
+The agent runs in the sandbox, so install the package in the environment's image or load it from a [folder](#loading-plugins-from-a-folder).
 
 ```toml
 [project.entry-points."karotte.cli_agents"]
