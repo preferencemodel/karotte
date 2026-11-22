@@ -20,6 +20,7 @@ from karotte.demoted import (
     open_regular_as_stdout,
     reap,
 )
+from karotte.plugin_path import PLUGIN_PATH_ENV
 from karotte.subprocess import make_demote_fn
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="posix only")
@@ -315,3 +316,10 @@ def test_open_regular_as_stdin_works_when_the_parent_has_no_stdin(tmp_path: Path
         timeout=30,
     )
     assert (r.returncode, r.stdout, r.stderr) == (0, b"hello\n", b"")
+
+
+@pytest.mark.asyncio
+async def test_check_access_withholds_the_harness_env(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(PLUGIN_PATH_ENV, "/root/.karotte-plugins/0")
+    monkeypatch.setattr("karotte.demoted.TEST_PATH", "/bin/sh")
+    assert await check_access("-c", f'[ -z "${PLUGIN_PATH_ENV}" ]')

@@ -74,6 +74,8 @@ ln -sf /proc/self/fd/1 /dev/stdout
 ln -sf /proc/self/fd/2 /dev/stderr
 stty -onlcr 2>/dev/null
 
+# Drives stay mounted under $K/mnt after being bound to their targets.
+mkdir -p -m 0700 $K
 mkdir -p -m 0700 $K/io
 mount -t ext4 /dev/vdc $K/io || { log "no io drive"; power_off; }
 chmod 0700 $K/io

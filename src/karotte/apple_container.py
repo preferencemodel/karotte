@@ -44,6 +44,7 @@ from karotte.confinement import (
 )
 from karotte.forwarded_env import sandbox_env
 from karotte.hardware import VmSize, vm_size
+from karotte.plugin_path import PLUGIN_MOUNT_ROOT
 from karotte.runtime import image_name
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.staged_mounts import STAGED_MOUNTS_ENV_VAR, StagedMount, encode
@@ -131,6 +132,13 @@ def get_run_command(
         parts = spec.split(":")
         source = Path(parts[0]).absolute()
         writable = not (len(parts) == 3 and parts[2] == "ro")
+        # Karotte loads plugins on import, before staged mounts are copied in;
+        # /root keeps them from the student.
+        if parts[1].startswith(f"{PLUGIN_MOUNT_ROOT}/"):
+            command.extend(
+                ["--mount", f"type=bind,source={source},target={parts[1]},readonly"]
+            )
+            continue
         staging = f"{STAGED_MOUNTS_DIR}/{index}"
         # virtiofs shares directories; a file comes in through a directory of
         # its own, not its parent, which would share its siblings too.
@@ -164,7 +172,7 @@ def get_run_command(
         command.extend(["--env", f"ANTHROPIC_BASE_URL={proxy_url}"])
         command.extend(["--env", f"KAROTTE_PROXY_URL={proxy_url}"])
 
-    for var, value in sandbox_env().items():
+    for var, value in sandbox_env(m.split(":")[1] for m in mounts or []).items():
         command.extend(["--env", f"{var}={value}"])
 
     command.append(image_name())

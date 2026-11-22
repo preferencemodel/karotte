@@ -18,6 +18,7 @@ from karotte.tools.view_image_file import (
     _read_capped,  # pyright: ignore[reportPrivateUsage]
     view_image_file,
 )
+from tests.conftest import assert_harness_env_withheld
 
 
 @pytest.mark.asyncio
@@ -256,3 +257,13 @@ async def test_hanging_open_times_out(
     with pytest.raises(TimeoutError, match="^Timed out opening: "):
         async with asyncio.timeout(10):
             await view_image_file()(image)
+
+
+@pytest.mark.usefixtures("gnu_base64")
+@pytest.mark.asyncio
+async def test_helpers_withhold_the_harness_env(
+    resource_dir: Path, demoted_envs: list[dict[str, str] | None]
+):
+    _ = await view_image_file()((resource_dir / "image_1px.png").absolute())
+
+    assert_harness_env_withheld(demoted_envs)

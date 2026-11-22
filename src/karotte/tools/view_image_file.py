@@ -10,7 +10,7 @@ from fastmcp.utilities.types import Image as FastMCPImage
 from karotte import ToolBase, demoted
 from karotte.demoted import drain_bounded as _drain_bounded
 from karotte.demoted import open_error, open_regular_as_stdin
-from karotte.subprocess import make_demote_fn
+from karotte.subprocess import make_demote_fn, student_env
 from pydantic import BaseModel
 
 BASE64_PATH = "/usr/bin/base64"
@@ -83,6 +83,7 @@ class view_image_file(ToolBase[ViewImageFileConfig]):
             "-w",
             "0",
             preexec_fn=open_regular_as_stdin(str(file_path), make_demote_fn()),
+            env=student_env(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

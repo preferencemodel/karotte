@@ -114,7 +114,7 @@ It only works inside a Karotte image, where the `Containerfile` sets `KAROTTE_CO
 Anywhere else, `karotte run` refuses it.
 Karotte uses it inside the container it starts.
 
-`--dev`, `--mount`, `--keep-containers` and `-n` greater than 1 all need a container, so you can't combine them with `--no-containerized`.
+`--dev`, `--mount`, `--plugin-path`, `--keep-containers` and `-n` greater than 1 all need a container, so you can't combine them with `--no-containerized`.
 
 ## Lint and test
 

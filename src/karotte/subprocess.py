@@ -19,6 +19,7 @@ from loguru import logger
 
 from karotte.confinement import Sandbox, current_sandbox
 from karotte.container import demoted_uid_gid as demoted_uid_gid
+from karotte.plugin_path import PLUGIN_PATH_ENV
 from karotte.trusted_bin import trusted_binary as trusted_binary
 
 
@@ -79,19 +80,39 @@ def student_identity_env() -> dict[str, str]:
 HARNESS_SECRET_ENTRY_POINT_GROUP = "karotte.harness_secret_env"
 
 
+_harness_secrets: frozenset[str] | None = None
+_withheld_logged: set[str] = set()
+
+
 def harness_secret_env() -> frozenset[str]:
-    """Env var names of harness credentials, as registered by installed packages.
+    """Env var names of harness settings and credentials: Karotte's own and
+    those installed packages register. Remembered once every plugin loads.
 
     An explicit list, not a pattern over credential-shaped names: environments
     hand the student secrets on purpose (a dataset token, a scoped API key).
     """
-    names: set[str] = set()
+    global _harness_secrets
+    if _harness_secrets is not None:
+        return _harness_secrets
+    names: set[str] = {PLUGIN_PATH_ENV}
+    complete = True
     for ep in entry_points(group=HARNESS_SECRET_ENTRY_POINT_GROUP):
         try:
             names.update(ep.load())
         except Exception as e:  # noqa: BLE001 - a broken plugin must not break karotte
             logger.warning("Ignoring harness secrets from {!r}: {}", ep.name, e)
-    return frozenset(names)
+            complete = False
+    secrets = frozenset(names)
+    if complete:
+        _harness_secrets = secrets
+    return secrets
+
+
+def reset_harness_secret_env(secrets: frozenset[str] | None = None) -> None:
+    """Remember ``secrets`` instead, or nothing, and forget what was logged. For tests."""
+    global _harness_secrets
+    _harness_secrets = secrets
+    _withheld_logged.clear()
 
 
 def is_harness_secret_env(name: str) -> bool:
@@ -103,8 +124,9 @@ def scrub_harness_secrets(env: Mapping[str, str]) -> dict[str, str]:
     """``env`` without the variables :func:`is_harness_secret_env` names."""
     secrets = harness_secret_env()
     dropped = sorted(k for k in env if k in secrets)
-    if dropped:
-        logger.info("Withholding {} from the student's environment", ", ".join(dropped))
+    if new := [k for k in dropped if k not in _withheld_logged]:
+        logger.info("Withholding {} from the student's environment", ", ".join(new))
+        _withheld_logged.update(new)
     return {k: v for k, v in env.items() if k not in dropped}
 
 

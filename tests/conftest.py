@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import itertools
 import json
@@ -25,6 +26,7 @@ from karotte.hardware import (
 )
 from karotte.judges.regex_judge import RegexJudge
 from karotte.mcp_servers.http_mcp_server import HttpMcpServer, run_server
+from karotte.plugin_path import PLUGIN_PATH_ENV
 from karotte.providers import SERVICE_TIER_ENV
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.http_mcp_server_config import HttpMcpServerConfig
@@ -32,6 +34,8 @@ from karotte.schemas.transcript import Transcript
 from karotte.subprocess import (
     HARNESS_SECRET_ENTRY_POINT_GROUP,
     PLATFORM_TOOLING_ENTRY_POINT_GROUP,
+    harness_secret_env,
+    reset_harness_secret_env,
 )
 from karotte.tools.bash import _BashSession, bash  # pyright: ignore[reportPrivateUsage]
 from karotte.update_env import INDEX_OVERRIDE_VARS
@@ -358,6 +362,20 @@ def _register_subprocess_entry_points(
         ]
 
     monkeypatch.setattr("karotte.subprocess.entry_points", fake_entry_points)
+    reset_harness_secret_env()
+
+
+@pytest.fixture(scope="session")
+def _real_harness_secrets() -> frozenset[str]:
+    """Scanned before any test fakes ``os.stat`` or ``Path.read_text``."""
+    reset_harness_secret_env()
+    return harness_secret_env()
+
+
+@pytest.fixture(autouse=True)
+def _restore_harness_secrets(_real_harness_secrets: frozenset[str]) -> Iterator[None]:
+    yield
+    reset_harness_secret_env(_real_harness_secrets)
 
 
 def register_hardware_plugins(
@@ -386,3 +404,25 @@ def register_hardware_plugins(
         ]
 
     monkeypatch.setattr("karotte.hardware.entry_points", fake_entry_points)
+
+
+@pytest.fixture
+def demoted_envs(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, str] | None]:
+    """The ``env`` of every asyncio subprocess started, with a harness-only
+    variable set that none of them may get."""
+    monkeypatch.setenv(PLUGIN_PATH_ENV, "/root/.karotte-plugins/0")
+    envs: list[dict[str, str] | None] = []
+    create_subprocess_exec = asyncio.create_subprocess_exec
+
+    async def recording(*args: Any, **kwargs: Any) -> asyncio.subprocess.Process:
+        envs.append(kwargs.get("env"))
+        return await create_subprocess_exec(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", recording)
+    return envs
+
+
+def assert_harness_env_withheld(envs: list[dict[str, str] | None]) -> None:
+    assert envs
+    for env in envs:
+        assert env is not None and PLUGIN_PATH_ENV not in env

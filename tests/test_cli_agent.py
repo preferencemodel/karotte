@@ -29,6 +29,7 @@ from karotte.agents.cli_agent import (
     cli_agent_types,
     get_cli_agent_type,
     install_release,
+    register_cli_agent,
     toml_string,
 )
 from karotte.model_forwarder import GeminiForwarder
@@ -354,7 +355,7 @@ class TestPluginAgents:
         def fake_entry_points(*, group: str) -> list[SimpleNamespace]:
             assert group == "karotte.cli_agents"
             return [
-                SimpleNamespace(name=name, load=lambda v=value: load(v))
+                SimpleNamespace(name=name, dist=None, load=lambda v=value: load(v))
                 for name, value in offered.items()
             ]
 
@@ -372,6 +373,13 @@ class TestPluginAgents:
         builtin = get_cli_agent_type("claude-code")
         cli_agent._plugins_loaded = False  # pyright: ignore[reportPrivateUsage]
         plugins["impostor"] = type("Impostor", (_EchoAgent,), {"name": "claude-code"})
+        assert get_cli_agent_type("claude-code") is builtin
+
+    @pytest.mark.usefixtures("plugins")
+    def test_registering_doesnt_replace_an_agent(self):
+        builtin = get_cli_agent_type("claude-code")
+        impostor = type("Impostor", (_EchoAgent,), {"name": "claude-code"})
+        assert register_cli_agent(impostor) is impostor
         assert get_cli_agent_type("claude-code") is builtin
 
     def test_a_broken_plugin_is_skipped(self, plugins: dict[str, object]):

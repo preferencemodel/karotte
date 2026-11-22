@@ -7,11 +7,14 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from loguru import logger
 
 import karotte.subprocess as karotte_subprocess
+from karotte.plugin_path import PLUGIN_PATH_ENV
 from karotte.subprocess import (
     is_harness_secret_env,
     make_demote_fn,
@@ -1414,6 +1417,12 @@ def test_nothing_is_a_harness_secret_without_a_plugin(
     assert not is_harness_secret_env("BACKEND_TOKEN")
 
 
+def test_the_plugin_path_is_withheld_from_the_student(monkeypatch: pytest.MonkeyPatch):
+    register_harness_secrets(monkeypatch)
+    monkeypatch.setenv(PLUGIN_PATH_ENV, "/root/.karotte-plugins/0")
+    assert PLUGIN_PATH_ENV not in student_env()
+
+
 @pytest.mark.usefixtures("backend_token")
 def test_installed_packages_register_harness_secrets():
     assert is_harness_secret_env("BACKEND_TOKEN")
@@ -1462,6 +1471,54 @@ def test_scrub_drops_secrets_and_keeps_the_rest():
     }
     # A copy, never the input.
     assert "BACKEND_TOKEN" in env
+
+
+@pytest.mark.usefixtures("backend_token")
+def test_scrub_logs_each_withheld_variable_once():
+    messages: list[str] = []
+    handler = logger.add(messages.append, format="{message}", level="INFO")
+    try:
+        for _ in range(3):
+            _ = scrub_harness_secrets({"BACKEND_TOKEN": "eyJ...", "OTHER": "x"})
+    finally:
+        logger.remove(handler)
+
+    withheld = [m for m in messages if m.startswith("Withholding")]
+    assert withheld == ["Withholding BACKEND_TOKEN from the student's environment\n"]
+
+
+def test_harness_secrets_are_looked_up_once(monkeypatch: pytest.MonkeyPatch):
+    lookups: list[str] = []
+
+    def fake_entry_points(*, group: str) -> list[SimpleNamespace]:
+        lookups.append(group)
+        return [SimpleNamespace(name="a", load=lambda: ("BACKEND_TOKEN",))]
+
+    monkeypatch.setattr("karotte.subprocess.entry_points", fake_entry_points)
+    karotte_subprocess.reset_harness_secret_env()
+
+    assert is_harness_secret_env("BACKEND_TOKEN")
+    assert is_harness_secret_env("BACKEND_TOKEN")
+    assert len(lookups) == 1
+
+
+def test_a_failed_harness_secret_lookup_is_retried(monkeypatch: pytest.MonkeyPatch):
+    attempts: list[int] = []
+
+    def flaky_load() -> tuple[str, ...]:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise ImportError("not yet")
+        return ("BACKEND_TOKEN",)
+
+    monkeypatch.setattr(
+        "karotte.subprocess.entry_points",
+        lambda *, group: [SimpleNamespace(name="a", load=flaky_load)],  # pyright: ignore[reportUnknownLambdaType]
+    )
+    karotte_subprocess.reset_harness_secret_env()
+
+    assert not is_harness_secret_env("BACKEND_TOKEN")
+    assert is_harness_secret_env("BACKEND_TOKEN")
 
 
 @pytest.mark.usefixtures("backend_token")

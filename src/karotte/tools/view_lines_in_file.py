@@ -14,7 +14,7 @@ from karotte.demoted import (
     open_regular_as_stdin,
     reap,
 )
-from karotte.subprocess import make_demote_fn
+from karotte.subprocess import make_demote_fn, student_env
 from karotte.text_files import decode_text
 from karotte.truncation import head_within_json_bytes, json_encoded_len
 from pydantic import BaseModel
@@ -40,6 +40,7 @@ async def _count_lines(file_path: str) -> int | None:
         AWK_PATH,
         "END{print NR}",
         preexec_fn=open_regular_as_stdin(file_path, make_demote_fn()),
+        env=student_env(),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )
@@ -107,6 +108,7 @@ class view_lines_in_file(ToolBase[ViewLinesInFileConfig]):
             "-n",
             f"{from_line},{to_line}p;{to_line + 1}q",
             preexec_fn=open_regular_as_stdin(path_str, make_demote_fn()),
+            env=student_env(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

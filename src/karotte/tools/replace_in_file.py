@@ -8,7 +8,7 @@ from fastmcp.tools import ToolResult
 from karotte.demoted import check_access as _check_access
 from karotte.demoted import communicate_or_kill as _communicate_or_kill
 from karotte.demoted import open_error, open_regular_as_stdin, open_regular_as_stdout
-from karotte.subprocess import make_demote_fn
+from karotte.subprocess import make_demote_fn, student_env
 from karotte.text_files import decode_text
 from karotte.truncation import head_within_json_bytes, json_encoded_len
 
@@ -225,6 +225,7 @@ async def replace_in_file(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         preexec_fn=open_regular_as_stdin(path_str, make_demote_fn()),
+        env=student_env(),
     )
     try:
         stdout, stderr = await _communicate_or_kill(read_proc)
@@ -278,6 +279,7 @@ async def replace_in_file(
         stdin=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         preexec_fn=open_regular_as_stdout(path_str, make_demote_fn()),
+        env=student_env(),
     )
     try:
         _, stderr = await _communicate_or_kill(proc, new_content.encode("utf-8"))

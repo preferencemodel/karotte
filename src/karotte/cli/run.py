@@ -29,6 +29,7 @@ from karotte.forwarded_env import EXIT_ON_RUN_ERROR_ENV_VAR
 from karotte.hardware import container_run_args, default_runtime
 from karotte.judges import RubricJudge
 from karotte.load_tasks import load_task, require_environment
+from karotte.plugin_path import PLUGIN_MOUNT_ROOT
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.run_config_preprocessors import apply_run_config_preprocessors
 from karotte.run_helpers import (
@@ -281,6 +282,17 @@ def run(
             + "Can only be used when running containerized.",
         ),
     ] = None,
+    plugin_path: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--plugin-path",
+            metavar="DIR",
+            help="Load Karotte plugins, such as CLI agents, from a folder holding "
+            + "their packages and .dist-info. The folder is mounted read-only where "
+            + "only root can read it. Can be specified multiple times. "
+            + "Can only be used when running containerized.",
+        ),
+    ] = None,
     no_ui: Annotated[
         bool,
         typer.Option(
@@ -390,6 +402,7 @@ def run(
                 websocket_port=websocket_port,
                 dev=dev,
                 mount=mount or [],
+                plugin_path=plugin_path or [],
                 no_ui=no_ui,
                 keep_containers=keep_containers,
                 cache_from=cache_from or [],
@@ -415,6 +428,11 @@ def run(
     if dev and not containerized:
         _print_and_abort("Cannot use the `--dev` option without containerization.")
 
+    if plugin_path and not containerized:
+        _print_and_abort(
+            "Cannot use the `--plugin-path` option without containerization."
+        )
+
     if model_api_key_file is not None:
         model_api_key = Path(model_api_key_file).read_text()
     config = _config_with_flags(
@@ -439,6 +457,8 @@ def run(
     if mount:
         mount = _expand_mount_file_references(mount)
         _validate_mount_specs(mount)
+
+    plugin_mounts = _plugin_mounts(plugin_path or [])
 
     if keep_containers and not containerized:
         _print_and_abort(
@@ -490,7 +510,7 @@ def run(
         validate_gvisor_runtime()
 
     if on_host:
-        _check_agent(run_config.resolved_agent, build_context)
+        _check_agent(run_config.resolved_agent, build_context, bool(plugin_path))
 
     if containerized and not is_containerized():
         try:
@@ -505,13 +525,16 @@ def run(
     if runtime == "firecracker" and containerized and not is_containerized():
         from karotte.firecracker.preflight import validate_firecracker_runtime
 
-        validate_firecracker_runtime(load_task(run_config).required_hardware, mount)
+        validate_firecracker_runtime(
+            load_task(run_config).required_hardware, [*(mount or []), *plugin_mounts]
+        )
     if runtime == "modal" and containerized and not is_containerized():
         from karotte.modal_runtime import modal_problems
 
         problems = modal_problems(
             required_hardware=load_task(run_config).required_hardware,
             mounts=mount,
+            plugin_paths=bool(plugin_path),
             dev=dev,
             keep_containers=keep_containers,
             prepare_only=prepare_only,
@@ -519,6 +542,9 @@ def run(
         )
         if problems:
             _print_and_abort("\n".join(problems))
+
+    if plugin_mounts:
+        mount = [*(mount or []), *plugin_mounts]
 
     if run_config.resolved_rubric_judge_model is not None:
         RubricJudge.default_model = run_config.resolved_rubric_judge_model
@@ -621,14 +647,17 @@ def run(
         raise typer.Exit(1)
 
 
-def _check_agent(agent: str, build_context: str) -> None:
-    """Abort unless ``agent`` exists and, for a CLI agent, the image gets built with it."""
+def _check_agent(agent: str, build_context: str, plugins: bool) -> None:
+    """Abort unless ``agent`` exists and, for a CLI agent, the image gets built
+    with it. An agent only a plugin folder can bring is left to the sandbox."""
     from karotte.agents import cli_agent_types
     from karotte.create_env import EnvManifest
 
     if agent in ("builtin", "external"):
         return
     if agent not in cli_agent_types():
+        if plugins:
+            return
         _print_and_abort(f"Unknown agent {agent!r}. See `karotte agents list`.")
     manifest = Path(build_context) / ".manifest.json"
     if (
@@ -700,6 +729,7 @@ def _source_run_options(
     websocket_port: int | None,
     dev: bool,
     mount: list[str],
+    plugin_path: list[str],
     no_ui: bool,
     keep_containers: bool,
     cache_from: list[str],
@@ -727,6 +757,8 @@ def _source_run_options(
     for spec in _expand_mount_file_references(mount):
         host, _, rest = spec.partition(":")
         options += ["--mount", f"{Path(host).absolute()}:{rest}"]
+    for folder in plugin_path:
+        options += ["--plugin-path", str(Path(folder).absolute())]
     if no_ui:
         options.append("--no-ui")
     if keep_containers:
@@ -869,6 +901,18 @@ def _print_output_paths(run_configs: list[EvaluationRunConfig]) -> None:
             typer.secho(f"Artifacts:  {artifact_dirs[-1]}", fg=typer.colors.BLUE)
 
 
+def _plugin_mounts(folders: list[str]) -> list[str]:
+    mounts: list[str] = []
+    for index, folder in enumerate(folders):
+        path = Path(folder).absolute()
+        if ":" in str(path):
+            _print_and_abort(f"--plugin-path {path} can't contain ':'.")
+        if not path.is_dir():
+            _print_and_abort(f"--plugin-path {path} isn't a folder.")
+        mounts.append(f"{path}:{PLUGIN_MOUNT_ROOT}/{index}:ro")
+    return mounts
+
+
 def _expand_mount_file_references(mounts: list[str]) -> list[str]:
     """Expand @file references in mount specs.
 
@@ -908,6 +952,10 @@ def _validate_mount_specs(mounts: list[str]) -> None:
         if not target or not target.startswith("/"):
             _print_and_abort(
                 f"Mount target must be a non-empty absolute path, got {target!r} in {spec!r}"
+            )
+        if Path(os.path.normpath(target)).is_relative_to(PLUGIN_MOUNT_ROOT):
+            _print_and_abort(
+                f"{PLUGIN_MOUNT_ROOT} is reserved for --plugin-path, got {target!r} in {spec!r}"
             )
         source = Path(parts[0])
         if not source.exists():

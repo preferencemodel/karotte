@@ -16,6 +16,7 @@ from karotte.tools.view_lines_in_file import (
     view_lines_in_file,
 )
 from karotte.truncation import json_encoded_len
+from tests.conftest import assert_harness_env_withheld
 
 
 def _access_stub(responses: dict[str, bool]) -> AsyncMock:
@@ -597,3 +598,15 @@ async def test_reads_through_symlink_to_regular_file(tmp_path: Path):
 
     assert result.structured_content is not None
     assert result.structured_content["content"] == "Line 1\nLine 2\n"
+
+
+@pytest.mark.asyncio
+async def test_helpers_withhold_the_harness_env(
+    tmp_path: Path, demoted_envs: list[dict[str, str] | None]
+):
+    file_path = tmp_path / "test.txt"
+    file_path.write_text("Line 1\nLine 2\nLine 3")
+
+    _ = await view_lines_in_file()(file_path, from_line=1, to_line=2)
+
+    assert_harness_env_withheld(demoted_envs)

@@ -8,7 +8,7 @@ import stat
 from collections.abc import Callable
 from typing import NoReturn
 
-from karotte.subprocess import make_demote_fn
+from karotte.subprocess import make_demote_fn, student_env
 
 TEST_PATH = "/usr/bin/test"
 SUBPROCESS_TIMEOUT_S = 30.0
@@ -51,7 +51,7 @@ async def check_access(
 ) -> bool:
     """Run ``test <flag> <file_path>`` as the demoted uid."""
     proc = await asyncio.create_subprocess_exec(
-        TEST_PATH, flag, file_path, preexec_fn=make_demote_fn()
+        TEST_PATH, flag, file_path, preexec_fn=make_demote_fn(), env=student_env()
     )
     try:
         async with asyncio.timeout(timeout_s or SUBPROCESS_TIMEOUT_S):
