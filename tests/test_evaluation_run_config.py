@@ -440,6 +440,39 @@ def test_agent_config_env_defaults_to_empty():
     assert config.agent_config.env == {}
 
 
+def test_agent_config_disallowed_tools_defaults_to_none():
+    config = EvaluationRunConfig(run_id="r", task_id="t", model="m")
+    assert config.agent_config.disallowed_tools == []
+
+
+@pytest.mark.parametrize("name", ["", "Agent,Task", "Agent Task", "Agent\n"])
+def test_agent_config_disallowed_tools_takes_one_tool_name_each(name: str):
+    with pytest.raises(ValidationError, match="disallowed_tools"):
+        _ = EvaluationRunConfig.model_validate(
+            {
+                "run_id": "r",
+                "task_id": "t",
+                "model": "claude-opus-5",
+                "agent": "claude-code",
+                "agent_config": {"disallowed_tools": [name]},
+            }
+        )
+
+
+@pytest.mark.parametrize("agent", ["builtin", "external"])
+def test_agent_config_disallowed_tools_need_an_agent_with_tools_of_its_own(agent: str):
+    with pytest.raises(ValidationError, match="disallowed_tools can't be applied"):
+        _ = EvaluationRunConfig.model_validate(
+            {
+                "run_id": "r",
+                "task_id": "t",
+                "model": "claude-opus-5",
+                "agent": agent,
+                "agent_config": {"disallowed_tools": ["Agent"]},
+            }
+        )
+
+
 def test_agent_config_env_takes_strings_only():
     with pytest.raises(ValidationError, match="env"):
         _ = EvaluationRunConfig.model_validate(

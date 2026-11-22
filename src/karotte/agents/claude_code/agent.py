@@ -71,6 +71,7 @@ class ClaudeCodeAgent(CliAgent):
     home_env: ClassVar[str | None] = "CLAUDE_CONFIG_DIR"
     applies_reasoning_effort: ClassVar[bool] = True
     supports_turn_limit: ClassVar[bool] = True
+    takes_disallowed_tools: ClassVar[bool] = True
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "stdin"
     native_tool_names: ClassVar[frozenset[str]] = frozenset(
         {"bash", "view_lines_in_file", "view_image_file", "replace_in_file"}
@@ -161,7 +162,7 @@ class ClaudeCodeAgent(CliAgent):
             "--permission-mode",
             "bypassPermissions",
             "--disallowedTools",
-            ",".join(_DISALLOWED_TOOLS),
+            ",".join((*_DISALLOWED_TOOLS, *self._config.agent_config.disallowed_tools)),
         ]
         if (effort := self._config.applied_reasoning_effort) is not None:
             argv += ["--effort", effort]

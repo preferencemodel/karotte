@@ -82,6 +82,7 @@ class EvaluationRunner:
             raise ValueError(msg)
         if isinstance(self._agent, CliAgent) and not config.use_fake_model:
             self._agent.check_agent_env()
+            self._agent.check_agent_tools()
 
     def _make_agent(self) -> Agent:
         match self.config.resolved_agent:

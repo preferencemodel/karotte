@@ -291,6 +291,23 @@ CLI agents differ from `builtin` in a few ways:
 - `builtin` and `external` run no process of their own, so a run config that sets `env` for them is rejected.
   A `use_fake_model` run is the exception: it accepts `env` and ignores it.
 
+`agent_config.disallowed_tools` turns off tools of the CLI agent's own, on top of the ones Karotte always turns off (`WebSearch`, `WebFetch` and `AskUserQuestion` for `claude-code`):
+
+```json
+{
+    "agent": "claude-code",
+    "agent_config": {
+        "disallowed_tools": ["Agent", "Task"]
+    }
+}
+```
+
+- This example keeps Claude Code from delegating to subagents.
+  Their model calls appear in no `token_usage` event, so a run waiting on one looks idle from outside.
+  Claude Code has called that tool both `Agent` and `Task`; naming both covers either release.
+- Only `claude-code` takes them. For any other agent the run fails before it starts.
+- A name can't be empty or contain a comma or whitespace.
+
 `grok-build` specifics:
 
 - All steps of a run share one Grok session, so later steps see the earlier conversation.

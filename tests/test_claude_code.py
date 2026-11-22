@@ -62,6 +62,17 @@ class TestClaudeCodeAgent:
     def test_reads_the_prompt_from_stdin(self):
         assert ClaudeCodeAgent.prompt_input == "stdin"
 
+    def test_a_runs_disallowed_tools_are_added_to_karottes_own(self):
+        agent = _agent(
+            agent="claude-code", agent_config={"disallowed_tools": ["Agent", "Task"]}
+        )
+        argv = agent._argv("x", None)  # pyright: ignore[reportPrivateUsage]
+        assert (
+            _value(argv, "--disallowedTools")
+            == "WebSearch,WebFetch,AskUserQuestion,Agent,Task"
+        )
+        agent.check_agent_tools()
+
     def test_argv_creates_then_resumes_one_session(self):
         agent = _agent(turn_limit=7, reasoning_effort="max")
         first = agent._argv("x", None)  # pyright: ignore[reportPrivateUsage]

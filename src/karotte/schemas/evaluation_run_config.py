@@ -37,6 +37,21 @@ class AgentConfig(BaseModel):
                 raise ValueError(msg)
         return env
 
+    disallowed_tools: list[str] = []
+    """Tools of the CLI agent's own to turn off for the run, on top of the ones
+    Karotte always turns off: Claude Code's ``Agent``, say, so a run can't
+    delegate to subagents. Only an agent with a tool denylist takes them."""
+
+    @field_validator("disallowed_tools")
+    @classmethod
+    def _valid_disallowed_tools(cls, tools: list[str]) -> list[str]:
+        for name in tools:
+            # The names are joined with commas into one command-line flag.
+            if not name or any(c in name for c in ", \t\n\x00"):
+                msg = f"agent_config.disallowed_tools can't hold the tool name {name!r}"
+                raise ValueError(msg)
+        return tools
+
 
 class EvaluationRunConfig(BaseModel):
     run_id: str
@@ -144,6 +159,17 @@ class EvaluationRunConfig(BaseModel):
             msg = (
                 f"agent_config.env can't be applied by the {self.resolved_agent} agent"
             )
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_agent_disallowed_tools(self) -> Self:
+        if (
+            self.agent_config.disallowed_tools
+            and not self.use_fake_model
+            and self.resolved_agent in ("builtin", "external")
+        ):
+            msg = f"agent_config.disallowed_tools can't be applied by the {self.resolved_agent} agent"
             raise ValueError(msg)
         return self
 

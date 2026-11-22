@@ -9,7 +9,8 @@
     "temperature": null,
     "agent": "builtin",
     "agent_config": {
-      "env": {}
+      "env": {},
+      "disallowed_tools": []
     },
     "use_hints": true
   },

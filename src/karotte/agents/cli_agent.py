@@ -88,6 +88,10 @@ class CliAgent(abc.ABC):
     home_env: ClassVar[str | None] = None
     """Env var that points the CLI at :attr:`home_dir`, if it reads one."""
 
+    takes_disallowed_tools: ClassVar[bool] = False
+    """Whether the CLI can be told to turn off tools of its own, so
+    ``agent_config.disallowed_tools`` can be applied."""
+
     prompt_input: ClassVar[Literal["argv", "file", "stdin"]] = "argv"
     """How the CLI gets each step's instructions: in :meth:`_argv`, from the
     file :meth:`_argv` is given, or on stdin."""
@@ -234,6 +238,16 @@ class CliAgent(abc.ABC):
         if (uid := demoted_uid_gid()) is not None:
             for path in written:
                 os.chown(path, uid, uid)
+
+    def check_agent_tools(self) -> None:
+        """Fail if ``agent_config.disallowed_tools`` names tools for a CLI that
+        has no way to turn them off."""
+        if (
+            self._config.agent_config.disallowed_tools
+            and not self.takes_disallowed_tools
+        ):
+            msg = f"agent_config.disallowed_tools can't be applied by the {self.name} agent"
+            raise ValueError(msg)
 
     def check_agent_env(self) -> None:
         """Fail if ``agent_config.env`` sets a variable Karotte sets itself."""

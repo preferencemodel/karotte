@@ -227,6 +227,19 @@ class TestHomeAndEnv:
         assert env["BASH_DEFAULT_TIMEOUT_MS"] == "3600000"
         assert env["LANG"] == "en"
 
+    def test_agent_config_disallowed_tools_need_a_cli_that_can_turn_tools_off(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(
+            tmp_path, monkeypatch, agent_config={"disallowed_tools": ["Agent"]}
+        )
+        with pytest.raises(
+            ValueError,
+            match="disallowed_tools can't be applied by the echo agent",
+        ):
+            agent.check_agent_tools()
+        _agent(tmp_path, monkeypatch).check_agent_tools()
+
     @pytest.mark.parametrize(
         "name", ["HOME", "USER", "PATH", "ECHO_HOME", "ECHO_TELEMETRY", "ECHO_API_KEY"]
     )
