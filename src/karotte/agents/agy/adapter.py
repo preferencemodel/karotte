@@ -1,9 +1,12 @@
 """Adapter from ``agy --output-format stream-json`` to transcript events; each
-model response becomes one assistant message with the tool calls it made."""
+model response becomes one assistant message with the tool calls it made.
+Subagents and swarm workers report usage only in their own transcripts, which
+:func:`transcript_usage` reads; web search calls leave no record and go uncounted."""
 
 import json
+import uuid
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from loguru import logger
@@ -19,6 +22,7 @@ from karotte.schemas.transcript import (
     MessageAddedEvent,
     TokenUsageEvent,
     ToolCallStartedEvent,
+    UsageSource,
 )
 
 
@@ -27,6 +31,10 @@ class Session:
     """What carries over between the steps of one agy conversation."""
 
     conversation_id: str | None = None
+    subagents: dict[str, None] = field(default_factory=dict)
+    """Conversations of the subagents and swarm workers started so far."""
+    counted: set[tuple[str, int]] = field(default_factory=set)
+    """Steps of their transcripts whose usage was counted."""
 
 
 def parse_stream(
@@ -93,11 +101,25 @@ class StreamParser:
                     self._results.extend(
                         tool_result_events(call_id, _result(info, state == "ERROR"))
                     )
+                if state == "DONE" and info.get("name") == "swarm":
+                    self._add_subagent(_swarm_worker(info))
+            case "subagent":
+                info = update.get("subagent_info")
+                subagents = info.get("subagents") if isinstance(info, dict) else None
+                for subagent in subagents if isinstance(subagents, list) else []:
+                    if isinstance(subagent, dict):
+                        self._add_subagent(subagent.get("conversation_id"))
             case "checkpoint" if update.get("state") == "DONE":
                 yield from self.flush()
+                if isinstance(usage := update.get("usage"), dict):
+                    yield _usage_event(usage, "helper")
                 yield ContextCompactedEvent()
             case kind:
                 logger.debug("Skipping agy {} step.", kind)
+
+    def _add_subagent(self, value: Any) -> None:
+        if (conversation := conversation_id(value)) is not None:
+            self._session.subagents[conversation] = None
 
     def flush(self) -> Iterator[Event]:
         """The response in progress, with its calls and the results they got."""
@@ -119,7 +141,61 @@ class StreamParser:
         self._calls, self._results = {}, []
 
 
-def _usage_event(usage: dict[str, Any]) -> TokenUsageEvent:
+def transcript_usage(
+    conversation: str, lines: Iterable[str], counted: set[tuple[str, int]]
+) -> Iterator[TokenUsageEvent]:
+    """Usage of the model calls in a subagent's ``transcript_full.jsonl`` that
+    isn't in ``counted`` yet."""
+    for i, line in enumerate(lines):
+        if "PLANNER_RESPONSE" not in line and "CHECKPOINT" not in line:
+            continue
+        row = parse_json_line(line, i, "agy transcript")
+        if row is None or not isinstance(index := row.get("step_index"), int):
+            continue
+        match row.get("type"):
+            case "PLANNER_RESPONSE":
+                source: UsageSource = "subagent"
+            case "CHECKPOINT":
+                source = "helper"
+            case _:
+                continue
+        if (conversation, index) in counted or not any(
+            isinstance(row.get(k), int) for k in ("input_tokens", "output_tokens")
+        ):
+            continue
+        counted.add((conversation, index))
+        yield _usage_event(row, source)
+
+
+def conversation_id(value: Any) -> str | None:
+    """``value`` if it is a conversation id agy made, a lowercase UUID."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return value if str(uuid.UUID(value)) == value else None
+    except ValueError:
+        return None
+
+
+def _swarm_worker(info: dict[str, Any]) -> Any:
+    """The conversation of the worker a swarm ``add`` started; its output is
+    timestamp lines and then a JSON object."""
+    parameters = info.get("parameters")
+    output = info.get("output")
+    if not isinstance(parameters, dict) or parameters.get("action") != "add":
+        return None
+    if not isinstance(output, str) or (start := output.find("{")) < 0:
+        return None
+    try:
+        added = json.loads(output[start:])
+    except (ValueError, RecursionError):
+        return None
+    return added.get("conversation_id") if isinstance(added, dict) else None
+
+
+def _usage_event(
+    usage: dict[str, Any], source: UsageSource = "agent"
+) -> TokenUsageEvent:
     """agy's input tokens leave out cache reads; its output tokens include thinking."""
     cache_read = int_or_zero(usage.get("cache_read_tokens"))
     return TokenUsageEvent(
@@ -127,6 +203,7 @@ def _usage_event(usage: dict[str, Any]) -> TokenUsageEvent:
         output_tokens=int_or_zero(usage.get("output_tokens")),
         cache_read_tokens=cache_read,
         cache_write_tokens=0,
+        source=source,
     )
 
 

@@ -11,7 +11,12 @@ import pytest
 
 from karotte.agents import cli_agent_types
 from karotte.agents.agy import AgyAgent
-from karotte.agents.agy.adapter import Session, StreamParser, parse_stream
+from karotte.agents.agy.adapter import (
+    Session,
+    StreamParser,
+    parse_stream,
+    transcript_usage,
+)
 from karotte.agents.cli_agent import AGENTS_BIN_DIR
 from karotte.model_forwarder import GeminiForwarder
 from karotte.providers import PROXY_PLACEHOLDER_KEY
@@ -335,6 +340,7 @@ class TestParseStream:
         events = list(parse_stream(lines))
 
         assert [type(e) for e in events] == [
+            TokenUsageEvent,
             ContextCompactedEvent,
             MessageAddedEvent,
             TokenUsageEvent,
@@ -358,10 +364,26 @@ class TestParseStream:
             ToolCallStartedEvent,
             ToolCallCompletedEvent,
             MessageAddedEvent,
+            TokenUsageEvent,
             ContextCompactedEvent,
             MessageAddedEvent,
             TokenUsageEvent,
         ]
+
+    def test_the_compaction_summary_is_a_helper_call(self):
+        events = list(parse_stream([_CHECKPOINT]))
+        (usage,) = [e for e in events if isinstance(e, TokenUsageEvent)]
+        assert usage.source == "helper"
+        assert (usage.input_tokens, usage.output_tokens, usage.cache_read_tokens) == (
+            275589,
+            675,
+            208129,
+        )
+
+    def test_model_responses_are_the_agents_own(self):
+        events = list(parse_stream(_lines("step_0.ndjson")))
+        usage = [e for e in events if isinstance(e, TokenUsageEvent)]
+        assert {u.source for u in usage} == {"agent"}
 
     def test_flush_keeps_what_a_killed_step_left_unsent(self):
         parse = StreamParser(Session(), 0)
@@ -410,14 +432,174 @@ def _step(index: int, step_type: str, **fields: Any) -> str:
 
 
 _CHECKPOINT = _step(
-    13,
+    7,
     "checkpoint",
-    duration_seconds=12.153453,
+    duration_seconds=8.541613,
     usage={
-        "input_tokens": 55810,
-        "output_tokens": 1160,
-        "thinking_tokens": 486,
-        "cache_read_tokens": 227007,
-        "total_tokens": 56970,
+        "input_tokens": 67460,
+        "output_tokens": 675,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 208129,
+        "total_tokens": 68135,
     },
 )
+
+
+_SUBAGENT = "fcff31b0-7d48-41d3-ab6f-36175f296ea5"
+_WORKER = "8a4d7844-c16b-49f8-9318-c8d89b0e1f11"
+
+
+def _transcript(workdir: Path, conversation: str) -> Path:
+    return (
+        workdir
+        / ".gemini"
+        / "antigravity-cli"
+        / "brain"
+        / conversation
+        / ".system_generated"
+        / "logs"
+        / "transcript_full.jsonl"
+    )
+
+
+def _write_transcript(
+    workdir: Path, conversation: str, rows: int | None = None
+) -> None:
+    fixture = (_FIXTURES / "brain" / conversation).joinpath(
+        ".system_generated", "logs", "transcript_full.jsonl"
+    )
+    path = _transcript(workdir, conversation)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    kept = fixture.read_text().splitlines()[:rows]
+    _ = path.write_text("\n".join(kept) + "\n")
+
+
+def _run_step(agent: AgyAgent, fixture: str | list[str]) -> list[Event]:
+    lines = _lines(fixture) if isinstance(fixture, str) else fixture
+    parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+    events = [e for i, line in enumerate(lines) for e in parse(line, i)]
+    return events + list(agent._output_ended())  # pyright: ignore[reportPrivateUsage]
+
+
+def _usage(events: list[Event], source: str) -> tuple[int, int, int]:
+    usage = [e for e in events if isinstance(e, TokenUsageEvent) and e.source == source]
+    return (
+        sum(u.input_tokens for u in usage),
+        sum(u.output_tokens for u in usage),
+        sum(u.cache_read_tokens or 0 for u in usage),
+    )
+
+
+class TestSubagentUsage:
+    @pytest.fixture
+    def workdir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        return tmp_path
+
+    def test_a_subagent_is_counted_from_its_transcript(self, workdir: Path):
+        _write_transcript(workdir, _SUBAGENT)
+        events = _run_step(_agent(), "subagent_step.ndjson")
+        assert _usage(events, "subagent") == (14946, 535, 5596)
+
+    def test_subagent_usage_follows_the_steps_own(self, workdir: Path):
+        _write_transcript(workdir, _SUBAGENT)
+        events = _run_step(_agent(), "subagent_step.ndjson")
+        usage = [e for e in events if isinstance(e, TokenUsageEvent)]
+        assert [u.source for u in usage] == ["agent"] * 4 + ["subagent"] * 3
+        assert _usage(events, "agent") == (41835, 271, 24797)
+
+    def test_a_swarm_worker_is_counted_from_its_transcript(self, workdir: Path):
+        _write_transcript(workdir, _WORKER)
+        events = _run_step(_agent(), "swarm_step.ndjson")
+        assert _usage(events, "subagent") == (21477, 84, 8629)
+
+    def test_a_running_worker_is_counted_on_later_steps_once(self, workdir: Path):
+        agent = _agent()
+        _write_transcript(workdir, _WORKER, rows=3)
+        first = _run_step(agent, "swarm_step.ndjson")
+        _write_transcript(workdir, _WORKER)
+        second = _run_step(agent, "step_1.ndjson")
+        third = _run_step(agent, "step_1.ndjson")
+        assert _usage(first, "subagent") == (10675, 38, 0)
+        assert _usage(second, "subagent") == (10802, 46, 8629)
+        assert _usage(third, "subagent") == (0, 0, 0)
+
+    @pytest.mark.usefixtures("workdir")
+    def test_a_missing_transcript_counts_nothing(self):
+        events = _run_step(_agent(), "subagent_step.ndjson")
+        assert _usage(events, "subagent") == (0, 0, 0)
+
+    def test_the_stdout_log_uri_is_never_read(self, workdir: Path):
+        _write_transcript(workdir / "elsewhere", _SUBAGENT)
+        logged = _transcript(workdir / "elsewhere", _SUBAGENT).as_uri()
+        lines: list[str] = []
+        for line in _lines("subagent_step.ndjson"):
+            record = json.loads(line)
+            info = record.get("step_update", {}).get("subagent_info", {})
+            for subagent in info.get("subagents", []):
+                subagent["log_uri"] = logged
+            lines.append(json.dumps(record))
+        events = _run_step(_agent(), lines)
+        assert _usage(events, "subagent") == (0, 0, 0)
+
+    def test_only_uuid_conversation_ids_are_read(self, workdir: Path):
+        secret = workdir / "secret" / ".system_generated" / "logs"
+        secret.mkdir(parents=True)
+        _ = (secret / "transcript_full.jsonl").write_text(
+            '{"step_index":1,"type":"PLANNER_RESPONSE","input_tokens":5}\n'
+        )
+        lines = [
+            line.replace(_WORKER, "../../../secret")
+            for line in _lines("swarm_step.ndjson")
+        ]
+        events = _run_step(_agent(), lines)
+        assert _usage(events, "subagent") == (0, 0, 0)
+
+    @pytest.mark.usefixtures("workdir")
+    def test_a_swarm_output_nested_too_deep_names_no_worker(self):
+        lines: list[str] = []
+        for line in _lines("swarm_step.ndjson"):
+            record = json.loads(line)
+            info = record.get("step_update", {}).get("tool_info", {})
+            if info.get("name") == "swarm":
+                info["output"] = '{"a":' * 200_000
+            lines.append(json.dumps(record))
+        events = _run_step(_agent(), lines)
+        assert _usage(events, "subagent") == (0, 0, 0)
+
+    def test_only_rows_that_can_carry_usage_are_parsed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        parsed: list[str] = []
+
+        def parse_json_line(line: str, _i: int, _label: str) -> dict[str, Any] | None:
+            parsed.append(line)
+            return json.loads(line)
+
+        monkeypatch.setattr(
+            "karotte.agents.agy.adapter.parse_json_line", parse_json_line
+        )
+        fixture = (_FIXTURES / "brain" / _SUBAGENT).joinpath(
+            ".system_generated", "logs", "transcript_full.jsonl"
+        )
+        lines = fixture.read_text().splitlines()
+        _ = list(transcript_usage(_SUBAGENT, lines, set()))
+        assert len(parsed) == 3
+        assert all("PLANNER_RESPONSE" in line for line in parsed)
+
+    def test_a_subagents_compaction_summary_is_a_helper_call(self, workdir: Path):
+        _write_transcript(workdir, _SUBAGENT)
+        row = {
+            "step_index": 7,
+            "source": "SYSTEM",
+            "type": "CHECKPOINT",
+            "status": "DONE",
+            "input_tokens": 67460,
+            "cache_read_tokens": 208129,
+            "output_tokens": 675,
+        }
+        with _transcript(workdir, _SUBAGENT).open("a") as f:
+            _ = f.write(json.dumps(row) + "\n")
+        events = _run_step(_agent(), "subagent_step.ndjson")
+        assert _usage(events, "helper") == (275589, 675, 208129)
+        assert _usage(events, "subagent") == (14946, 535, 5596)

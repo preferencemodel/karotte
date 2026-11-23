@@ -2,7 +2,7 @@
 --json`` output has no tool arguments or per-call usage."""
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 from loguru import logger
@@ -18,14 +18,76 @@ from karotte.schemas.transcript import (
     MessageAddedEvent,
     TokenUsageEvent,
     ToolCallStartedEvent,
+    UsageSource,
 )
+
+
+class UsageRecords:
+    """Turns a session's usage records into events, once per usage id."""
+
+    def __init__(self) -> None:
+        self._counted: set[str] = set()
+        self._unknown_owners: set[str] = set()
+
+    def event(self, record: dict[str, Any]) -> TokenUsageEvent | None:
+        """One model call's usage, unless it reports none (tool records) or
+        was counted before."""
+        quantity = _dict(record.get("quantity"))
+        if quantity.get("reported") is not True:
+            return None
+        if (usage_id := record.get("usage_id")) is not None:
+            if str(usage_id) in self._counted:
+                return None
+            self._counted.add(str(usage_id))
+        return TokenUsageEvent(
+            input_tokens=int_or_zero(quantity.get("input_tokens")),
+            output_tokens=int_or_zero(quantity.get("output_tokens")),
+            cache_read_tokens=int_or_zero(quantity.get("cached_tokens")),
+            source=self._source(record),
+        )
+
+    def log_events(self, lines: Iterable[str]) -> Iterator[TokenUsageEvent]:
+        """The usage in a session log, read in full each time, that wasn't
+        counted before; records without a usage id are left out."""
+        for i, line in enumerate(lines):
+            if "goal_usage_attribution" not in line:
+                continue
+            event = _run_event(parse_json_line(line, i, "muse-code"))
+            record = _dict(event.get("record"))
+            if event.get("kind") != "goal_usage_attribution" or not record.get(
+                "usage_id"
+            ):
+                continue
+            if (usage := self.event(record)) is not None:
+                yield usage
+
+    def _source(self, record: dict[str, Any]) -> UsageSource:
+        if record.get("usage_family") == "compaction":
+            return "helper"
+        owner_type = str(_dict(record.get("owner")).get("owner_type"))
+        match owner_type:
+            case "main_root":
+                return "agent"
+            case "native_child" | "workflow_child":
+                return "subagent"
+            case "reminder_child" | "side_session":
+                return "helper"
+            case _:
+                if owner_type not in self._unknown_owners:
+                    self._unknown_owners.add(owner_type)
+                    logger.debug(
+                        "Counting muse-code usage of owner {} as the agent's",
+                        owner_type,
+                    )
+                return "agent"
 
 
 class StreamParser:
     """Turns session log lines into events. A response's tool calls are sent as
     soon as Muse commits them; their results wait for any images that follow."""
 
-    def __init__(self) -> None:
+    def __init__(self, records: UsageRecords | None = None) -> None:
+        self._records: UsageRecords = records or UsageRecords()
         self._texts: list[str] = []
         self._thoughts: list[str] = []
         self._usage: list[Event] = []
@@ -45,12 +107,7 @@ class StreamParser:
         if record.get("payload_type") == "tool_batch.effect.terminal":
             self._effect_ended(_dict(payload.get("record")))
             return
-        if (
-            record.get("payload_type") != "runtime.session"
-            or payload.get("kind") != "run"
-        ):
-            return
-        event = _dict(payload.get("event"))
+        event = _run_event(record)
         match event.get("kind"):
             case "model_response_created":
                 yield from self.flush()
@@ -73,7 +130,8 @@ class StreamParser:
                 images = [_image(_dict(c)) for c in event.get("content") or []]
                 self._images[str(event.get("call_id"))] = [i for i in images if i]
             case "goal_usage_attribution":
-                if (usage := _usage_event(_dict(event.get("record")))) is not None:
+                attribution = _dict(event.get("record"))
+                if (usage := self._records.event(attribution)) is not None:
                     self._usage.append(usage)
             case "context_compaction_installed":
                 yield from self.flush()
@@ -148,17 +206,12 @@ def _image(content: dict[str, Any]) -> ImageContent | None:
     )
 
 
-def _usage_event(record: dict[str, Any]) -> TokenUsageEvent | None:
-    """One model call's usage, the main agent's or a helper's; tool records
-    report none."""
-    quantity = _dict(record.get("quantity"))
-    if quantity.get("reported") is not True:
-        return None
-    return TokenUsageEvent(
-        input_tokens=int_or_zero(quantity.get("input_tokens")),
-        output_tokens=int_or_zero(quantity.get("output_tokens")),
-        cache_read_tokens=int_or_zero(quantity.get("cached_tokens")),
-    )
+def _run_event(record: dict[str, Any] | None) -> dict[str, Any]:
+    record = record or {}
+    payload = _dict(record.get("payload"))
+    if record.get("payload_type") != "runtime.session" or payload.get("kind") != "run":
+        return {}
+    return _dict(payload.get("event"))
 
 
 def _dict(value: Any) -> dict[str, Any]:

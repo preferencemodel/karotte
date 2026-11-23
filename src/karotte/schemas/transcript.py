@@ -182,6 +182,9 @@ class TaskCompletedEvent(BaseEvent):
     status: RunStatus
 
 
+UsageSource = Literal["agent", "subagent", "helper"]
+
+
 class TokenUsageEvent(BaseEvent):
     type: Literal["token_usage"] = "token_usage"
     input_tokens: int
@@ -194,6 +197,9 @@ class TokenUsageEvent(BaseEvent):
     service_tier: str | None = None
     """The tier that billed the request where the provider reports it (Vertex
     ``trafficType``), else the tier asked for; None is the provider's default tier."""
+    source: UsageSource = "agent"
+    """Who made the calls: the agent itself, a subagent it started, or a call
+    the CLI makes on its own (compaction summaries, reminders, titles)."""
 
 
 class ContextCompactedEvent(BaseEvent):

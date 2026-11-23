@@ -1,0 +1,29 @@
+{
+  "session_id": "af38fec1-092e-c0cf-b8b6-6521a1a66593",
+  "parent_session_id": null,
+  "start_time": "2026-11-23T05:52:26.095499+00:00",
+  "end_time": "2026-11-23T05:52:28.575961+00:00",
+  "title": "Step 1: read src/notes.txt with read_file. Step 2:…",
+  "title_source": "auto",
+  "stats": {
+    "steps": 3,
+    "session_prompt_tokens": 16046,
+    "session_completion_tokens": 31,
+    "tool_calls_agreed": 2,
+    "tool_calls_rejected": 0,
+    "tool_calls_hook_denied": 0,
+    "tool_calls_failed": 0,
+    "tool_calls_succeeded": 2,
+    "context_tokens": 9963,
+    "last_turn_prompt_tokens": 9947,
+    "last_turn_completion_tokens": 16,
+    "last_turn_duration": 1.2009305829997174,
+    "tokens_per_second": 13.323001534389073,
+    "input_price_per_million": 0.0,
+    "output_price_per_million": 0.0,
+    "session_total_llm_tokens": 16077,
+    "last_turn_total_tokens": 9963,
+    "session_cost": 0.0
+  },
+  "total_messages": 5
+}

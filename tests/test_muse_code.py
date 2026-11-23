@@ -3,6 +3,8 @@ session log -> transcript-event adapter, driven by a real two-step log
 (tests/resources/muse_code/)."""
 
 import json
+import shutil
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -331,6 +333,37 @@ class TestStreamParser:
         other = _run_event({"kind": "context_block_diagnostic"})
         assert _parse(["not json", "[1]", "{}", other, ""]) == []
 
+    def test_usage_is_tagged_with_who_made_the_call(self):
+        events = _parse(_lines("step_0.ndjson"))
+        assert [e.source for e in events if isinstance(e, TokenUsageEvent)] == [
+            "agent",
+            "agent",
+            "helper",
+            "helper",
+            "helper",
+        ]
+
+    def test_a_compaction_summary_is_a_helper_call(self):
+        events = _parse(_lines("compaction.ndjson"))
+        (summary,) = [
+            e
+            for e in events
+            if isinstance(e, TokenUsageEvent) and e.input_tokens == 2343
+        ]
+        assert summary.source == "helper"
+
+    def test_a_usage_record_read_twice_counts_once(self):
+        line = _usage_line(_lines("step_0.ndjson"))
+        assert len(_usage(_parse([line, line]))) == 1
+
+    def test_usage_from_an_unknown_owner_is_the_agents(self):
+        record = json.loads(_usage_line(_lines("step_0.ndjson")))
+        record["payload"]["event"]["record"]["owner"]["owner_type"] = "new_kind"
+        (usage,) = [
+            e for e in _parse([json.dumps(record)]) if isinstance(e, TokenUsageEvent)
+        ]
+        assert usage.source == "agent"
+
     def test_flush_keeps_what_a_killed_step_left_unsent(self):
         lines = _lines("step_0.ndjson")
         cut = next(
@@ -339,3 +372,105 @@ class TestStreamParser:
         events = _parse(lines[: cut + 1])
         assert len(_messages(events, "assistant")) == 1
         assert len(_completed(events)) == 4
+
+
+def _usage_line(lines: list[str]) -> str:
+    return next(line for line in lines if '"reported":true' in line)
+
+
+def _totals(events: list[Event]) -> dict[str, tuple[int, int, int]]:
+    totals: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
+    for e in events:
+        if isinstance(e, TokenUsageEvent):
+            total = totals[e.source]
+            total[0] += 1
+            total[1] += e.input_tokens
+            total[2] += e.output_tokens
+    return {source: (n, i, o) for source, (n, i, o) in totals.items()}
+
+
+def _with_session(agent: MuseCodeAgent, name: str) -> Path:
+    sessions = agent._home / "data" / "muse" / "sessions"  # pyright: ignore[reportPrivateUsage]
+    session = sessions / "2026" / "11" / "22" / agent._session_id  # pyright: ignore[reportPrivateUsage]
+    _ = shutil.copytree(_FIXTURES / name, session)
+    return session
+
+
+def _step(agent: MuseCodeAgent, lines: list[str]) -> list[Event]:
+    parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+    events = [e for i, line in enumerate(lines) for e in parse(line, i)]
+    return [*events, *agent._output_ended()]  # pyright: ignore[reportPrivateUsage]
+
+
+class TestSubagentUsage:
+    def test_subagent_calls_are_read_from_their_logs_when_the_step_ends(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        session = _with_session(agent, "subagents")
+        events = _step(agent, (session / "session.jsonl").read_text().splitlines())
+        assert _totals(events) == {
+            "agent": (5, 173388, 1707),
+            "helper": (6, 77070, 4086),
+            "subagent": (6, 162307, 802),
+        }
+
+    def test_workflow_agents_are_subagents_and_compaction_is_a_helper(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        session = _with_session(agent, "workflow")
+        events = _step(agent, (session / "session.jsonl").read_text().splitlines())
+        assert _totals(events) == {
+            "agent": (5, 194633, 2005),
+            "helper": (6, 86663 + 9569, 3590 + 1131),
+            "subagent": (9, 260087, 1562),
+        }
+
+    def test_a_later_step_counts_only_calls_not_counted_before(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        session = _with_session(agent, "subagents")
+        main = (session / "session.jsonl").read_text().splitlines()
+        _ = _step(agent, main)
+
+        child = (
+            session
+            / "subagent"
+            / "01a206e7-f1e7-79a2-964f-686f1b06893e"
+            / "session.jsonl"
+        )
+        record = json.loads(_usage_line(child.read_text().splitlines()))
+        record["payload"]["event"]["record"]["usage_id"] = "usage-later"
+        with child.open("a") as f:
+            _ = f.write(json.dumps(record) + "\n")
+
+        assert _totals(_step(agent, main)) == {"subagent": (1, 26894, 204)}
+
+    def test_the_subagent_log_scan_stops_at_its_budget(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("karotte.agents.student_files._SCAN_ENTRIES", 0)
+        agent = _agent(tmp_path, monkeypatch)
+        _ = _with_session(agent, "subagents")
+        assert _totals(_step(agent, [])) == {}
+
+    def test_a_subagent_record_without_a_usage_id_is_never_counted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = _agent(tmp_path, monkeypatch)
+        session = _with_session(agent, "subagents")
+        child = (
+            session
+            / "subagent"
+            / "01a206e7-f1e7-79a2-964f-686f1b06893e"
+            / "session.jsonl"
+        )
+        record = json.loads(_usage_line(child.read_text().splitlines()))
+        del record["payload"]["event"]["record"]["usage_id"]
+        with child.open("a") as f:
+            _ = f.write(json.dumps(record) + "\n")
+
+        assert _totals(_step(agent, []))["subagent"] == (6, 162307, 802)
+        assert _totals(_step(agent, [])) == {}

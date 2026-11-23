@@ -11,7 +11,7 @@ def parse_json_line(line: str, i: int, tool: str) -> dict[str, Any] | None:
         return None
     try:
         record = json.loads(line)
-    except json.JSONDecodeError:
+    except (ValueError, RecursionError):
         logger.warning("Skipping unparseable {} line {}: {!r}", tool, i, line[:200])
         return None
     if not isinstance(record, dict):

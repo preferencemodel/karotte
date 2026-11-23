@@ -6,7 +6,11 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import ClassVar, Literal, final
 
-from karotte.agents.agy.adapter import Session, StreamParser
+from karotte.agents.agy.adapter import (
+    Session,
+    StreamParser,
+    transcript_usage,
+)
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     CliAgent,
@@ -14,6 +18,7 @@ from karotte.agents.cli_agent import (
     register_cli_agent,
 )
 from karotte.agents.models import resolve_model
+from karotte.agents.student_files import student_file_lines
 from karotte.model_forwarder import GeminiForwarder, ModelForwarder, vertex_forwarder
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event
@@ -143,4 +148,15 @@ class AgyAgent(CliAgent):
         return self._parser
 
     def _output_ended(self) -> Iterable[Event]:
-        return () if self._parser is None else self._parser.flush()
+        if self._parser is None:
+            return
+        yield from self._parser.flush()
+        for conversation in self._session.subagents:
+            lines = self._subagent_transcript(conversation)
+            yield from transcript_usage(conversation, lines, self._session.counted)
+
+    def _subagent_transcript(self, conversation: str) -> Iterable[str]:
+        brain = self._home / "antigravity-cli" / "brain" / conversation
+        return student_file_lines(
+            brain / ".system_generated" / "logs" / "transcript_full.jsonl"
+        )

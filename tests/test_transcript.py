@@ -94,6 +94,30 @@ def test_token_usage_event_without_cache():
     assert event.cache_write_tokens is None
 
 
+def test_token_usage_is_the_agent_s_own_unless_tagged():
+    assert TokenUsageEvent(input_tokens=1, output_tokens=1).source == "agent"
+    old = TypeAdapter(Event).validate_python(
+        {"type": "token_usage", "input_tokens": 1, "output_tokens": 1}
+    )
+    assert isinstance(old, TokenUsageEvent)
+    assert old.source == "agent"
+
+
+@pytest.mark.parametrize("source", ["subagent", "helper"])
+def test_token_usage_can_come_from_a_subagent_or_helper(source: str):
+    event = TokenUsageEvent.model_validate(
+        {"input_tokens": 1, "output_tokens": 1, "source": source}
+    )
+    assert event.source == source
+
+
+def test_token_usage_source_is_a_fixed_set():
+    with pytest.raises(ValidationError):
+        _ = TokenUsageEvent.model_validate(
+            {"input_tokens": 1, "output_tokens": 1, "source": "title"}
+        )
+
+
 def test_pre_hook_event_round_trips_through_a_transcript():
     transcript = Transcript(
         run_id="r", events=[TaskPreHookCompletedEvent(metadata={"a": 1})]

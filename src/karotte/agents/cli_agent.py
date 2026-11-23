@@ -13,7 +13,6 @@ import json
 import os
 import shutil
 import signal
-import stat
 import tempfile
 from collections.abc import AsyncGenerator, Callable, Iterable, Mapping
 from importlib.metadata import entry_points
@@ -27,6 +26,7 @@ from karotte.agents.agent import (
     RunContext,
     StepTimeLimitReachedError,
 )
+from karotte.agents.student_files import open_student_file
 from karotte.model_forwarder import ModelForwarder
 from karotte.plugin_path import from_plugin_path
 from karotte.providers import PROXY_PLACEHOLDER_KEY
@@ -35,7 +35,6 @@ from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event, MessageAddedEvent
 from karotte.subprocess import demoted_uid_gid, make_preexec, scrub_harness_secrets
-from karotte.untrusted_paths import FILE_FLAGS, open_at, walk_to_parent
 
 # Root-owned, world-readable+executable directory the build installs CLI agents
 # into, so the student user can run them but not tamper with them.
@@ -442,22 +441,9 @@ class CliAgent(abc.ABC):
                 pass
 
     def _open_event_log(self) -> int | None:
-        """The event log, opened without following a link anywhere on its
-        path, or None while it doesn't exist. Raises OSError unless it is a
-        regular file the student owns."""
         if (path := self._event_log()) is None:
             return None
-        parent, name = walk_to_parent(path.absolute())
-        try:
-            fd = open_at(parent, name, FILE_FLAGS)
-        finally:
-            os.close(parent)
-        info = os.fstat(fd)
-        uid = demoted_uid_gid()
-        if not stat.S_ISREG(info.st_mode) or (uid is not None and info.st_uid != uid):
-            os.close(fd)
-            raise OSError(f"{path} is not a regular file the student owns")
-        return fd
+        return open_student_file(path)
 
     def _read_event_log(self, fd: int) -> bytes:
         chunk = os.pread(fd, _READ_CHUNK_BYTES, self._event_log_read)

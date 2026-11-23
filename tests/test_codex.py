@@ -3,6 +3,7 @@
 (tests/resources/codex/)."""
 
 import json
+import shutil
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from karotte.agents import cli_agent_types
+from karotte.agents import cli_agent_types, student_files
 from karotte.agents.cli_agent import AGENTS_BIN_DIR
 from karotte.agents.codex import CodexAgent
 from karotte.agents.codex.adapter import Session, StreamParser, parse_stream
@@ -434,3 +435,284 @@ def _started(item: dict[str, Any]) -> str:
 
 def _completed(item: dict[str, Any]) -> str:
     return json.dumps({"type": "item.completed", "item": item})
+
+
+_HOME = _FIXTURES / "codex_home"
+_DAY = Path("sessions/2026/11/22")
+_MAIN = "01a206f5-b1c6-7550-be62-f64c1c1bc0f8"
+_BACKGROUND = "01a206f6-28eb-7001-aa53-c95183093866"
+_STEP_ENDS = (
+    "2026-11-23T05:51:59.485Z",
+    "2026-11-23T05:52:09.253Z",
+    "2026-11-23T05:52:21.585Z",
+)
+# What the model proxy served over the three steps, by who asked.
+_PROXY_TOTALS = {
+    "agent": (136165, 596, 103560, 32517),
+    "helper": (37344, 258, 31757, 5581),
+    "subagent": (68515, 258, 63425, 2804),
+}
+
+
+def _rollout(thread_id: str) -> Path:
+    (path,) = _HOME.glob(f"sessions/*/*/*/rollout-*-{thread_id}.jsonl")
+    return path
+
+
+def _write_home(home: Path, until: str = "~", skip: str | None = None) -> None:
+    """Codex's home as it was at `until`: what each rollout file had logged by then."""
+    for path in _HOME.rglob("rollout-*.jsonl"):
+        if skip is not None and path.name.endswith(f"{skip}.jsonl"):
+            continue
+        lines = [
+            line
+            for line in path.read_text().splitlines()
+            if json.loads(line)["timestamp"] <= until
+        ]
+        if lines:
+            target = home / path.relative_to(_HOME)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _ = target.write_text("\n".join(lines) + "\n")
+
+
+def _run_step(agent: CodexAgent, step: int) -> list[Event]:
+    parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+    lines = _lines(f"subagents_compaction_step_{step}.ndjson")
+    events = [e for i, line in enumerate(lines) for e in parse(line, i)]
+    return events + list(agent._output_ended())  # pyright: ignore[reportPrivateUsage]
+
+
+def _usage(events: list[Event], source: str | None = None) -> list[TokenUsageEvent]:
+    return [
+        e
+        for e in events
+        if isinstance(e, TokenUsageEvent) and source in (None, e.source)
+    ]
+
+
+def _summed(usage: list[TokenUsageEvent]) -> tuple[int, int, int, int]:
+    return (
+        sum(u.input_tokens for u in usage),
+        sum(u.output_tokens for u in usage),
+        sum(u.cache_read_tokens or 0 for u in usage),
+        sum(u.cache_write_tokens or 0 for u in usage),
+    )
+
+
+def _by_source(events: list[Event]) -> dict[str, tuple[int, int, int, int]]:
+    return {s: _summed(_usage(events, s)) for s in ("agent", "helper", "subagent")}
+
+
+def _logged(thread_id: str, until: str = "~") -> tuple[int, int, int, int]:
+    usage = [
+        record["payload"]["usage"]
+        for line in _rollout(thread_id).read_text().splitlines()
+        if (record := json.loads(line))["type"] == "token_usage_record"
+        and record["payload"]["thread_id"] == thread_id
+        and record["timestamp"] <= until
+    ]
+    return (
+        sum(u["input_tokens"] for u in usage),
+        sum(u["output_tokens"] for u in usage),
+        sum(u["cached_input_tokens"] for u in usage),
+        sum(u["cache_write_input_tokens"] for u in usage),
+    )
+
+
+@pytest.fixture
+def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+    return tmp_path / ".codex_home"
+
+
+_SUBAGENT_COMPACTION = _FIXTURES / "subagent_compaction"
+# Three nested subagents that each compacted once, as the model proxy saw them.
+_SUBAGENT_COMPACTION_TOTALS = {
+    "agent": (30714, 169, 20333, 10263),
+    "helper": (65209, 238, 48834, 16366),
+    "subagent": (163106, 965, 125682, 35056),
+}
+
+
+class TestTaggedUsage:
+    def test_a_subagent_s_compaction_is_a_helper_call(self, home: Path):
+        _ = shutil.copytree(_SUBAGENT_COMPACTION / "codex_home", home)
+        agent = _agent()
+        parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+        lines = (_SUBAGENT_COMPACTION / "step_0.ndjson").read_text().splitlines()
+        events = [e for i, line in enumerate(lines) for e in parse(line, i)]
+        events += list(agent._output_ended())  # pyright: ignore[reportPrivateUsage]
+        assert _by_source(events) == _SUBAGENT_COMPACTION_TOTALS
+
+    def test_only_usage_and_compaction_lines_are_parsed(
+        self, home: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        _write_home(home, _STEP_ENDS[0])
+        main = home / _DAY / _rollout(_MAIN).name
+        item = {"type": "response_item", "payload": {"type": "message", "text": "x"}}
+        with main.open("a") as f:
+            _ = f.write(json.dumps(item) + "\n")
+        parsed: list[str] = []
+
+        def parse_json_line(line: str, *_: object) -> dict[str, Any] | None:
+            parsed.append(line)
+            return json.loads(line)
+
+        monkeypatch.setattr(
+            "karotte.agents.codex.adapter.parse_json_line", parse_json_line
+        )
+        _ = _run_step(_agent(), 0)
+        assert parsed
+        assert not [line for line in parsed if '"response_item"' in line]
+        assert not [line for line in parsed if '"token_count"' in line]
+
+    def test_each_source_adds_up_to_what_the_model_served(self, home: Path):
+        agent, events = _agent(), []
+        for step, end in enumerate(_STEP_ENDS):
+            _write_home(home, end)
+            events += _run_step(agent, step)
+        assert _by_source(events) == _PROXY_TOTALS
+
+    def test_compaction_moves_from_the_agent_to_helper_in_its_step(self, home: Path):
+        agent, helpers = _agent(), []
+        for step, end in enumerate(_STEP_ENDS):
+            _write_home(home, end)
+            helpers.append(_summed(_usage(_run_step(agent, step), "helper")))
+        assert helpers == [
+            (21242, 147, 15779, 5460),
+            (0, 0, 0, 0),
+            (16102, 111, 15978, 121),
+        ]
+
+    def test_the_agent_and_helper_share_codex_s_own_total(self, home: Path):
+        _write_home(home, _STEP_ENDS[0])
+        usage = _usage(_run_step(_agent(), 0))
+        main = [u for u in usage if u.source != "subagent"]
+        assert _summed(main) == (88669, 481, 66809, 21787)
+
+    def test_a_subagent_of_a_subagent_is_counted(self, home: Path):
+        _write_home(home, _STEP_ENDS[0])
+        subagents = _usage(_run_step(_agent(), 0), "subagent")
+        assert len(subagents) == 5
+        assert _summed(subagents) == tuple(
+            map(
+                sum,
+                zip(
+                    _logged("01a206f5-bf12-7771-bc69-04d6acc5b635"),
+                    _logged("01a206f5-c793-7051-84da-872f261ace72"),
+                    strict=True,
+                ),
+            )
+        )
+
+    def test_a_subagent_that_logs_after_the_turn_is_counted_when_output_ends(
+        self, home: Path
+    ):
+        agent = _agent()
+        _write_home(home, _STEP_ENDS[0])
+        _ = _run_step(agent, 0)
+        _write_home(home, _STEP_ENDS[1], skip=_BACKGROUND)
+        parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+        lines = _lines("subagents_compaction_step_1.ndjson")
+        during = [e for i, line in enumerate(lines) for e in parse(line, i)]
+        _write_home(home, _STEP_ENDS[1])
+        ended = list(agent._output_ended())  # pyright: ignore[reportPrivateUsage]
+        assert _usage(during, "subagent") == []
+        assert _summed(_usage(ended, "subagent")) == _logged(_BACKGROUND)
+
+    def test_usage_read_again_is_counted_once(self, home: Path):
+        _write_home(home)
+        agent, events = _agent(), []
+        for step in range(3):
+            events += _run_step(agent, step)
+        assert _by_source(events)["subagent"] == _PROXY_TOTALS["subagent"]
+        assert _summed(_usage(events)) == tuple(
+            map(sum, zip(*_PROXY_TOTALS.values(), strict=True))
+        )
+
+    def test_finds_rollouts_in_every_day_folder(self, home: Path):
+        _write_home(home)
+        later = home / "sessions" / "2026" / "11" / "23"
+        later.mkdir(parents=True)
+        moved = home / _DAY / _rollout(_BACKGROUND).name
+        _ = shutil.move(moved, later / moved.name)
+        agent, events = _agent(), []
+        for step in range(3):
+            events += _run_step(agent, step)
+        assert _by_source(events)["subagent"] == _PROXY_TOTALS["subagent"]
+
+    def test_threads_of_another_session_are_not_counted(self, home: Path):
+        _write_home(home)
+        other = _rollout(_BACKGROUND).read_text()
+        other = (
+            other.replace(_MAIN, "another-thread")
+            .replace(_BACKGROUND, "another-subagent")
+            .replace("resp_", "other_resp_")
+        )
+        _ = (home / _DAY / "rollout-other.jsonl").write_text(other)
+        agent, events = _agent(), []
+        for step in range(3):
+            events += _run_step(agent, step)
+        assert _by_source(events)["subagent"] == _PROXY_TOTALS["subagent"]
+
+    def test_a_linked_folder_is_not_followed(self, home: Path, tmp_path: Path):
+        _write_home(home, skip=_BACKGROUND)
+        outside = tmp_path / "outside" / "01"
+        outside.mkdir(parents=True)
+        _ = shutil.copy(_rollout(_BACKGROUND), outside)
+        (home / "sessions" / "2026" / "12").symlink_to(outside.parent)
+        events = _run_step(_agent(), 1)
+        assert _summed(_usage(events, "subagent")) == tuple(
+            total - background
+            for total, background in zip(
+                _PROXY_TOTALS["subagent"], _logged(_BACKGROUND), strict=True
+            )
+        )
+
+    def test_a_junk_rollout_file_costs_the_scan_one_line(
+        self, home: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        real = sum(p.stat().st_size for p in _HOME.rglob("rollout-*.jsonl"))
+        monkeypatch.setattr("karotte.agents.student_files._MAX_LINE_BYTES", 64 * 1024)
+        monkeypatch.setattr(
+            "karotte.agents.student_files._SCAN_BYTES", 2 * real + 128 * 1024
+        )
+        agent, events = _agent(), []
+        for step, end in enumerate(_STEP_ENDS):
+            _write_home(home, end)
+            with (home / _DAY / "rollout-junk.jsonl").open("wb") as f:
+                f.truncate(1024**3)
+            events += _run_step(agent, step)
+        assert _by_source(events) == _PROXY_TOTALS
+
+    def test_a_scan_opens_no_more_files_than_its_budget(
+        self, home: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        _write_home(home, _STEP_ENDS[0])
+        for i in range(50):
+            (home / _DAY / f"rollout-junk-{i}.jsonl").touch()
+        monkeypatch.setattr("karotte.agents.student_files._SCAN_ENTRIES", 1000)
+        agent = _agent()
+        listing = student_files.ScanBudget()
+        _ = agent._rollout_files(listing)  # pyright: ignore[reportPrivateUsage]
+        monkeypatch.setattr(
+            "karotte.agents.student_files._SCAN_ENTRIES", 1000 - listing.entries + 10
+        )
+        opened: list[Path] = []
+        open_student_file = student_files.open_student_file
+
+        def counting(path: Path) -> int | None:
+            opened.append(path)
+            return open_student_file(path)
+
+        monkeypatch.setattr(student_files, "open_student_file", counting)
+        _ = _run_step(agent, 0)
+        assert 0 < len(opened) <= 2 * 10
+
+    def test_without_rollouts_everything_stays_with_the_agent(self):
+        session, events = Session(), []
+        for step in range(3):
+            lines = _lines(f"subagents_compaction_step_{step}.ndjson")
+            events += list(parse_stream(lines, session, step))
+        assert {e.source for e in _usage(events)} == {"agent"}
+        assert _summed(_usage(events)) == (173509, 854, 135317, 38098)

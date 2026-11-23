@@ -1,0 +1,29 @@
+{
+  "session_id": "b7fbcfda-8781-0881-7bbf-6521a1a66593",
+  "parent_session_id": "af38fec1-092e-c0cf-b8b6-6521a1a66593",
+  "start_time": "2026-11-23T05:52:30.369144+00:00",
+  "end_time": "2026-11-23T05:52:31.458626+00:00",
+  "title": "You are continuing a trajectory after a context co…",
+  "title_source": "auto",
+  "stats": {
+    "steps": 5,
+    "session_prompt_tokens": 32501,
+    "session_completion_tokens": 169,
+    "tool_calls_agreed": 2,
+    "tool_calls_rejected": 0,
+    "tool_calls_hook_denied": 0,
+    "tool_calls_failed": 0,
+    "tool_calls_succeeded": 2,
+    "context_tokens": 6316,
+    "last_turn_prompt_tokens": 6296,
+    "last_turn_completion_tokens": 20,
+    "last_turn_duration": 1.0298556660418399,
+    "tokens_per_second": 19.42019708146895,
+    "input_price_per_million": 0.0,
+    "output_price_per_million": 0.0,
+    "session_total_llm_tokens": 32670,
+    "last_turn_total_tokens": 6316,
+    "session_cost": 0.0
+  },
+  "total_messages": 2
+}

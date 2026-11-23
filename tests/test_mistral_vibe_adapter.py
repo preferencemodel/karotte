@@ -3,6 +3,7 @@
 (tests/resources/mistral_vibe/)."""
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,13 @@ from karotte.schemas.transcript import (
 )
 
 _FIXTURE_DIR = Path(__file__).parent / "resources" / "mistral_vibe"
+_SESSION_USAGE = _FIXTURE_DIR / "session_usage"
+_STEP_SESSIONS = (
+    ("session_20261123_055219_0b62ef85",),
+    ("session_20261123_055226_af38fec1", "session_20261123_055230_b7fbcfda"),
+)
+_SUBAGENT_TOTAL = (3618, 44)
+_MAIN_TOTALS = ((12266, 71), (12266 + 32501, 71 + 169))
 
 MODEL = "mistral/mistral-medium-3-5"
 
@@ -211,3 +219,158 @@ class TestEnv:
 
         assert "PYTHONSAFEPATH" not in env
         assert env["HOME"]
+
+
+class TestSessionUsage:
+    """Real usage from Vibe's session log, recorded over two steps: a subagent
+    in the first, a compaction in the second."""
+
+    def _agent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> MistralVibeAgent:
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        return MistralVibeAgent(
+            EvaluationRunConfig(run_id="r", task_id="t", model=MODEL, model_api_key="k")
+        )
+
+    def _step(
+        self, agent: MistralVibeAgent, step: int, home: Path | None
+    ) -> list[Event]:
+        if home is not None:
+            for name in _STEP_SESSIONS[step]:
+                shutil.copytree(
+                    _SESSION_USAGE / "home" / "logs" / "session" / name,
+                    home / "logs" / "session" / name,
+                )
+        lines = (_SESSION_USAGE / f"step_{step}.ndjson").read_text().splitlines()
+        parse = agent._line_parser(json.loads(lines[1])["content"])  # pyright: ignore[reportPrivateUsage]
+        events = [e for i, line in enumerate(lines) for e in parse(line, i)]
+        return events + list(agent._output_ended())  # pyright: ignore[reportPrivateUsage]
+
+    def _summed(self, events: list[Event], source: str) -> tuple[int, int]:
+        usages = [
+            e for e in events if isinstance(e, TokenUsageEvent) and e.source == source
+        ]
+        return sum(u.input_tokens for u in usages), sum(u.output_tokens for u in usages)
+
+    def test_config_turns_on_the_session_log(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
+        agent._write_config()  # pyright: ignore[reportPrivateUsage]
+        config = (tmp_path / ".vibe" / "config.toml").read_text()
+        assert "[session_logging]\nenabled = true\n" in config
+
+    def test_step_end_brings_agent_usage_up_to_the_session_log(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        events = self._step(agent, 0, tmp_path / ".vibe")
+        assert self._summed(events, "agent") == _MAIN_TOTALS[0]
+
+    def test_subagent_usage_comes_from_its_session_log(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        events = self._step(agent, 0, tmp_path / ".vibe")
+        assert self._summed(events, "subagent") == _SUBAGENT_TOTAL
+        subagent = [
+            e
+            for e in events
+            if isinstance(e, TokenUsageEvent) and e.source == "subagent"
+        ]
+        assert not any(e.estimated for e in subagent)
+
+    def test_steps_and_a_compacted_session_chain_are_counted_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        events = self._step(agent, 0, tmp_path / ".vibe")
+        events += self._step(agent, 1, tmp_path / ".vibe")
+        assert self._summed(events, "agent") == _MAIN_TOTALS[1]
+        assert self._summed(events, "subagent") == _SUBAGENT_TOTAL
+        assert self._summed(events, "helper") == (0, 0)
+
+    def test_the_session_log_scan_stops_at_its_budget(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("karotte.agents.student_files._SCAN_ENTRIES", 0)
+        agent = self._agent(tmp_path, monkeypatch)
+        events = self._step(agent, 0, tmp_path / ".vibe")
+        usages = [e for e in events if isinstance(e, TokenUsageEvent)]
+        assert len(usages) == 2
+        assert all(u.estimated and u.source == "agent" for u in usages)
+
+    def test_without_a_session_log_only_estimates_are_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        events = self._step(agent, 0, None)
+        usages = [e for e in events if isinstance(e, TokenUsageEvent)]
+        assert len(usages) == 2
+        assert all(u.estimated and u.source == "agent" for u in usages)
+
+    def test_estimates_above_the_logged_total_add_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        session = tmp_path / ".vibe" / "logs" / "session" / "session_1"
+        session.mkdir(parents=True)
+        meta = {
+            "session_id": "a",
+            "parent_session_id": None,
+            "stats": {"session_prompt_tokens": 1, "session_completion_tokens": 1},
+        }
+        _ = (session / "meta.json").write_text(json.dumps(meta))
+        events = self._step(agent, 0, None)
+        usages = [e for e in events if isinstance(e, TokenUsageEvent)]
+        assert len(usages) == 2
+
+    def test_a_session_log_over_the_size_cap_is_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        monkeypatch.setattr("karotte.agents.mistral_vibe.agent._MAX_META_BYTES", 200)
+        session = tmp_path / ".vibe" / "logs" / "session" / "session_1"
+        session.mkdir(parents=True)
+        meta = {
+            "session_id": "a",
+            "parent_session_id": None,
+            "padding": "x" * 300,
+            "stats": {"session_prompt_tokens": 10**9, "session_completion_tokens": 1},
+        }
+        _ = (session / "meta.json").write_text(json.dumps(meta, indent=2))
+        events = self._step(agent, 0, None)
+        assert len([e for e in events if isinstance(e, TokenUsageEvent)]) == 2
+
+    def test_a_malformed_session_log_is_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        session = tmp_path / ".vibe" / "logs" / "session" / "session_1"
+        session.mkdir(parents=True)
+        _ = (session / "meta.json").write_text("{not json")
+        events = self._step(agent, 0, None)
+        assert len([e for e in events if isinstance(e, TokenUsageEvent)]) == 2
+
+    @pytest.mark.parametrize("key", ["session_id", "parent_session_id"])
+    def test_a_session_log_with_an_odd_id_does_not_end_the_step(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        session = tmp_path / ".vibe" / "logs" / "session" / "session_1"
+        session.mkdir(parents=True)
+        _ = (session / "meta.json").write_text(json.dumps({key: ["a"]}))
+        events = self._step(agent, 0, None)
+        assert len([e for e in events if isinstance(e, TokenUsageEvent)]) == 2
+
+    def test_a_session_log_nested_too_deep_is_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        agent = self._agent(tmp_path, monkeypatch)
+        session = tmp_path / ".vibe" / "logs" / "session" / "session_1"
+        session.mkdir(parents=True)
+        _ = (session / "meta.json").write_text("[" * 200_000)
+        events = self._step(agent, 0, None)
+        assert len([e for e in events if isinstance(e, TokenUsageEvent)]) == 2

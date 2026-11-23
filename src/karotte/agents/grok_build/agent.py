@@ -21,7 +21,7 @@ from karotte.agents.cli_agent import (
     register_cli_agent,
     toml_string,
 )
-from karotte.agents.grok_build.adapter import parse_line
+from karotte.agents.grok_build.adapter import StreamParser
 from karotte.agents.models import resolve_model
 from karotte.model_spec import spec_for
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -180,4 +180,4 @@ class GrokBuildAgent(CliAgent):
         return argv
 
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
-        return parse_line
+        return StreamParser()

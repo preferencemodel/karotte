@@ -7,11 +7,14 @@ Each stdout line is one object tagged by ``type``: a ``system`` preamble
 ``user`` lines carrying ``tool_result`` blocks, and a terminal ``result``.
 Unlike Vibe, Grok reports real token usage per model response.
 
-Lines with a non-null ``parent_tool_use_id`` come from subagents; their tool
-calls are not part of the main conversation, so they are left out of the
-transcript (the native log, saved as an artifact, keeps them).
+Subagent lines leave ``parent_tool_use_id`` null, so only lines between a
+foreground ``spawn_subagent`` call and its result are known to be subagents'
+(only their usage is kept); background subagents' lines stay in the transcript,
+as do those of a foreground one Grok moves to the background for want of a slot.
+The step's ``result`` total covers usage lost when parallel subagents' lines
+merge; session titles and compaction summaries appear nowhere.
 
-Parsing is pure and lenient: no I/O, malformed lines are logged and skipped.
+Parsing is lenient: malformed lines are logged and skipped.
 """
 
 import json
@@ -23,66 +26,137 @@ from mcp.types import CallToolResult, ImageContent, TextContent
 
 from karotte.agents.ndjson import parse_json_line
 from karotte.agents.tool_results import tool_result_events
-from karotte.agents.usage import messages_usage_event
+from karotte.agents.usage import (
+    MESSAGES_USAGE_BUCKETS,
+    int_or_zero,
+    messages_usage_event,
+)
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
     ContextCompactedEvent,
     Event,
     MessageAddedEvent,
+    TokenUsageEvent,
     ToolCallCompletedEvent,
     ToolCallStartedEvent,
+    UsageSource,
 )
 
 
 def parse_stream(lines: Iterable[str]) -> Iterator[Event]:
-    """Convert Grok NDJSON lines into normalized transcript events.
-
-    Lines are independent, so a caller reading Grok's stdout as it arrives can
-    feed each one to :func:`parse_line` instead.
-    """
+    """Convert one step's Grok NDJSON lines into normalized transcript events."""
+    parse = StreamParser()
     for i, line in enumerate(lines):
-        yield from parse_line(line, i)
+        yield from parse(line, i)
 
 
-def parse_line(line: str, i: int) -> Iterator[Event]:
-    """Events for line ``i`` of Grok's NDJSON output.
+class StreamParser:
+    """:func:`parse_stream` fed one line at a time, as Grok writes them."""
 
-    An ``assistant`` line yields a `MessageAddedEvent`, a `TokenUsageEvent`
-    and one `ToolCallStartedEvent` per tool call. Each ``tool_result`` block of
-    a ``user`` line yields a `ToolCallCompletedEvent` and the tool
-    `MessageAddedEvent`. A ``compact_boundary`` line yields a
-    `ContextCompactedEvent`; other ``system`` lines and ``result`` lines yield
-    nothing.
-    """
-    record = parse_json_line(line, i, "grok")
-    if record is None:
-        return
-    if record.get("parent_tool_use_id") is not None:
-        return
+    def __init__(self) -> None:
+        self._foreground: set[str] = set()
+        self._pending: set[str] = set()
+        self._spawned: bool = False
+        self._counted: dict[str, int] = dict.fromkeys(MESSAGES_USAGE_BUCKETS, 0)
 
-    kind = record.get("type")
-    message = record.get("message")
-    if kind == "system" and record.get("subtype") == "compact_boundary":
-        yield ContextCompactedEvent()
-        return
-    if kind not in ("assistant", "user"):
-        return
-    if not isinstance(message, dict):
-        logger.warning("Skipping grok {} line {} without a message.", kind, i)
-        return
-    blocks = message.get("content")
-    if isinstance(blocks, str):
-        blocks = [{"type": "text", "text": blocks}]
-    if not isinstance(blocks, list):
-        blocks = []
+    def __call__(self, line: str, i: int) -> Iterator[Event]:
+        """Events for line ``i``: an ``assistant`` line yields a
+        `MessageAddedEvent`, a `TokenUsageEvent` and one `ToolCallStartedEvent`
+        per tool call; each ``tool_result`` block of a ``user`` line yields a
+        `ToolCallCompletedEvent` and the tool `MessageAddedEvent`."""
+        record = parse_json_line(line, i, "grok")
+        if record is None:
+            return
+        kind = record.get("type")
+        if kind == "result":
+            yield from self._unreported(record.get("usage"))
+            return
+        if kind == "system" and record.get("subtype") == "compact_boundary":
+            if not self._foreground:
+                yield ContextCompactedEvent()
+            return
+        if kind not in ("assistant", "user"):
+            return
+        message = record.get("message")
+        if not isinstance(message, dict):
+            logger.warning("Skipping grok {} line {} without a message.", kind, i)
+            return
+        blocks = message.get("content")
+        if isinstance(blocks, str):
+            blocks = [{"type": "text", "text": blocks}]
+        if not isinstance(blocks, list):
+            blocks = []
+        usage = message.get("usage")
 
-    if kind == "assistant":
-        yield from _assistant_events(blocks, message.get("usage"), i)
-    else:
-        yield from _user_events(blocks)
+        if record.get("parent_tool_use_id") is not None or self._foreground:
+            if kind == "assistant" and isinstance(usage, dict):
+                yield self._usage_event(usage, "subagent")
+            elif kind == "user" and record.get("parent_tool_use_id") is None:
+                yield from _user_events(self._foreground_results(blocks))
+            return
+        if kind == "user":
+            for block in blocks:
+                if isinstance(block, dict):
+                    self._pending.discard(_nonempty_str(block.get("tool_use_id")) or "")
+            yield from _user_events(blocks)
+            return
+        self._track_calls(blocks)
+        usage_event = (
+            self._usage_event(usage, "agent") if isinstance(usage, dict) else None
+        )
+        yield from _assistant_events(blocks, usage_event, i)
+
+    def _track_calls(self, blocks: list[Any]) -> None:
+        for block in blocks:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
+                continue
+            call_id = _nonempty_str(block.get("id"))
+            if call_id is not None:
+                self._pending.add(call_id)
+            if block.get("name") != "spawn_subagent":
+                continue
+            self._spawned = True
+            arguments = block.get("input")
+            background = isinstance(arguments, dict) and arguments.get("background")
+            if call_id is not None and background is False:
+                self._foreground.add(call_id)
+
+    def _foreground_results(self, blocks: list[Any]) -> list[Any]:
+        """The results of the main agent's pending calls among a ``user`` line's
+        blocks; the rest are the subagents'."""
+        results: list[Any] = []
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            call_id = _nonempty_str(block.get("tool_use_id"))
+            if call_id is not None and call_id in self._pending:
+                self._pending.discard(call_id)
+                self._foreground.discard(call_id)
+                results.append(block)
+        return results
+
+    def _usage_event(
+        self, usage: dict[str, Any], source: UsageSource
+    ) -> TokenUsageEvent:
+        for bucket in MESSAGES_USAGE_BUCKETS:
+            self._counted[bucket] += int_or_zero(usage.get(bucket))
+        return messages_usage_event(usage, source)
+
+    def _unreported(self, usage: Any) -> Iterator[Event]:
+        """What the step's ``result`` total has beyond the counted usage."""
+        if not isinstance(usage, dict):
+            return
+        missing = {
+            bucket: max(0, int_or_zero(usage.get(bucket)) - self._counted[bucket])
+            for bucket in MESSAGES_USAGE_BUCKETS
+        }
+        if any(missing.values()):
+            yield self._usage_event(missing, "subagent" if self._spawned else "agent")
 
 
-def _assistant_events(blocks: list[Any], usage: Any, i: int) -> Iterator[Event]:
+def _assistant_events(
+    blocks: list[Any], usage: TokenUsageEvent | None, i: int
+) -> Iterator[Event]:
     texts: list[str] = []
     thoughts: list[str] = []
     tool_calls: list[ChatCompletionMessageToolCall] = []
@@ -97,9 +171,10 @@ def _assistant_events(blocks: list[Any], usage: Any, i: int) -> Iterator[Event]:
             case "tool_use":
                 tool_calls.append(
                     ChatCompletionMessageToolCall(
-                        id=block.get("id") or f"grok-tool-call-{i}-{len(tool_calls)}",
+                        id=_nonempty_str(block.get("id"))
+                        or f"grok-tool-call-{i}-{len(tool_calls)}",
                         function=Function(
-                            name=block.get("name"),
+                            name=_nonempty_str(block.get("name")),
                             arguments=json.dumps(block.get("input") or {}),
                         ),
                         type="function",
@@ -116,8 +191,8 @@ def _assistant_events(blocks: list[Any], usage: Any, i: int) -> Iterator[Event]:
             tool_calls=tool_calls or None,
         )
     )
-    if isinstance(usage, dict):
-        yield messages_usage_event(usage)
+    if usage is not None:
+        yield usage
     for tool_call in tool_calls:
         yield ToolCallStartedEvent(tool_call=tool_call)
 
@@ -132,7 +207,7 @@ def _user_events(blocks: list[Any]) -> Iterator[Event]:
             continue
         if block.get("type") != "tool_result":
             continue
-        tool_call_id = block.get("tool_use_id") or ""
+        tool_call_id = _nonempty_str(block.get("tool_use_id")) or ""
         text = _result_text(block.get("content"))
         is_error = bool(block.get("is_error"))
         if (image := _read_file_image(text)) is not None:
@@ -154,13 +229,17 @@ def _user_events(blocks: list[Any]) -> Iterator[Event]:
         yield MessageAddedEvent(message=Message(role="user", content="".join(texts)))
 
 
+def _nonempty_str(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 def _read_file_image(text: str) -> ImageContent | None:
     """The image in Grok's JSON-encoded ``read_file`` result, if it read one."""
     if not text.startswith("{"):
         return None
     try:
         record = json.loads(text)
-    except json.JSONDecodeError:
+    except (ValueError, RecursionError):
         return None
     if not isinstance(record, dict) or record.get("type") != "ReadFile":
         return None

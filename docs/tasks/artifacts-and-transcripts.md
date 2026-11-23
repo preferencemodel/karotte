@@ -65,6 +65,11 @@ Each event has a `timestamp` and a `type`.
 The full schema is in [`karotte/schemas/transcript.py`](https://github.com/preferencemodel/karotte/blob/main/src/karotte/schemas/transcript.py).
 Streamed message chunks go to live viewers only and aren't saved.
 
+A `token_usage` event's `source` says who made the calls it counts.
+It's `agent` for the agent's own calls, `subagent` for the calls of a subagent the agent started, and `helper` for calls a CLI agent makes on its own, such as compaction summaries and reminders.
+A CLI agent that doesn't tell its own calls apart from compaction summaries counts both as `agent`.
+One event can cover several model calls, so the events don't count turns.
+
 To read a transcript in Python, validate it with the `Transcript` model:
 
 ```python
