@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import psutil
-from karotte.confinement import Sandbox, current_sandbox
+from karotte.confinement import current_sandbox
 from karotte.schemas.transcript import ResourceMetrics, ResourceSample
 from loguru import logger
 
@@ -31,7 +31,7 @@ CGROUP_V1_MEMORY_USAGE = Path("/sys/fs/cgroup/memory/memory.usage_in_bytes")
 
 def _trust_cgroup_v1() -> bool:
     """gVisor serves a readable cgroup v1 facade whose numbers mean nothing."""
-    return current_sandbox() is not Sandbox.GVISOR
+    return current_sandbox().has_real_cgroups
 
 
 def _read_cgroup_cpu_usage_usec() -> int | None:
