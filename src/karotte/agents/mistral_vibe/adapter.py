@@ -5,7 +5,9 @@ JSON): ``role`` is ``system``/``user``/``assistant``/``tool``, assistant
 messages carry ``tool_calls`` (``{id, index, function: {name, arguments},
 type}``), and a ``role: "tool"`` line carries the result for ``tool_call_id``.
 Vibe never writes token usage to stdout (its ``LLMUsage`` stays internal), so
-usage is estimated from message content and marked as such.
+usage is estimated from message content and marked as such. Its session logs
+record the real totals, including subagents and compaction summaries that
+stdout never shows; :class:`UsageLedger` turns them into corrections.
 
 Parsing is pure and lenient: no I/O, malformed lines are logged and skipped.
 The native log is saved as an artifact elsewhere and remains the source of
@@ -20,6 +22,7 @@ from loguru import logger
 from mcp.types import CallToolResult, TextContent
 
 from karotte.agents.ndjson import parse_json_line
+from karotte.agents.usage import int_or_zero
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
     Event,
@@ -27,6 +30,7 @@ from karotte.schemas.transcript import (
     TokenUsageEvent,
     ToolCallCompletedEvent,
     ToolCallStartedEvent,
+    UsageSource,
 )
 
 _ROLES = frozenset({"system", "user", "assistant", "tool"})
@@ -130,6 +134,65 @@ class StreamParser:
 
         for tool_call in tool_calls:
             yield ToolCallStartedEvent(tool_call=tool_call)
+
+
+class UsageLedger:
+    """Tokens the events of every step have reported so far, by source."""
+
+    def __init__(self) -> None:
+        self.counted: dict[UsageSource, tuple[int, int]] = {
+            "agent": (0, 0),
+            "subagent": (0, 0),
+            "helper": (0, 0),
+        }
+
+    def add(self, event: TokenUsageEvent) -> None:
+        tokens_in, tokens_out = self.counted[event.source]
+        self.counted[event.source] = (
+            tokens_in + event.input_tokens,
+            tokens_out + event.output_tokens,
+        )
+
+    def corrections(
+        self, sessions: Iterable[dict[str, Any]], subagents: Iterable[dict[str, Any]]
+    ) -> Iterator[TokenUsageEvent]:
+        """What the session logs' totals have beyond the counted usage. The main
+        sessions' share includes their compaction summaries, which the logs
+        don't break out."""
+        yield from self._missing("agent", logged_total(sessions), estimated=True)
+        yield from self._missing("subagent", logged_total(subagents), estimated=False)
+
+    def _missing(
+        self, source: UsageSource, logged: tuple[int, int], estimated: bool
+    ) -> Iterator[TokenUsageEvent]:
+        counted_in, counted_out = self.counted[source]
+        event = TokenUsageEvent(
+            input_tokens=max(0, logged[0] - counted_in),
+            output_tokens=max(0, logged[1] - counted_out),
+            estimated=estimated,
+            source=source,
+        )
+        if event.input_tokens or event.output_tokens:
+            self.add(event)
+            yield event
+
+
+def logged_total(metas: Iterable[dict[str, Any]]) -> tuple[int, int]:
+    """Input and output tokens of the session logs' ``meta.json`` contents. A
+    compaction carries a session's stats over into a new log naming it as
+    parent, so only the last log of each chain counts."""
+    metas = list(metas)
+    parents = {str(meta.get("parent_session_id")) for meta in metas}
+    stats = [
+        meta.get("stats")
+        for meta in metas
+        if str(meta.get("session_id")) not in parents
+    ]
+    stats = [s for s in stats if isinstance(s, dict)]
+    return (
+        sum(int_or_zero(s.get("session_prompt_tokens")) for s in stats),
+        sum(int_or_zero(s.get("session_completion_tokens")) for s in stats),
+    )
 
 
 def _parse_tool_call(element: Any, i: int) -> ChatCompletionMessageToolCall | None:

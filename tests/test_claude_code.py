@@ -3,6 +3,7 @@
 `claude -p` log (tests/resources/claude_code/)."""
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -10,7 +11,8 @@ import pytest
 
 from karotte.agents import cli_agent_types
 from karotte.agents.claude_code import ClaudeCodeAgent
-from karotte.agents.claude_code.adapter import parse_stream
+from karotte.agents.claude_code.adapter import StreamParser, UsageLedger, parse_stream
+from karotte.agents.claude_code.agent import project_dir_name
 from karotte.agents.cli_agent import AGENTS_BIN_DIR
 from karotte.providers import PROXY_PLACEHOLDER_KEY
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -107,6 +109,64 @@ class TestClaudeCodeAgent:
         assert config_path.parent == tmp_path / ".claude_home"
         server = json.loads(config_path.read_text())["mcpServers"]["karotte"]
         assert server == {"type": "http", "url": agent.mcp_url}
+
+    def test_reads_a_finished_subagent_s_log_from_its_session(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        workdir = tmp_path.resolve() / "work.dir"
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(workdir))
+        agent = _agent()
+        logs = (
+            workdir
+            / ".claude_home"
+            / "projects"
+            / re.sub(r"[^a-zA-Z0-9]", "-", str(workdir))
+            / agent._session_id  # pyright: ignore[reportPrivateUsage]
+            / "subagents"
+        )
+        logs.mkdir(parents=True)
+        name = f"agent-{_FOREGROUND_TASK}.jsonl"
+        _ = (logs / name).write_text((_FIXTURES / "subagent_logs" / name).read_text())
+        parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+        lines = _lines("subagent_foreground.ndjson")
+        events = [e for i, line in enumerate(lines) for e in parse(line, i)]
+        assert _summed(_usage(events, "subagent")) == _logged_subagent_total(
+            _FOREGROUND_TASK
+        )
+
+    @pytest.mark.parametrize(
+        ("cwd", "folder"),
+        [
+            ("/workdir", "-workdir"),
+            ("/w/é/zzzzzzzzzz", "-w---zzzzzzzzzz"),
+            ("/w/" + "x" * 197, "-w-" + "x" * 197),
+            ("/w/" + "x" * 198, "-w-" + "x" * 197 + "-qvwt6v"),
+            ("/w/\N{GRINNING FACE}/" + "y" * 200, "-w----" + "y" * 194 + "-7ltq2t"),
+        ],
+    )
+    def test_project_folder_is_named_like_claude_code_names_it(
+        self, cwd: str, folder: str
+    ):
+        assert project_dir_name(cwd) == folder
+
+    def test_a_task_id_cannot_point_outside_the_session(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        (tmp_path / "secret.jsonl").write_text("{}\n")
+        agent = _agent()
+        assert list(agent._subagent_log("../../../../../secret")) == []  # pyright: ignore[reportPrivateUsage]
+
+    def test_counts_unreported_calls_over_all_steps(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
+        agent = _agent()
+        events: list[Event] = []
+        for name in ("subagents_step_0.ndjson", "subagents_step_1.ndjson"):
+            parse = agent._line_parser("x")  # pyright: ignore[reportPrivateUsage]
+            events += [e for i, line in enumerate(_lines(name)) for e in parse(line, i)]
+        assert _summed(_usage(events)) == _claudes_total("subagents_step_1.ndjson")
 
     def test_env_points_claude_at_its_home_and_model_endpoint(
         self, monkeypatch: pytest.MonkeyPatch
@@ -466,7 +526,7 @@ class TestParseStream:
         ]
         assert [e.message.role for e in _messages(events, "user")] == ["user"]
 
-    def test_skips_subagent_and_malformed_lines(self):
+    def test_skips_malformed_lines_and_subagent_messages(self):
         subagent = json.dumps(
             {
                 "type": "assistant",
@@ -474,7 +534,237 @@ class TestParseStream:
                 "message": {"id": "m", "content": [{"type": "text", "text": "x"}]},
             }
         )
-        assert list(parse_stream(["not json", "[1]", subagent, ""])) == []
+        odd_id = json.dumps(
+            {
+                "type": "assistant",
+                "parent_tool_use_id": "toolu_1",
+                "message": {"id": ["m"], "usage": {"input_tokens": 1}},
+            }
+        )
+        assert list(parse_stream(["not json", "[1]", subagent, odd_id, ""])) == []
+
+
+def _subagent_log(task_id: str) -> list[str]:
+    path = _FIXTURES / "subagent_logs" / f"agent-{task_id}.jsonl"
+    return path.read_text().splitlines() if path.exists() else []
+
+
+def _parse(
+    name: str, ledger: UsageLedger | None = None, *, logs: bool = True
+) -> list[Event]:
+    parse = StreamParser(_subagent_log if logs else None, ledger or UsageLedger())
+    return [e for i, line in enumerate(_lines(name)) for e in parse(line, i)]
+
+
+def _usage(events: list[Event], source: str | None = None) -> list[TokenUsageEvent]:
+    return [
+        e
+        for e in events
+        if isinstance(e, TokenUsageEvent) and source in (None, e.source)
+    ]
+
+
+def _summed(usage: list[TokenUsageEvent]) -> tuple[int, int, int, int]:
+    return (
+        sum(u.input_tokens for u in usage),
+        sum(u.output_tokens for u in usage),
+        sum(u.cache_read_tokens or 0 for u in usage),
+        sum(u.cache_write_tokens or 0 for u in usage),
+    )
+
+
+def _claudes_total(name: str) -> tuple[int, int, int, int]:
+    """Claude Code's own running total for the session, from the step's last
+    `result` line, in transcript terms."""
+    (result,) = [
+        json.loads(line) for line in _lines(name)[-1:] if '"type":"result"' in line
+    ]
+    models = result["modelUsage"].values()
+    cache_read = sum(m["cacheReadInputTokens"] for m in models)
+    cache_write = sum(m["cacheCreationInputTokens"] for m in models)
+    return (
+        sum(m["inputTokens"] for m in models) + cache_read + cache_write,
+        sum(m["outputTokens"] for m in models),
+        cache_read,
+        cache_write,
+    )
+
+
+def _logged_subagent_total(*task_ids: str) -> tuple[int, int, int, int]:
+    final: dict[str, dict[str, int]] = {}
+    for task_id in task_ids:
+        for line in _subagent_log(task_id):
+            record = json.loads(line)
+            if record["type"] == "assistant":
+                final[record["message"]["id"]] = record["message"]["usage"]
+    cache_read = sum(u["cache_read_input_tokens"] for u in final.values())
+    cache_write = sum(u["cache_creation_input_tokens"] for u in final.values())
+    return (
+        sum(u["input_tokens"] for u in final.values()) + cache_read + cache_write,
+        sum(u["output_tokens"] for u in final.values()),
+        cache_read,
+        cache_write,
+    )
+
+
+_BACKGROUND_TASK = "ac516d9bce2c4ffd3"
+_FOREGROUND_TASK = "a672780334727480c"
+
+
+class TestSubagentUsage:
+    def test_subagent_lines_add_no_messages(self):
+        events = _parse("subagents_step_0.ndjson")
+        texts = [m.message.content for m in _messages(events, "assistant")]
+        assert not any("hello world" in (t or "") for t in texts[:-1])
+        assert len(_messages(events, "assistant")) == 3
+
+    def test_subagent_calls_are_counted_as_they_stream(self):
+        lines = _lines("subagents_step_0.ndjson")
+        done = next(i for i, line in enumerate(lines) if "task_notification" in line)
+        parse = StreamParser()
+        events = [e for i, line in enumerate(lines[:done]) for e in parse(line, i)]
+        live = _usage(events, "subagent")
+        assert len(live) == 2
+        assert all(u.input_tokens > 0 for u in live)
+
+    def test_a_finished_subagent_is_counted_from_its_log(self):
+        events = _parse("subagents_step_0.ndjson")
+        assert _summed(_usage(events, "subagent")) == _logged_subagent_total(
+            _BACKGROUND_TASK
+        )
+
+    def test_a_subagent_response_missing_from_stdout_is_counted_from_its_log(self):
+        events = _parse("subagent_foreground.ndjson")
+        assert _summed(_usage(events, "subagent")) == _logged_subagent_total(
+            _FOREGROUND_TASK
+        )
+
+    def test_what_no_line_reports_is_a_helper_call(self):
+        events = _parse("subagents_step_0.ndjson")
+        (helper,) = _usage(events, "helper")
+        assert (helper.input_tokens, helper.output_tokens) == (1210, 19)
+        assert _summed(_usage(events)) == _claudes_total("subagents_step_0.ndjson")
+
+    def test_without_helper_calls_there_is_no_helper_usage(self):
+        events = _parse("subagent_foreground.ndjson")
+        assert _usage(events, "helper") == []
+        assert _summed(_usage(events)) == _claudes_total("subagent_foreground.ndjson")
+
+    def test_claudes_total_runs_over_resumed_steps(self):
+        ledger = UsageLedger()
+        events = _parse("subagents_step_0.ndjson", ledger)
+        events += _parse("subagents_step_1.ndjson", ledger)
+        assert _summed(_usage(events)) == _claudes_total("subagents_step_1.ndjson")
+
+    def test_without_its_log_the_total_still_adds_up(self):
+        events = _parse("subagent_foreground.ndjson", logs=False)
+        assert _summed(_usage(events)) == _claudes_total("subagent_foreground.ndjson")
+
+    def test_no_helper_usage_while_a_subagent_is_still_running(self):
+        lines = [
+            line
+            for line in _lines("subagent_foreground.ndjson")
+            if "task_notification" not in line
+        ]
+        parse = StreamParser(_subagent_log, UsageLedger())
+        events = [e for i, line in enumerate(lines) for e in parse(line, i)]
+        assert _usage(events, "helper") == []
+
+    def test_a_response_logged_after_the_subagent_finished_is_still_a_subagent_s(
+        self,
+    ):
+        reads: list[str] = []
+
+        def late_log(task_id: str) -> list[str]:
+            reads.append(task_id)
+            lines = _subagent_log(task_id)
+            return lines[:-1] if len(reads) == 1 else lines
+
+        parse = StreamParser(late_log, UsageLedger())
+        lines = _lines("subagent_foreground.ndjson")
+        events = [e for i, line in enumerate(lines) for e in parse(line, i)]
+        assert _usage(events, "helper") == []
+        assert _summed(_usage(events, "subagent")) == _logged_subagent_total(
+            _FOREGROUND_TASK
+        )
+
+    def test_a_subagent_finished_in_a_step_without_a_result_is_settled_next_step(
+        self,
+    ):
+        reads: list[str] = []
+
+        def late_log(task_id: str) -> list[str]:
+            reads.append(task_id)
+            lines = _subagent_log(task_id)
+            return lines[:-1] if len(reads) == 1 else lines
+
+        *lines, result = _lines("subagent_foreground.ndjson")
+        ledger = UsageLedger()
+        cut_short = StreamParser(late_log, ledger)
+        events = [e for i, line in enumerate(lines) for e in cut_short(line, i)]
+        events += cut_short.finish()
+        events += StreamParser(late_log, ledger)(result, 0)
+        assert _usage(events, "helper") == []
+        assert _summed(_usage(events)) == _claudes_total("subagent_foreground.ndjson")
+        assert _summed(_usage(events, "subagent")) == _logged_subagent_total(
+            _FOREGROUND_TASK
+        )
+
+    def test_a_subagent_still_running_when_its_step_ends_is_settled_next_step(self):
+        *lines, result = _lines("subagent_foreground.ndjson")
+        lines = [line for line in lines if "task_notification" not in line]
+        ledger = UsageLedger()
+        cut_short = StreamParser(_subagent_log, ledger)
+        events = [e for i, line in enumerate(lines) for e in cut_short(line, i)]
+        events += cut_short.finish()
+        events += StreamParser(_subagent_log, ledger)(result, 0)
+        assert _usage(events, "helper") == []
+        assert _summed(_usage(events)) == _claudes_total("subagent_foreground.ndjson")
+        assert _summed(_usage(events, "subagent")) == _logged_subagent_total(
+            _FOREGROUND_TASK
+        )
+
+    def test_a_subagent_still_running_when_the_last_step_ends_is_counted_from_its_log(
+        self,
+    ):
+        *lines, _ = _lines("subagent_foreground.ndjson")
+        lines = [line for line in lines if "task_notification" not in line]
+        cut_short = StreamParser(_subagent_log, UsageLedger())
+        events = [e for i, line in enumerate(lines) for e in cut_short(line, i)]
+        events += cut_short.finish()
+        assert _summed(_usage(events, "subagent")) == _logged_subagent_total(
+            _FOREGROUND_TASK
+        )
+
+    def test_a_subagent_continued_in_a_later_step_is_not_counted_twice(self):
+        ledger = UsageLedger()
+        first = _parse("subagents_step_0.ndjson", ledger)
+        continued = [
+            json.dumps(
+                {
+                    "type": "system",
+                    "subtype": "task_started",
+                    "task_id": _BACKGROUND_TASK,
+                    "task_type": "local_agent",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "system",
+                    "subtype": "task_notification",
+                    "task_id": _BACKGROUND_TASK,
+                    "status": "completed",
+                }
+            ),
+        ]
+        parse = StreamParser(_subagent_log, ledger)
+        again = [e for i, line in enumerate(continued) for e in parse(line, i)]
+        assert _usage(first, "subagent")
+        assert _usage(again) == []
+
+    def test_without_a_ledger_a_resumed_step_counts_only_its_own_calls(self):
+        events = list(parse_stream(_lines("subagents_step_1.ndjson")))
+        assert _usage(events, "helper") == []
 
 
 _COMPACTING = json.dumps(

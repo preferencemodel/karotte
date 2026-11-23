@@ -49,6 +49,7 @@ Karotte posts `update_run_state` after the task starts, after each token usage e
 ```
 
 Token counts are totals for the run so far.
+For a CLI agent, they include its subagents' calls and the calls the CLI makes on its own, such as compaction summaries, wherever the CLI records them.
 They're `null` until they're known.
 
 ### Artifacts

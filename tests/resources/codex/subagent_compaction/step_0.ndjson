@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a20700-b1b3-7c80-a2fb-e20b194af828"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"collab_tool_call","tool":"wait","sender_thread_id":"01a20700-b1b3-7c80-a2fb-e20b194af828","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"collab_tool_call","tool":"wait","sender_thread_id":"01a20700-b1b3-7c80-a2fb-e20b194af828","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"The sub-agent reported:\n\n- f1.txt: `9ff8460fe56594f33f9cf200`\n- f2.txt: `8738f599644a91d07043bda9`\n- f3.txt: `28214928b6d83014346efa49`"}}
+{"type":"turn.completed","usage":{"input_tokens":30714,"cached_input_tokens":20333,"cache_write_input_tokens":10263,"output_tokens":169,"reasoning_output_tokens":0}}

@@ -90,3 +90,41 @@ async def test_valid_arguments_still_call_the_tool(
 
     assert not completed.result.is_error
     assert completed.result.content[0].text == text  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def _nested(depth: int) -> str:
+    return '{"text":' * depth + "1" + "}" * depth
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        '{"text":' * 200_000,
+        _nested(200_000),
+        _nested(201),
+        '{"text":' + "[" * 200 + "1" + "]" * 200 + "}",
+        "[" * 200_000,
+    ],
+    ids=["unclosed", "closed", "just_over", "lists", "unclosed_list"],
+)
+async def test_arguments_nested_too_deep_give_an_error_result(
+    mcp_client: Client[FastMCPTransport], arguments: str
+):
+    tool_call = _call("echo", arguments)
+
+    completed = await _completed(tool_call, mcp_client)
+
+    assert completed.result.is_error
+    assert "_error" in json.loads(tool_call.function.arguments)
+
+
+@pytest.mark.asyncio
+async def test_arguments_nested_up_to_the_limit_reach_the_tool(
+    mcp_client: Client[FastMCPTransport],
+):
+    tool_call = _call("echo", _nested(200))
+
+    _ = await _completed(tool_call, mcp_client)
+
+    assert "_error" not in json.loads(tool_call.function.arguments)

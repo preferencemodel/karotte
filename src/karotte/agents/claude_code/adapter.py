@@ -6,12 +6,17 @@ model response spans several lines sharing a message id. The response's final
 usage arrives only in its ``message_delta`` stream event; ``message_stop`` ends
 it. Claude Code runs a tool as soon as its call has streamed, so a result can
 arrive before the response that asked for it ends; such results are held until
-then. Lines with a non-null ``parent_tool_use_id`` come from subagents and are
-left out (the native log, saved as an artifact, keeps them).
+then.
+
+Lines with a non-null ``parent_tool_use_id`` come from subagents; only their
+usage is kept, corrected from the subagent's own log once it finishes, since
+stdout lacks most output tokens and can miss responses. Calls no line reports,
+such as compaction summaries, are what the running total in ``result`` has
+beyond that.
 """
 
 import json
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
 from loguru import logger
@@ -19,7 +24,11 @@ from mcp.types import CallToolResult, ContentBlock, ImageContent, TextContent
 
 from karotte.agents.ndjson import parse_json_line
 from karotte.agents.tool_results import tool_result_events
-from karotte.agents.usage import messages_usage_event
+from karotte.agents.usage import (
+    MESSAGES_USAGE_BUCKETS,
+    int_or_zero,
+    messages_usage_event,
+)
 from karotte.schemas.chat import ChatCompletionMessageToolCall, Function, Message
 from karotte.schemas.transcript import (
     ContextCompactedEvent,
@@ -36,20 +45,62 @@ def parse_stream(lines: Iterable[str]) -> Iterator[Event]:
         yield from parse(line, i)
 
 
-class StreamParser:
-    """:func:`parse_stream` fed one line at a time, as Claude Code writes them."""
+_MODEL_USAGE_KEYS = (
+    "inputTokens",
+    "outputTokens",
+    "cacheReadInputTokens",
+    "cacheCreationInputTokens",
+)
+
+type SubagentLog = Callable[[str], Iterable[str]]
+"""The lines of a subagent's own log, by task id."""
+
+
+class UsageLedger:
+    """Usage a session's events have reported so far, in Messages-API buckets."""
 
     def __init__(self) -> None:
+        self.counted: dict[str, int] = dict.fromkeys(MESSAGES_USAGE_BUCKETS, 0)
+        self.subagent_responses: dict[str, dict[str, Any]] = {}
+        """Usage counted so far per subagent response id."""
+        self.finished_subagents: set[str] = set()
+        """Subagents whose logs may still hold usage not yet counted."""
+
+    def add(self, usage: dict[str, Any]) -> None:
+        for bucket in MESSAGES_USAGE_BUCKETS:
+            self.counted[bucket] += int_or_zero(usage.get(bucket))
+
+
+class StreamParser:
+    """:func:`parse_stream` fed one line at a time, as Claude Code writes them.
+    Calls no line reports are only counted with a ledger that has seen every
+    step of the session, since Claude Code's running total spans them all."""
+
+    def __init__(
+        self, subagent_log: SubagentLog | None = None, ledger: UsageLedger | None = None
+    ) -> None:
         self._blocks: list[dict[str, Any]] = []
         self._usage: dict[str, Any] = {}
         self._in_response: bool = False
         self._held_results: list[Event] = []
+        self._subagent_log: SubagentLog | None = subagent_log
+        self._ledger: UsageLedger | None = ledger
+        self._subagent_usage: dict[str, dict[str, Any]] = (
+            {} if ledger is None else ledger.subagent_responses
+        )
+        self._running_subagents: set[str] = set()
+        self._finished_subagents: set[str] = (
+            set() if ledger is None else ledger.finished_subagents
+        )
         self.error: str | None = None
         """What Claude Code's ``result`` line reported, if the run ended in an error."""
 
     def __call__(self, line: str, i: int) -> Iterator[Event]:
         record = parse_json_line(line, i, "claude")
-        if record is None or record.get("parent_tool_use_id") is not None:
+        if record is None:
+            return
+        if record.get("parent_tool_use_id") is not None:
+            yield from self._subagent_line(record)
             return
         match record.get("type"):
             case "stream_event":
@@ -64,11 +115,91 @@ class StreamParser:
                 )
             case "system" if record.get("subtype") == "compact_boundary":
                 yield from self._after_response([ContextCompactedEvent()])
-            case "result" if record.get("is_error"):
-                self.error = str(record.get("result"))
-                logger.warning("claude reported an error: {}", self.error)
+            case "system" if (
+                record.get("subtype") == "task_started"
+                and record.get("task_type") == "local_agent"
+            ):
+                self._running_subagents.add(str(record.get("task_id")))
+            case "system" if record.get("subtype") == "task_notification":
+                yield from self._subagent_finished(str(record.get("task_id")))
+            case "result":
+                if record.get("is_error"):
+                    self.error = str(record.get("result"))
+                    logger.warning("claude reported an error: {}", self.error)
+                yield from self._unreported(record.get("modelUsage"))
             case _:
                 pass
+
+    def _subagent_line(self, record: dict[str, Any]) -> Iterator[Event]:
+        message = _message(record)
+        usage = message.get("usage")
+        message_id = message.get("id")
+        if record.get("type") != "assistant" or not isinstance(usage, dict):
+            return
+        if not isinstance(message_id, str) or message_id in self._subagent_usage:
+            return
+        self._subagent_usage[message_id] = usage
+        self._count(usage)
+        yield messages_usage_event(usage, "subagent")
+
+    def _subagent_finished(self, task_id: str) -> Iterator[Event]:
+        if task_id not in self._running_subagents:
+            return
+        self._running_subagents.discard(task_id)
+        self._finished_subagents.add(task_id)
+        yield from self._logged_subagent_usage(task_id)
+
+    def _logged_subagent_usage(self, task_id: str) -> Iterator[Event]:
+        if self._subagent_log is None:
+            return
+        final: dict[str, dict[str, Any]] = {}
+        for i, line in enumerate(self._subagent_log(task_id)):
+            record = parse_json_line(line, i, "claude subagent")
+            usage = _message(record or {}).get("usage")
+            message_id = _message(record or {}).get("id")
+            if record and record.get("type") == "assistant" and isinstance(usage, dict):
+                final[str(message_id)] = usage
+        missing: dict[str, int] = dict.fromkeys(MESSAGES_USAGE_BUCKETS, 0)
+        for message_id, usage in final.items():
+            counted = self._subagent_usage.get(message_id, {})
+            for bucket in MESSAGES_USAGE_BUCKETS:
+                missing[bucket] += max(
+                    0, int_or_zero(usage.get(bucket)) - int_or_zero(counted.get(bucket))
+                )
+            self._subagent_usage[message_id] = usage
+        if any(missing.values()):
+            self._count(missing)
+            yield messages_usage_event(missing, "subagent")
+
+    def _unreported(self, model_usage: Any) -> Iterator[Event]:
+        """What Claude Code's running total has beyond the counted usage. A
+        running subagent's log isn't read yet, so its share would be miscounted."""
+        if self._ledger is None or self._running_subagents:
+            return
+        # A subagent's last response can reach its log after it reports finishing.
+        for task_id in sorted(self._finished_subagents):
+            yield from self._logged_subagent_usage(task_id)
+        self._finished_subagents.clear()
+        if not isinstance(model_usage, dict):
+            return
+        models = [m for m in model_usage.values() if isinstance(m, dict)]
+        missing: dict[str, int] = {
+            bucket: max(
+                0,
+                sum(int_or_zero(m.get(key)) for m in models)
+                - self._ledger.counted[bucket],
+            )
+            for bucket, key in zip(
+                MESSAGES_USAGE_BUCKETS, _MODEL_USAGE_KEYS, strict=True
+            )
+        }
+        if any(missing.values()):
+            self._ledger.add(missing)
+            yield messages_usage_event(missing, "helper")
+
+    def _count(self, usage: dict[str, Any]) -> None:
+        if self._ledger is not None:
+            self._ledger.add(usage)
 
     def _after_response(self, events: Iterable[Event]) -> Iterator[Event]:
         if self._in_response:
@@ -96,6 +227,8 @@ class StreamParser:
 
     def flush(self) -> Iterator[Event]:
         """The response in progress, with the results held for it."""
+        if self._in_response:
+            self._count(self._usage)
         if self._in_response and self._blocks:
             yield from _response_events(self._blocks, self._usage)
         elif self._in_response:
@@ -103,6 +236,15 @@ class StreamParser:
         yield from self._held_results
         self._blocks, self._usage, self._held_results = [], {}, []
         self._in_response = False
+
+    def finish(self) -> Iterator[Event]:
+        """:meth:`flush` at the step's end, which also ends its subagents: their
+        logs are read now, and again at the next ``result`` if there is one."""
+        yield from self.flush()
+        self._finished_subagents.update(self._running_subagents)
+        self._running_subagents.clear()
+        for task_id in sorted(self._finished_subagents):
+            yield from self._logged_subagent_usage(task_id)
 
 
 def _response_events(

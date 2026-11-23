@@ -144,7 +144,8 @@
     "cache_read_tokens": null,
     "cache_write_tokens": null,
     "estimated": false,
-    "service_tier": null
+    "service_tier": null,
+    "source": "agent"
   },
   {
     "type": "tool_call_started",
@@ -272,7 +273,8 @@
     "cache_read_tokens": null,
     "cache_write_tokens": null,
     "estimated": false,
-    "service_tier": null
+    "service_tier": null,
+    "source": "agent"
   },
   {
     "type": "tool_call_started",
@@ -373,7 +375,8 @@
     "cache_read_tokens": null,
     "cache_write_tokens": null,
     "estimated": false,
-    "service_tier": null
+    "service_tier": null,
+    "source": "agent"
   },
   {
     "type": "scoring",

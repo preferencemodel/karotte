@@ -261,15 +261,29 @@ class TestParseStream:
         assert usage.cache_read_tokens == 90
         assert usage.cache_write_tokens == 5
 
-    def test_skips_subagent_and_malformed_lines(self):
+    def test_skips_malformed_lines(self):
+        assert list(parse_stream(["not json", "[]", ""])) == []
+
+    def test_keeps_only_usage_of_lines_with_a_parent_tool_use(self):
         subagent = json.dumps(
             {
                 "type": "assistant",
                 "parent_tool_use_id": "call_x",
-                "message": {"content": [{"type": "text", "text": "child"}]},
+                "message": {
+                    "content": [{"type": "text", "text": "child"}],
+                    "usage": {"input_tokens": 5, "output_tokens": 2},
+                },
             }
         )
-        assert list(parse_stream(["not json", "[]", subagent, ""])) == []
+
+        (usage,) = parse_stream([subagent])
+
+        assert isinstance(usage, TokenUsageEvent)
+        assert (usage.input_tokens, usage.output_tokens, usage.source) == (
+            5,
+            2,
+            "subagent",
+        )
 
     def test_read_file_image_becomes_an_image(self):
         line = json.dumps(
@@ -334,6 +348,27 @@ class TestParseStream:
         assert isinstance(message, MessageAddedEvent)
         assert message.message.content == text
 
+    def test_a_result_nested_too_deep_stays_text(self):
+        text = '{"a":' * 200_000
+        line = json.dumps(
+            {
+                "type": "user",
+                "parent_tool_use_id": None,
+                "message": {
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": "c", "content": text}
+                    ]
+                },
+            }
+        )
+
+        completed, message = list(parse_stream([line]))
+
+        assert isinstance(completed, ToolCallCompletedEvent)
+        assert completed.result.content == [TextContent(type="text", text=text)]
+        assert isinstance(message, MessageAddedEvent)
+        assert message.message.content == text
+
     def test_compact_boundary_marks_a_compaction(self):
         boundary = json.dumps(
             {
@@ -346,6 +381,269 @@ class TestParseStream:
         )
 
         assert [type(e) for e in parse_stream([boundary])] == [ContextCompactedEvent]
+
+
+def _usage(events: list[Event], source: str | None = None) -> list[TokenUsageEvent]:
+    return [
+        e
+        for e in events
+        if isinstance(e, TokenUsageEvent) and source in (None, e.source)
+    ]
+
+
+def _line(kind: str, content: list[dict[str, Any]], **message: Any) -> str:
+    return json.dumps(
+        {
+            "type": kind,
+            "parent_tool_use_id": None,
+            "message": {"role": kind, "content": content, **message},
+        }
+    )
+
+
+def _spawn(call_id: str, background: bool) -> str:
+    return _line(
+        "assistant",
+        [
+            {
+                "type": "tool_use",
+                "id": call_id,
+                "name": "spawn_subagent",
+                "input": {"prompt": "p", "description": "d", "background": background},
+            }
+        ],
+        usage={"input_tokens": 10, "output_tokens": 1},
+    )
+
+
+def _result_line(**usage: int) -> str:
+    return json.dumps({"type": "result", "subtype": "success", "usage": usage})
+
+
+class TestSubagentUsage:
+    """Recorded from Grok Build 1.0.85, which leaves ``parent_tool_use_id`` null
+    on subagent lines."""
+
+    def _events(self, name: str) -> list[Event]:
+        path = _FIXTURE.parent / name
+        return list(parse_stream(path.read_text().splitlines()))
+
+    def test_foreground_subagent_lines_stay_out_of_the_transcript(self):
+        events = self._events("subagent_foreground.ndjson")
+
+        messages = [e.message for e in events if isinstance(e, MessageAddedEvent)]
+        assert [m.role for m in messages] == ["assistant", "tool", "assistant"]
+        spawn = "call-e88928d8-c6c2-4bc3-abc7-a28d45de8874-0"
+        started = [
+            e.tool_call.id for e in events if isinstance(e, ToolCallStartedEvent)
+        ]
+        completed = [
+            e.tool_call_id for e in events if isinstance(e, ToolCallCompletedEvent)
+        ]
+        assert started == completed == [spawn]
+
+    def test_foreground_subagent_usage_is_tagged(self):
+        events = self._events("subagent_foreground.ndjson")
+
+        assert [u.source for u in _usage(events)] == ["agent"] + ["subagent"] * 5 + [
+            "agent"
+        ]
+        subagent = _usage(events, "subagent")
+        assert sum(u.input_tokens for u in subagent) == 29180
+        assert sum(u.output_tokens for u in subagent) == 248
+        assert [(u.input_tokens, u.output_tokens) for u in _usage(events, "agent")] == [
+            (8140, 127),
+            (8401, 128),
+        ]
+
+    def test_parallel_subagents_usage_missing_from_lines_comes_from_the_result(self):
+        events = self._events("subagents_parallel.ndjson")
+
+        messages = [e.message for e in events if isinstance(e, MessageAddedEvent)]
+        assert [m.role for m in messages] == ["assistant", "tool", "tool", "assistant"]
+        subagent = _usage(events, "subagent")
+        correction = subagent[-1]
+        assert (
+            correction.input_tokens,
+            correction.cache_read_tokens,
+            correction.output_tokens,
+        ) == (5791, 5632, 43)
+        assert sum(u.input_tokens for u in subagent) == 17221 + 11461
+        assert sum(u.input_tokens for u in _usage(events)) == 26086 + 19328
+        assert sum(u.output_tokens for u in _usage(events)) == 474
+
+    def test_background_subagent_lines_are_left_as_they_are(self):
+        child = _line(
+            "assistant",
+            [{"type": "text", "text": "child"}],
+            usage={"input_tokens": 7, "output_tokens": 1},
+        )
+
+        events = list(parse_stream([_spawn("call_bg", background=True), child]))
+
+        messages = [e.message for e in events if isinstance(e, MessageAddedEvent)]
+        assert [m.content for m in messages] == [None, "child"]
+        assert [u.source for u in _usage(events)] == ["agent", "agent"]
+
+    def test_missing_usage_without_subagents_is_the_agents(self):
+        line = _line(
+            "assistant",
+            [{"type": "text", "text": "x"}],
+            usage={"input_tokens": 10, "output_tokens": 2},
+        )
+
+        events = list(
+            parse_stream([line, _result_line(input_tokens=15, output_tokens=2)])
+        )
+
+        assert [
+            (u.input_tokens, u.output_tokens, u.source) for u in _usage(events)
+        ] == [
+            (10, 2, "agent"),
+            (5, 0, "agent"),
+        ]
+
+    def test_missing_usage_after_a_background_subagent_is_the_subagents(self):
+        events = list(
+            parse_stream(
+                [
+                    _spawn("call_bg", background=True),
+                    _result_line(input_tokens=30, output_tokens=4),
+                ]
+            )
+        )
+
+        assert [
+            (u.input_tokens, u.output_tokens, u.source) for u in _usage(events)
+        ] == [
+            (10, 1, "agent"),
+            (20, 3, "subagent"),
+        ]
+
+    def test_compaction_during_a_foreground_subagent_is_the_subagents(self):
+        boundary = json.dumps({"type": "system", "subtype": "compact_boundary"})
+        result = _line(
+            "user",
+            [{"type": "tool_result", "tool_use_id": "call_fg", "content": "done"}],
+        )
+
+        events = list(
+            parse_stream(
+                [_spawn("call_fg", background=False), boundary, result, boundary]
+            )
+        )
+
+        assert [type(e) for e in events].count(ContextCompactedEvent) == 1
+        assert isinstance(events[-1], ContextCompactedEvent)
+
+    def test_main_results_still_arrive_while_a_foreground_subagent_runs(self):
+        call = _line(
+            "assistant",
+            [
+                {"type": "tool_use", "id": "call_a", "name": "read_file", "input": {}},
+                json.loads(_spawn("call_fg", background=False))["message"]["content"][
+                    0
+                ],
+            ],
+        )
+        child = _line(
+            "assistant",
+            [{"type": "text", "text": "child"}],
+            usage={"input_tokens": 7, "output_tokens": 1},
+        )
+
+        events = list(
+            parse_stream(
+                [
+                    call,
+                    _line(
+                        "user",
+                        [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "call_a",
+                                "content": "a",
+                            }
+                        ],
+                    ),
+                    child,
+                    _line(
+                        "user",
+                        [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "call_fg",
+                                "content": "done",
+                            }
+                        ],
+                    ),
+                ]
+            )
+        )
+
+        completed = [
+            e.tool_call_id for e in events if isinstance(e, ToolCallCompletedEvent)
+        ]
+        assert completed == ["call_a", "call_fg"]
+        messages = [e.message for e in events if isinstance(e, MessageAddedEvent)]
+        assert [(m.role, m.content) for m in messages] == [
+            ("assistant", None),
+            ("tool", "a"),
+            ("tool", "done"),
+        ]
+        assert [u.source for u in _usage(events)] == ["subagent"]
+
+    def test_tool_ids_that_are_not_strings_do_not_crash(self):
+        call = _line(
+            "assistant",
+            [
+                {"type": "tool_use", "id": ["x"], "name": {"n": 1}, "input": {}},
+                {
+                    "type": "tool_use",
+                    "id": {"y": 1},
+                    "name": "spawn_subagent",
+                    "input": {"background": False},
+                },
+            ],
+        )
+        result = _line(
+            "user", [{"type": "tool_result", "tool_use_id": ["x"], "content": "r"}]
+        )
+        after = _line("assistant", [{"type": "text", "text": "main"}])
+
+        events = list(parse_stream([call, result, after]))
+
+        messages = [e.message for e in events if isinstance(e, MessageAddedEvent)]
+        assert [m.role for m in messages] == ["assistant", "tool", "assistant"]
+
+    def test_spawn_without_an_id_does_not_hide_later_lines(self):
+        spawn = _line(
+            "assistant",
+            [
+                {
+                    "type": "tool_use",
+                    "id": None,
+                    "name": "spawn_subagent",
+                    "input": {"background": False},
+                }
+            ],
+        )
+        after = _line("assistant", [{"type": "text", "text": "main"}])
+
+        events = list(parse_stream([spawn, after]))
+
+        messages = [e.message for e in events if isinstance(e, MessageAddedEvent)]
+        assert [m.content for m in messages] == [None, "main"]
+
+    def test_each_step_gets_a_fresh_parser(self):
+        agent = _agent()
+        first = agent._line_parser("a")  # pyright: ignore[reportPrivateUsage]
+        _ = list(first(_spawn("call_fg", background=False), 0))
+        second = agent._line_parser("b")  # pyright: ignore[reportPrivateUsage]
+
+        line = _line("assistant", [{"type": "text", "text": "next step"}])
+
+        assert [type(e) for e in second(line, 0)] == [MessageAddedEvent]
 
 
 _FAKE_GROK = """

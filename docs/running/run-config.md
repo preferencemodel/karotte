@@ -259,6 +259,8 @@ CLI agents differ from `builtin` in a few ways:
   If they bring their own tools, those replace the task's tools that do the same job; their shell replaces `bash`, for example.
 - They send their own system prompt instead of the task's.
 - `reasoning_effort` isn't applied, except by `grok-build`, `claude-code`, `codex`, `agy` and `muse-code`.
+- Their token usage includes their subagents' calls and the calls the CLI makes on its own, such as compaction summaries, wherever the CLI records them.
+  Each `token_usage` event's `source` says who made the calls; see [Transcripts](../tasks/artifacts-and-transcripts.md#transcripts).
 - The student's firewall only lets them reach localhost and the model proxy.
   Without a proxy (no `--proxy` and no plugin default), Karotte listens on a local port and forwards the agent's model calls from there to the provider, adding the API key itself.
   The agent gets a placeholder key, so the real one never reaches the student.
@@ -320,7 +322,8 @@ CLI agents differ from `builtin` in a few ways:
 
 - All steps of a run share one Codex session, so later steps see the earlier conversation.
 - Codex reports what the model did, not each model response.
-  The transcript has one assistant message per group of tool calls Codex runs together, carrying the text and reasoning that came before them, and one token usage entry per step.
+  The transcript has one assistant message per group of tool calls Codex runs together, carrying the text and reasoning that came before them.
+  Its token usage has one entry per step for the agent's own calls, plus entries for its compaction summaries and its subagents' calls.
 - Its shell, file-editing and image tools replace `bash`, `replace_in_file` and `view_image_file`.
   The transcript records them as `exec_command` and `apply_patch`, and the task's tools as `mcp__karotte__<tool>`.
 - Codex's hosted web search, telemetry and feedback are turned off.
@@ -363,7 +366,7 @@ CLI agents differ from `builtin` in a few ways:
 - Muse Code's subagents, reminder agents and web tools stay on.
   Its own command sandbox is off, since it needs bubblewrap; the student's sandbox still applies.
   Its telemetry is turned off.
-- The token usage includes the calls of Muse Code's reminder agents and of its context compaction.
+- The token usage includes the calls of Muse Code's subagents, its reminder agents and its context compaction.
 - It sends `reasoning_effort` when the run config sets it.
   It can't send `temperature` or stop at `turn_limit`, so a run config that sets either is rejected.
 - The transcript has no reasoning, because Meta returns it to Muse Code only encrypted.

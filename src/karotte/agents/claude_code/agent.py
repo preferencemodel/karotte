@@ -8,12 +8,13 @@ manifest. Steps share one session, created on the first step and resumed after.
 
 import json
 import os
+import re
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import ClassVar, Literal, final
 
-from karotte.agents.claude_code.adapter import StreamParser
+from karotte.agents.claude_code.adapter import StreamParser, UsageLedger
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
     CliAgent,
@@ -21,6 +22,7 @@ from karotte.agents.cli_agent import (
     register_cli_agent,
 )
 from karotte.agents.models import resolve_model
+from karotte.agents.student_files import student_file_lines
 from karotte.model_forwarder import ModelForwarder
 from karotte.model_spec import spec_for
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
@@ -42,6 +44,8 @@ _SHA256: dict[str, str] = {
 _DISALLOWED_TOOLS = ("WebSearch", "WebFetch", "AskUserQuestion")
 
 _MCP_CONFIG = "mcp.json"
+
+_MAX_PROJECT_DIR_NAME = 200
 
 # The env vars behind Claude Code's model aliases (`haiku`, `sonnet`, ...) and
 # the models it picks for background calls and subagents.
@@ -91,6 +95,7 @@ class ClaudeCodeAgent(CliAgent):
         self._on_anthropic: bool = spec_for(config.model).provider == "anthropic"
         self._session_id: str = str(uuid.uuid4())
         self._parser: StreamParser | None = None
+        self._usage_ledger: UsageLedger = UsageLedger()
 
     def _make_forwarder(self) -> ModelForwarder | None:
         # Anthropic is the only provider with a fixed address; without a proxy,
@@ -170,13 +175,48 @@ class ClaudeCodeAgent(CliAgent):
         return argv
 
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
-        self._parser = StreamParser()
+        self._parser = StreamParser(self._subagent_log, self._usage_ledger)
         return self._parser
 
+    def _subagent_log(self, task_id: str) -> Iterable[str]:
+        if not re.fullmatch(r"[A-Za-z0-9]+", task_id):
+            return ()
+        cwd = os.path.realpath(os.environ.get("KAROTTE_WORKDIR") or os.getcwd())
+        project = project_dir_name(cwd)
+        session = self._home / "projects" / project / self._session_id
+        return student_file_lines(session / "subagents" / f"agent-{task_id}.jsonl")
+
     def _output_ended(self) -> Iterable[Event]:
-        return () if self._parser is None else self._parser.flush()
+        return () if self._parser is None else self._parser.finish()
 
     def _reported_error(self) -> str | None:
         # Claude Code's stderr can end in a warning such as
         # `[claude-code:unrecognized_model]`, printed for any non-Claude model.
         return None if self._parser is None else self._parser.error
+
+
+def project_dir_name(cwd: str) -> str:
+    """The folder Claude Code keeps a project's sessions in. It works on UTF-16
+    code units, and cuts an overlong name short with a hash of the path."""
+    data = cwd.encode("utf-16-le", "surrogatepass")
+    units = [int.from_bytes(data[i : i + 2], "little") for i in range(0, len(data), 2)]
+    name = "".join(
+        chr(u) if chr(u).isascii() and chr(u).isalnum() else "-" for u in units
+    )
+    if len(name) <= _MAX_PROJECT_DIR_NAME:
+        return name
+    digest = 0
+    for unit in units:
+        digest = (digest * 31 + unit) % 2**32
+    if digest >= 2**31:
+        digest = 2**32 - digest
+    return f"{name[:_MAX_PROJECT_DIR_NAME]}-{_base36(digest)}"
+
+
+def _base36(n: int) -> str:
+    digits = ""
+    while True:
+        n, digit = divmod(n, 36)
+        digits = "0123456789abcdefghijklmnopqrstuvwxyz"[digit] + digits
+        if n == 0:
+            return digits

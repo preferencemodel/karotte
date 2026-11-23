@@ -53,6 +53,10 @@ BLOCKED_TURN_NUDGE = (
     "never reached the environment. Continue the task from where you left off."
 )
 
+# The MCP client can't send arguments nested about 255 levels deep, and trying
+# leaves it unable to make any later call.
+MAX_ARGUMENT_DEPTH = 200
+
 SKIPPED_TOOL_CALL_RESULT = "Not run: the model provider blocked this reply."
 
 
@@ -294,6 +298,8 @@ async def _execute_tool_calls(
 
         try:
             arguments = json.loads(tool_call.function.arguments or "{}")
+        except RecursionError:
+            result = _reject_nested_too_deep(tool_call)
         except json.JSONDecodeError:
             # Sanitize the tool call arguments to prevent downstream API errors.
             # Some providers (e.g., TogetherAI) validate JSON in tool_call arguments
@@ -306,7 +312,9 @@ async def _execute_tool_calls(
                 is_error=True,
             )
         else:
-            if arguments is None or isinstance(arguments, dict):
+            if _nested_deeper_than(arguments, MAX_ARGUMENT_DEPTH):
+                result = _reject_nested_too_deep(tool_call)
+            elif arguments is None or isinstance(arguments, dict):
                 result = await mcp_client.call_tool_mcp(
                     tool_call.function.name, cast("dict[str, Any]", arguments)
                 )
@@ -324,6 +332,31 @@ async def _execute_tool_calls(
         completed, message = tool_result_events(tool_call.id, result)
         yield completed
         yield message
+
+
+def _reject_nested_too_deep(tool_call: ChatCompletionMessageToolCall) -> CallToolResult:
+    tool_call.function.arguments = json.dumps(
+        {"_error": "original arguments are nested too deep"}
+    )
+    return _build_call_tool_result(
+        result="Error: Tool arguments are nested too deep", is_error=True
+    )
+
+
+def _nested_deeper_than(value: Any, limit: int) -> bool:
+    level = [value]
+    for _ in range(limit + 1):
+        level = [
+            child
+            for container in level
+            if isinstance(container, dict | list)
+            for child in (
+                container.values() if isinstance(container, dict) else container
+            )
+        ]
+        if not level:
+            return False
+    return True
 
 
 def _build_call_tool_result(result: str, is_error: bool) -> CallToolResult:

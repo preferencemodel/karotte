@@ -1,0 +1,29 @@
+{
+  "session_id": "0b62ef85-835d-47c7-277f-c4e003634e3c",
+  "parent_session_id": null,
+  "start_time": "2026-11-23T05:52:19.524484+00:00",
+  "end_time": "2026-11-23T05:52:24.063256+00:00",
+  "title": "Use the task tool to spawn the explore subagent an…",
+  "title_source": "auto",
+  "stats": {
+    "steps": 3,
+    "session_prompt_tokens": 12266,
+    "session_completion_tokens": 71,
+    "tool_calls_agreed": 1,
+    "tool_calls_rejected": 0,
+    "tool_calls_hook_denied": 0,
+    "tool_calls_failed": 0,
+    "tool_calls_succeeded": 1,
+    "context_tokens": 6197,
+    "last_turn_prompt_tokens": 6171,
+    "last_turn_completion_tokens": 26,
+    "last_turn_duration": 1.471707625023555,
+    "tokens_per_second": 17.66655248496376,
+    "input_price_per_million": 0.0,
+    "output_price_per_million": 0.0,
+    "session_total_llm_tokens": 12337,
+    "last_turn_total_tokens": 6197,
+    "session_cost": 0.0
+  },
+  "total_messages": 4
+}

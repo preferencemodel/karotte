@@ -130,6 +130,7 @@ def _agent(
     monkeypatch.setenv("KAROTTE_WORKDIR", str(tmp_path))
     monkeypatch.delenv("KAROTTE_PROXY_URL", raising=False)
     monkeypatch.setattr("karotte.agents.cli_agent.demoted_uid_gid", lambda: None)
+    monkeypatch.setattr("karotte.agents.student_files.demoted_uid_gid", lambda: None)
     monkeypatch.setattr(
         "karotte.agents.cli_agent.make_preexec",
         lambda *_fds: None,  # pyright: ignore[reportUnknownLambdaType]
@@ -607,7 +608,7 @@ class TestEventLog:
     ):
         agent = _log_agent(tmp_path, monkeypatch)
         monkeypatch.setattr(
-            "karotte.agents.cli_agent.demoted_uid_gid", lambda: os.getuid() + 1
+            "karotte.agents.student_files.demoted_uid_gid", lambda: os.getuid() + 1
         )
         (tmp_path / ".echo" / "gate").touch()
         events, error = await _step_error(agent.run_step("hi"))
@@ -634,7 +635,7 @@ class TestEventLog:
     ):
         agent = _log_agent(tmp_path, monkeypatch)
         monkeypatch.setattr(
-            "karotte.agents.cli_agent.demoted_uid_gid", lambda: os.getuid() + 1
+            "karotte.agents.student_files.demoted_uid_gid", lambda: os.getuid() + 1
         )
         agent.after_output = "time.sleep(1)"
         (tmp_path / ".echo" / "gate").touch()

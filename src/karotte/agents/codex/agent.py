@@ -13,6 +13,11 @@ from karotte.agents.cli_agent import (
 )
 from karotte.agents.codex.adapter import Session, StreamParser
 from karotte.agents.models import resolve_model
+from karotte.agents.student_files import (
+    ScanBudget,
+    student_files_in,
+    student_subdirs,
+)
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event
 
@@ -132,8 +137,25 @@ class CodexAgent(CliAgent):
         return [*argv, "-"]
 
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
-        self._parser = StreamParser(self._session, self._step_index)
+        self._parser = StreamParser(
+            self._session, self._step_index, self._rollout_files
+        )
         return self._parser
 
+    def _rollout_files(self, budget: ScanBudget) -> list[Path]:
+        sessions = self._home / "sessions"
+        days = [
+            sessions / year / month / day
+            for year in student_subdirs(sessions, budget)
+            for month in student_subdirs(sessions / year, budget)
+            for day in student_subdirs(sessions / year / month, budget)
+        ]
+        return [
+            day / name
+            for day in days
+            for name in student_files_in(day, budget)
+            if name.startswith("rollout-") and name.endswith(".jsonl")
+        ]
+
     def _output_ended(self) -> Iterable[Event]:
-        return () if self._parser is None else self._parser.flush()
+        return () if self._parser is None else self._parser.finish()

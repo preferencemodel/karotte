@@ -5,10 +5,13 @@ MCP server. Vibe is a Python tool (``mistral-vibe`` on PyPI), so it installs as
 an isolated ``uv tool`` into the shared agents dir at build time.
 """
 
+import json
 import os
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
-from typing import ClassVar, final
+from typing import Any, ClassVar, final
+
+from loguru import logger
 
 from karotte.agents.cli_agent import (
     AGENTS_BIN_DIR,
@@ -16,11 +19,20 @@ from karotte.agents.cli_agent import (
     CliAgent,
     register_cli_agent,
 )
-from karotte.agents.mistral_vibe.adapter import StreamParser
+from karotte.agents.mistral_vibe.adapter import StreamParser, UsageLedger
 from karotte.agents.models import resolve_model
-from karotte.schemas.transcript import Event, MessageAddedEvent
+from karotte.agents.student_files import (
+    ScanBudget,
+    student_file_lines,
+    student_subdirs,
+)
+from karotte.schemas.evaluation_run_config import EvaluationRunConfig
+from karotte.schemas.transcript import Event, MessageAddedEvent, TokenUsageEvent
 
 _VIBE_BIN = f"{AGENTS_BIN_DIR}/vibe"
+# Where Vibe keeps session logs by default, relative to its home.
+_SESSION_LOGS = Path("logs") / "session"
+_MAX_META_BYTES = 16 * 1024 * 1024
 
 
 @final
@@ -41,6 +53,10 @@ class MistralVibeAgent(CliAgent):
         {"bash", "view_lines_in_file", "view_image_file", "replace_in_file"}
     )
 
+    def __init__(self, config: EvaluationRunConfig) -> None:
+        super().__init__(config)
+        self._usage_ledger: UsageLedger = UsageLedger()
+
     @classmethod
     def install(cls) -> list[str]:
         # `uv tool install` puts vibe in its own venv; the bin symlink goes to
@@ -56,7 +72,8 @@ class MistralVibeAgent(CliAgent):
         ]
 
     def _config_files(self) -> dict[str, str]:
-        """Vibe's config: model, provider, MCP server.
+        """Vibe's config: model, provider, MCP server, and the session log
+        that records real token usage.
 
         Model traffic goes to :attr:`model_url`: the proxy when
         ``KAROTTE_PROXY_URL`` is set, otherwise the forwarder to Mistral's API.
@@ -73,7 +90,7 @@ class MistralVibeAgent(CliAgent):
         config = (
             f'active_model = "{resolved.model}"\n\n'
             "[session_logging]\n"
-            "enabled = false\n\n"
+            "enabled = true\n\n"
             "[[providers]]\n"
             f'name = "{provider_name}"\n'
             f'api_base = "{api_base}"\n'
@@ -127,6 +144,34 @@ class MistralVibeAgent(CliAgent):
                         seen_user = True
                         if event.message.content == instructions:
                             continue
+                elif isinstance(event, TokenUsageEvent):
+                    self._usage_ledger.add(event)
                 yield event
 
         return events
+
+    def _output_ended(self) -> Iterable[Event]:
+        sessions = self._home / _SESSION_LOGS
+        budget = ScanBudget()
+        main: list[dict[str, Any]] = []
+        subagents: list[dict[str, Any]] = []
+        for name in student_subdirs(sessions, budget):
+            if (meta := _session_meta(sessions / name, budget)) is not None:
+                main.append(meta)
+            agents = sessions / name / "agents"
+            for agent in student_subdirs(agents, budget):
+                if (meta := _session_meta(agents / agent, budget)) is not None:
+                    subagents.append(meta)
+        return self._usage_ledger.corrections(main, subagents)
+
+
+def _session_meta(session: Path, budget: ScanBudget) -> dict[str, Any] | None:
+    text = "\n".join(student_file_lines(session / "meta.json", _MAX_META_BYTES, budget))
+    if not text:
+        return None
+    try:
+        meta = json.loads(text)
+    except (ValueError, RecursionError):
+        logger.warning("Skipping unreadable vibe session log {}.", session)
+        return None
+    return meta if isinstance(meta, dict) else None

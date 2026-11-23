@@ -1,10 +1,10 @@
 """Muse Code CLI agent: runs ``muse exec`` once per step in one session,
-against Meta's API or a proxy, and reads the session log Muse writes."""
+against Meta's API or a proxy, and reads the session logs Muse writes."""
 
 import json
 import os
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import ClassVar, Literal, final
 
@@ -15,7 +15,12 @@ from karotte.agents.cli_agent import (
     register_cli_agent,
 )
 from karotte.agents.models import resolve_model
-from karotte.agents.muse_code.adapter import StreamParser
+from karotte.agents.muse_code.adapter import StreamParser, UsageRecords
+from karotte.agents.student_files import (
+    ScanBudget,
+    student_file_lines,
+    student_subdirs,
+)
 from karotte.model_forwarder import ModelForwarder, MuseForwarder
 from karotte.model_spec import spec_for
 from karotte.providers import PROXY_PLACEHOLDER_KEY
@@ -67,6 +72,7 @@ class MuseCodeAgent(CliAgent):
         self._session_id: str = str(uuid.uuid4())
         self._session_log: Path | None = None
         self._parser: StreamParser | None = None
+        self._usage_records: UsageRecords = UsageRecords()
 
     def _make_forwarder(self) -> ModelForwarder | None:
         # Always forward: only Meta's API serves Muse's model list.
@@ -127,11 +133,25 @@ class MuseCodeAgent(CliAgent):
         return self._session_log
 
     def _line_parser(self, instructions: str) -> Callable[[str, int], Iterable[Event]]:
-        self._parser = StreamParser()
+        self._parser = StreamParser(self._usage_records)
         return self._parser
 
     def _output_ended(self) -> Iterable[Event]:
-        return () if self._parser is None else self._parser.flush()
+        if self._parser is not None:
+            yield from self._parser.flush()
+        yield from self._subagent_usage()
+
+    def _subagent_usage(self) -> Iterator[Event]:
+        # Subagents, nested ones too, log to their own sessions in one folder.
+        if (log := self._event_log()) is None:
+            return
+        subagents = log.parent / "subagent"
+        budget = ScanBudget()
+        for name in sorted(student_subdirs(subagents, budget)):
+            lines = student_file_lines(
+                subagents / name / "session.jsonl", budget=budget
+            )
+            yield from self._usage_records.log_events(lines)
 
     def _reported_error(self) -> str | None:
         return None if self._parser is None else self._parser.error
