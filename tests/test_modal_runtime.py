@@ -3,6 +3,7 @@ import io
 import json
 import os
 import socket
+import stat
 import subprocess
 import sys
 import tarfile
@@ -280,6 +281,7 @@ class FakeSandbox:
             tar = self.modal.mount_tars.get(packed, self.modal.out_tar)
             self.files[argv[argv.index("-cf") + 1]] = tar
             return FakeProcess([], 0)
+        self.modal.on_run()
         return FakeProcess(self.modal.output, self.modal.returncode)
 
     def create_connect_token(self, port: int) -> SimpleNamespace:
@@ -318,6 +320,8 @@ class FakeModal(ModuleType):
         """What packing each staged mount directory yields at the end."""
         self.failing_tars: set[str] = set()
         self.failing_downloads: set[str] = set()
+        self.on_create: Callable[[], object] = lambda: None
+        self.on_run: Callable[[], object] = lambda: None
         self.exec_error: Exception | None = None
         self.token_ports: list[int] = []
         self.images: list[dict[str, Any]] = []
@@ -335,6 +339,7 @@ class FakeModal(ModuleType):
         return SimpleNamespace(dockerfile=Path(path).read_text())
 
     def create(self, *argv: str, **kwargs: Any) -> FakeSandbox:
+        self.on_create()
         sandbox = FakeSandbox(self, {"argv": argv, **kwargs})
         self.sandboxes.append(sandbox)
         return sandbox
@@ -358,9 +363,10 @@ def _out_tar(build: Callable[[tarfile.TarFile], None]) -> bytes:
     return buffer.getvalue()
 
 
-def _add_file(tar: tarfile.TarFile, name: str, data: bytes) -> None:
+def _add_file(tar: tarfile.TarFile, name: str, data: bytes, mode: int = 0o644) -> None:
     info = tarfile.TarInfo(name)
     info.size = len(data)
+    info.mode = mode
     tar.addfile(info, io.BytesIO(data))
 
 
@@ -555,13 +561,118 @@ class TestRun:
             for argv, _ in fake.sandboxes[0].execs
             if argv[0] == "tar" and "-cf" in argv and "/out" not in argv
         ]
-        assert [argv[argv.index("-C") + 1] for argv in packs] == [
-            "/root/.karotte_mounts/0"
+        # Nothing only GNU tar has.
+        assert packs == [
+            (
+                "tar",
+                "-cf",
+                "/root/.karotte_transfer/mount-0-back.tar",
+                "-C",
+                "/root/.karotte_mounts/0",
+                ".",
+            )
         ]
-        # A hard link the filter dropped would read as deleted on the host.
-        assert "--hard-dereference" in packs[0]
 
-    def test_a_mount_that_fails_to_come_back_is_left_alone(
+    def test_a_writable_file_mount_comes_back(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        notes = tmp_path / "notes.txt"
+        notes.write_text("before")
+
+        def build(tar: tarfile.TarFile) -> None:
+            _add_file(tar, "./notes.txt", b"after")
+
+        fake.mount_tars["/root/.karotte_mounts/0"] = _out_tar(build)
+
+        self._run(env_dir, tmp_path, mounts=[f"{notes}:/workdir/notes.txt"])
+
+        assert notes.read_text() == "after"
+
+    def test_a_hard_link_comes_back_as_a_file(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        """Left out, it would read as deleted on the host."""
+        data = tmp_path / "data"
+        data.mkdir()
+        (data / "a.txt").write_text("before")
+        os.link(data / "a.txt", data / "b.txt")
+
+        def build(tar: tarfile.TarFile) -> None:
+            _add_file(tar, "./a.txt", b"after")
+            link = tarfile.TarInfo("./b.txt")
+            link.type = tarfile.LNKTYPE
+            link.linkname = "./a.txt"
+            tar.addfile(link)
+
+        fake.mount_tars["/root/.karotte_mounts/0"] = _out_tar(build)
+
+        self._run(env_dir, tmp_path, mounts=[f"{data}:/workdir/data"])
+
+        assert (data / "a.txt").read_text() == "after"
+        assert (data / "b.txt").read_text() == "after"
+
+    def test_files_keep_their_modes(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        modes = {"shared.txt": 0o664, "frozen.txt": 0o444, "tool.sh": 0o775}
+        data = tmp_path / "data"
+        data.mkdir()
+        for name, mode in modes.items():
+            (data / name).write_text("x")
+            (data / name).chmod(mode)
+
+        def build(tar: tarfile.TarFile) -> None:
+            for name, mode in modes.items():
+                _add_file(tar, f"./{name}", b"x", mode)
+
+        fake.mount_tars["/root/.karotte_mounts/0"] = _out_tar(build)
+
+        self._run(env_dir, tmp_path, mounts=[f"{data}:/workdir/data"])
+
+        assert {
+            name: stat.S_IMODE((data / name).stat().st_mode) for name in modes
+        } == modes
+
+    def test_only_what_was_uploaded_can_read_as_deleted(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        data = tmp_path / "data"
+        data.mkdir()
+        (data / "a.txt").write_text("a")
+        (data / "late.txt").write_text("gone before the upload")
+        fake.on_create = (data / "late.txt").unlink
+        fake.on_run = lambda: (data / "late.txt").write_text("written during the run")
+
+        def build(tar: tarfile.TarFile) -> None:
+            _add_file(tar, "./a.txt", b"a")
+
+        fake.mount_tars["/root/.karotte_mounts/0"] = _out_tar(build)
+
+        self._run(env_dir, tmp_path, mounts=[f"{data}:/workdir/data"])
+
+        assert (data / "late.txt").read_text() == "written during the run"
+
+    def test_an_archive_cut_short_deletes_nothing(
+        self, fake: FakeModal, env_dir: Path, tmp_path: Path
+    ):
+        data = tmp_path / "data"
+        data.mkdir()
+        for name in ("a.txt", "b.txt"):
+            (data / name).write_text("before")
+
+        def build(tar: tarfile.TarFile) -> None:
+            _add_file(tar, "./a.txt", b"before")
+            _add_file(tar, "./b.txt", b"before")
+
+        # The first file's header and data, and nothing after.
+        fake.mount_tars["/root/.karotte_mounts/0"] = _out_tar(build)[:1024]
+
+        with pytest.raises(ModalError, match="/workdir/data"):
+            self._run(env_dir, tmp_path, mounts=[f"{data}:/workdir/data"])
+
+        assert sorted(p.name for p in data.iterdir()) == ["a.txt", "b.txt"]
+
+    def test_a_mount_that_fails_to_come_back_is_left_alone_and_fails_the_run(
         self, fake: FakeModal, env_dir: Path, tmp_path: Path
     ):
         """An archive that never arrived must not read as everything deleted."""
@@ -575,10 +686,11 @@ class TestRun:
 
         fake.out_tar = _out_tar(build)
 
-        transcript = self._run(env_dir, tmp_path, mounts=[f"{data}:/workdir/data"])
+        with pytest.raises(ModalError, match="/workdir/data"):
+            self._run(env_dir, tmp_path, mounts=[f"{data}:/workdir/data"])
 
         assert (data / "kept.txt").read_text() == "before"
-        assert transcript.exists()
+        assert (tmp_path / "out" / "transcript.json").exists()
 
     def test_one_mount_lost_on_the_way_back_spares_the_others(
         self, fake: FakeModal, env_dir: Path, tmp_path: Path
@@ -599,13 +711,16 @@ class TestRun:
 
         fake.out_tar = _out_tar(out)
 
-        transcript = self._run(
-            env_dir, tmp_path, mounts=[f"{first}:/workdir/a", f"{second}:/workdir/b"]
-        )
+        with pytest.raises(ModalError, match="/workdir/a$"):
+            self._run(
+                env_dir,
+                tmp_path,
+                mounts=[f"{first}:/workdir/a", f"{second}:/workdir/b"],
+            )
 
         assert (first / "a.txt").read_text() == "before"
         assert (second / "a.txt").read_text() == "after"
-        assert transcript.exists()
+        assert (tmp_path / "out" / "transcript.json").exists()
 
     @pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
     def test_an_unreadable_mount_is_a_modal_error(

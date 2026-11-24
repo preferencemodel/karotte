@@ -42,7 +42,6 @@ from karotte.staged_mounts import (
     StagedMount,
     apply_copy_back,
     encode,
-    plain_entries,
 )
 
 APP_NAME = "karotte"
@@ -377,6 +376,7 @@ def run_modal(
         )
 
     uploads = _plan_uploads(mounts)
+    packed: list[list[Path]] = []
     port = run_config.websocket_config.port
     argv = [KAROTTE_BIN, "run", "--no-containerized", "--config", CONFIG_PATH]
     relay = WebsocketRelay(port)
@@ -403,8 +403,9 @@ def run_modal(
         if uploads:
             for root_only in (TRANSFER_DIR, STAGED_MOUNTS_DIR):
                 _exec_checked(sandbox, "mkdir", "-p", "-m", "0700", root_only)
-            for index, upload in enumerate(uploads):
-                _upload(sandbox, upload, index)
+            packed = [
+                _upload(sandbox, upload, index) for index, upload in enumerate(uploads)
+            ]
         token = sandbox.create_connect_token(port=port)
         relay.connect_to(token.url, token.token)
 
@@ -424,13 +425,18 @@ def run_modal(
             _stream(process.stdout, out)
         returncode = process.wait()
 
-        for index, upload in enumerate(uploads):
-            if upload.writable:
-                _bring_back(sandbox, upload, index)
+        lost = [
+            upload.target
+            for index, upload in enumerate(uploads)
+            if upload.writable
+            and not _bring_back(sandbox, upload, index, packed[index])
+        ]
         if host_out is not None:
             _copy_out(sandbox, host_out)
         if returncode != 0:
             raise subprocess.CalledProcessError(returncode, argv)
+        if lost:
+            raise ModalError(f"Could not copy back the mounts at {', '.join(lost)}")
     except modal.exception.Error as e:
         raise ModalError(f"Modal: {e}") from e
     finally:
@@ -448,9 +454,6 @@ class _Upload:
     target: str
     writable: bool
     staging: str
-    copied: list[Path]
-    """What a writable directory held, so copy-back can tell what the student
-    deleted from what the host added during the run."""
 
     @property
     def staged(self) -> StagedMount:
@@ -468,12 +471,8 @@ def _plan_uploads(mounts: Sequence[str] | None) -> list[_Upload]:
         # tarfile stores a link as a link; a bind mount would follow it.
         source = Path(parts[0]).resolve()
         writable = not (len(parts) == 3 and parts[2] == "ro")
-        try:
-            copied = plain_entries(source) if writable and source.is_dir() else []
-        except OSError as e:
-            raise ModalError(f"Cannot read the mount {parts[0]}: {e}") from e
         uploads.append(
-            _Upload(source, parts[1], writable, f"{STAGED_MOUNTS_DIR}/{index}", copied)
+            _Upload(source, parts[1], writable, f"{STAGED_MOUNTS_DIR}/{index}")
         )
     return uploads
 
@@ -483,7 +482,9 @@ def _exec_checked(sandbox: Any, *argv: str) -> None:
         raise ModalError(f"`{' '.join(argv)}` failed in the sandbox (exit {code})")
 
 
-def _upload(sandbox: Any, upload: _Upload, index: int) -> None:
+def _upload(sandbox: Any, upload: _Upload, index: int) -> list[Path]:
+    """Stage the mount in the sandbox. Returns the files and directories sent,
+    relative to the mount."""
     remote = f"{TRANSFER_DIR}/mount-{index}.tar"
     with tempfile.TemporaryDirectory(prefix="karotte-modal-mount-") as tmp:
         archive = Path(tmp) / "mount.tar"
@@ -491,6 +492,12 @@ def _upload(sandbox: Any, upload: _Upload, index: int) -> None:
             with tarfile.open(archive, "w") as tar:
                 name = "." if upload.source.is_dir() else upload.source.name
                 tar.add(upload.source, arcname=name)
+                # A hard link is a file on the host.
+                packed = [
+                    Path(member.name)
+                    for member in tar.getmembers()
+                    if member.isfile() or member.isdir() or member.islnk()
+                ]
         except OSError as e:
             raise ModalError(f"Cannot pack the mount {upload.source}: {e}") from e
         sandbox.filesystem.copy_from_local(archive, remote)
@@ -499,56 +506,55 @@ def _upload(sandbox: Any, upload: _Upload, index: int) -> None:
         sandbox, "tar", "-xf", remote, "-C", upload.staging, "--no-same-owner"
     )
     _exec_checked(sandbox, "rm", "-f", remote)
+    return [path for path in packed if path.parts]
 
 
-def _bring_back(sandbox: Any, upload: _Upload, index: int) -> None:
-    """Copy a writable mount back over its host path. The guest has already
-    copied the student's changes to the staging directory. A mount that fails
-    to come back is left as it was on the host, and the others still come
-    back: an archive that never arrived must not read as everything deleted."""
+def _bring_back(sandbox: Any, upload: _Upload, index: int, packed: list[Path]) -> bool:
+    """Copy a writable mount, as the guest left it in staging, back over its
+    host path. False when it didn't come back."""
     remote = f"{TRANSFER_DIR}/mount-{index}-back.tar"
     try:
-        # A hard link would be left out on the host and so read as deleted.
-        _exec_checked(
-            sandbox,
-            "tar",
-            "--hard-dereference",
-            "-cf",
-            remote,
-            "-C",
-            upload.staging,
-            ".",
-        )
+        _exec_checked(sandbox, "tar", "-cf", remote, "-C", upload.staging, ".")
         with tempfile.TemporaryDirectory(prefix="karotte-modal-mount-") as tmp:
             # Copy-back distrusts links above its source, such as macOS's /var.
             local = Path(tmp).resolve()
             sandbox.filesystem.copy_to_local(remote, local / "back.tar")
+            _require_whole(local / "back.tar")
             with tarfile.open(local / "back.tar") as archive:
                 archive.extractall(local / "back", filter=_plain_member)
-            skipped = apply_copy_back(local / "back", upload.source, upload.copied)
+            skipped = apply_copy_back(local / "back", upload.source, packed)
     except Exception as e:  # noqa: BLE001 - one mount mustn't cost the others or /out
         logger.warning(f"Could not copy mount {upload.target} back: {e}")
-        return
+        return False
     if skipped:
         logger.warning(
             f"Mount {upload.target}: skipped {skipped} links and special files on copy-back"
         )
+    return True
+
+
+def _require_whole(archive: Path) -> None:
+    """tarfile reads an archive cut between two members as a shorter one, and
+    what's missing would count as deleted."""
+    end = 2 * tarfile.BLOCKSIZE
+    with open(archive, "rb") as file:
+        if file.seek(0, os.SEEK_END) >= end:
+            _ = file.seek(-end, os.SEEK_END)
+            if not any(file.read()):
+                return
+    raise ModalError("the archive is cut short")
 
 
 def _plain_member(member: tarfile.TarInfo, dest: str) -> tarfile.TarInfo | None:
-    """Regular files and directories only, with their mode bits, which
-    copy-back writes onto the host files."""
-    if not (member.isfile() or member.isdir()):
+    """Regular files, hard links to them, and directories."""
+    if not (member.isfile() or member.isdir() or member.islnk()):
         return None
-    try:
-        safe = tarfile.data_filter(member, dest)
-    except tarfile.FilterError:
-        return None
+    safe = tarfile.data_filter(member, dest)
     if safe.isdir():
-        # data_filter leaves a directory's mode unset, so it's ours to write in.
         return safe
-    # Readable by us, so copy-back can read it.
-    return safe.replace(mode=(safe.mode or 0) | 0o400, deep=False)
+    # data_filter drops mode bits that copy-back writes onto the host's file;
+    # copy-back still has to read ours.
+    return safe.replace(mode=member.mode & 0o777 | 0o400, deep=False)
 
 
 def _stream(lines: Any, out: IO[str]) -> None:

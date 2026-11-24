@@ -140,22 +140,10 @@ def copy_back() -> None:
         logger.info(f"Copied mount {mount.target} back to the host")
 
 
-def plain_entries(root: Path) -> list[Path]:
-    """The regular files and directories under ``root``, relative to it: all
-    that copy-back brings back, so nothing else can look deleted."""
-    return [
-        rel
-        for rel in _entries(root)
-        if stat.S_ISREG(mode := (root / rel).lstat().st_mode) or stat.S_ISDIR(mode)
-    ]
-
-
 def apply_copy_back(back: Path, dest: Path, copied: list[Path]) -> int:
-    """Write a mount's copy, downloaded from the guest into ``back``, over its
-    host path ``dest``, as a bind mount would have left it. For a launcher that
-    can't share the staging directory and copies it out instead. ``copied`` is
-    what :func:`plain_entries` listed under ``dest`` before the run; what's
-    gone from ``back`` is removed. Returns how many entries were skipped."""
+    """Write ``back``, a mount's staging directory fetched from the guest, over
+    its host path ``dest``, removing what was ``copied`` in and is gone from
+    ``back``. Returns how many entries were skipped."""
     if dest.is_dir():
         skipped = _copy_back(back, dest)
         _remove_deleted(back, dest, set(), copied)

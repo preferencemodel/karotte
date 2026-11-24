@@ -111,6 +111,7 @@ When the run ends, Karotte copies `/out` back next to the transcript, keeping on
 
 `--mount` paths aren't shared live.
 They're copied into the sandbox when the run starts, and read-write ones are copied back when it ends, keeping only regular files and directories.
+A read-write mount that can't be copied back fails the run.
 
 Model calls go out from the sandbox, so a model proxy has to be on a public address.
 Karotte refuses a proxy on localhost or a private address.
