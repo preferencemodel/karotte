@@ -533,7 +533,6 @@ def run(
 
         problems = modal_problems(
             required_hardware=load_task(run_config).required_hardware,
-            mounts=mount,
             plugin_paths=bool(plugin_path),
             dev=dev,
             keep_containers=keep_containers,

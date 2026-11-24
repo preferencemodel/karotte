@@ -999,7 +999,6 @@ class TestPluginPath:
         ):
             run(config="{}", runtime="modal", no_ui=True, plugin_path=[str(tmp_path)])
 
-        assert problems.call_args.kwargs["mounts"] is None
         assert problems.call_args.kwargs["plugin_paths"] is True
 
     def test_lets_the_run_use_an_agent_the_image_lacks(self, tmp_path: Path):

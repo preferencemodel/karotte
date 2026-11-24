@@ -34,6 +34,9 @@ from karotte.trusted_bin import trusted_binary
 
 STAGED_MOUNTS_ENV_VAR = "KAROTTE_STAGED_MOUNTS"
 
+STAGED_MOUNTS_DIR = "/root/.karotte_mounts"
+"""Where a launcher stages user mounts in the guest, under root's 0700 home."""
+
 _MODE_BITS = 0o777
 
 
@@ -135,6 +138,21 @@ def copy_back() -> None:
                 f"Mount {mount.target}: skipped {skipped} links and special files on copy-back"
             )
         logger.info(f"Copied mount {mount.target} back to the host")
+
+
+def apply_copy_back(back: Path, dest: Path, copied: list[Path]) -> int:
+    """Write ``back``, a mount's staging directory fetched from the guest, over
+    its host path ``dest``, removing what was ``copied`` in and is gone from
+    ``back``. Returns how many entries were skipped."""
+    if dest.is_dir():
+        skipped = _copy_back(back, dest)
+        _remove_deleted(back, dest, set(), copied)
+        return skipped
+    returned = back / dest.name
+    if returned.is_symlink() or not returned.is_file():
+        return 1
+    _copy_file_back(returned, dest)
+    return 0
 
 
 def _student_id() -> int | None:
