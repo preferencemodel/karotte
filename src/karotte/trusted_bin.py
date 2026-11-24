@@ -6,13 +6,17 @@ from typing import Final
 TRUSTED_BIN_PATH: Final = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 """Search path for privileged binaries, holding only root-owned system dirs.
 
-The server runs as root with a PATH that leads with the student-writable
-``/workdir/.venv/bin`` — the bash session prepends it (see the ``python_venv``
-note in :mod:`karotte.tools.bash`) and the image ``ENV`` sets it too. Resolving a
-security-critical binary by bare name against that PATH would exec a
-student-planted file as root. Resolving against this fixed path never consults a
-student-writable directory.
+The student's bash session and CLI agents put the student-writable
+:data:`STUDENT_VENV` ``/bin`` first on their PATH, and an environment image may
+still put it on the image-wide PATH too. Resolving a security-critical binary by
+bare name against such a PATH would exec a student-planted file as root.
+Resolving against this fixed path never consults a student-writable directory.
 """
+
+STUDENT_VENV: Final = "/workdir/.venv"
+"""The student's venv. Put on PATH only for the student's own processes (the bash
+tool's ``python_venv``, CLI agents), never image-wide: there it would lead root's
+PATH too."""
 
 
 def trusted_binary(name: str) -> str:
