@@ -35,6 +35,7 @@ from karotte.schemas.chat import Message
 from karotte.schemas.evaluation_run_config import EvaluationRunConfig
 from karotte.schemas.transcript import Event, MessageAddedEvent
 from karotte.subprocess import demoted_uid_gid, make_preexec, scrub_harness_secrets
+from karotte.trusted_bin import STUDENT_VENV
 
 # Root-owned, world-readable+executable directory the build installs CLI agents
 # into, so the student user can run them but not tamper with them.
@@ -260,10 +261,12 @@ class CliAgent(abc.ABC):
             own[self.home_env] = str(self._home)
 
         # sanitize_paths() strips the task venv's bin from PATH; the student needs it back.
+        # An image that keeps the venv off root's environment sets no VIRTUAL_ENV.
         path_parts = [AGENTS_BIN_DIR]
-        venv = env.get("VIRTUAL_ENV")
-        if venv and (Path(venv) / "pyvenv.cfg").is_file():
+        venv = env.get("VIRTUAL_ENV") or STUDENT_VENV
+        if (Path(venv) / "pyvenv.cfg").is_file():
             path_parts.insert(0, f"{venv}/bin")
+            own["VIRTUAL_ENV"] = venv
         own["PATH"] = ":".join([*path_parts, env.get("PATH", "")])
 
         own.update(self._extra_env())

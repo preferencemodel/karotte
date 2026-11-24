@@ -173,10 +173,11 @@ RUN --mount=type=secret,id=uv_env \
   uv pip install . \
   && rm -rf ${UV_CACHE_DIR} /tmp/uv-*.lock /root/.local/share/uv/credentials
 
-# Configure the Python executable that will be used by the student
-ENV VIRTUAL_ENV=${STUDENT_WORKDIR}/.venv \
-  PATH="${STUDENT_WORKDIR}/.venv/bin:$PATH"
-RUN echo -e "\033[34mStudent uses $(python --version)\033[0m"
+# The student's venv goes on PATH per session (the bash tool's `python_venv`, and CLI agents),
+# not in an image-level ENV: that would put a student-writable directory first on root's PATH
+# too, where a planted binary shadows any command root runs by bare name. See
+# `karotte.trusted_bin`; `check_permissions` fails the build if root's PATH regains it.
+RUN echo -e "\033[34mStudent uses $(${STUDENT_WORKDIR}/.venv/bin/python --version)\033[0m"
 
 # Lock down root-only data directories
 # This must be done AFTER all operations that create files in /root

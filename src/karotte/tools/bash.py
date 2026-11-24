@@ -36,6 +36,7 @@ from fastmcp.tools import ToolResult
 from karotte import ToolBase
 from karotte.confinement import network_needs_namespace
 from karotte.subprocess import student_env, student_session_command
+from karotte.trusted_bin import STUDENT_VENV
 from pydantic import BaseModel, Field
 
 # max_output_length only truncates at return time; a flooding command would
@@ -71,7 +72,7 @@ class BashConfig(BaseModel):
     disable_networking: bool = Field(default_factory=network_needs_namespace)
     """Put bash and its children in their own network namespace, cutting them off from the network.
     On by default where iptables can't be used (gVisor)."""
-    python_venv: str | None = "/workdir/.venv"
+    python_venv: str | None = STUDENT_VENV
     """Venv activated only in the student's bash (VIRTUAL_ENV and PATH), never for root, so a
     student-planted binary in the venv can't shadow a tool the harness runs."""
 
