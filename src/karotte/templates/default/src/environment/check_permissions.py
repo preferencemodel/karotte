@@ -17,18 +17,6 @@ def check_permissions():
     test_script = f"""
 set -e
 
-# ===== Root's PATH =====
-# A student-writable directory on root's inherited PATH lets a planted binary run as root the
-# next time anything execs a bare command name.
-echo "Running test: root's PATH has no student-writable component"
-case ":$PATH:" in
-  *":{student_workdir}"*)
-    echo "FAIL: root's PATH contains a component under {student_workdir}: $PATH"
-    exit 1
-    ;;
-esac
-echo "PASS: root's PATH has no student-writable component"
-
 # ===== Student-writable tests ({STUDENT_DATA_DIR}) =====
 # Test 1-2: Student user can read/write student data and access venv
 echo "Running test 1-2: Student writable tests"

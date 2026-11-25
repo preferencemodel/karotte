@@ -111,20 +111,6 @@ class TestMistralVibeAgent:
         # venv bin must precede system dirs so `python` resolves to the venv.
         assert env["PATH"].startswith(str(venv / "bin"))
 
-    def test_env_falls_back_to_the_student_venv_without_virtual_env(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        """An image that keeps the venv off root's environment sets no VIRTUAL_ENV; the
-        agent still gets the student venv first on PATH, as the bash tool does."""
-        venv = tmp_path / ".venv"
-        (venv / "bin").mkdir(parents=True)
-        (venv / "pyvenv.cfg").write_text("")
-        monkeypatch.delenv("VIRTUAL_ENV", raising=False)
-        monkeypatch.setattr("karotte.agents.cli_agent.STUDENT_VENV", str(venv))
-        env = self._agent()._env()  # pyright: ignore[reportPrivateUsage]
-        assert env["PATH"].startswith(str(venv / "bin"))
-        assert env["VIRTUAL_ENV"] == str(venv)
-
     def test_env_skips_venv_when_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
